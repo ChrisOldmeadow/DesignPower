@@ -12,8 +12,8 @@ import json
 import requests
 import os
 import sys
+import math
 from scipy import stats
-from scipy import optimize
 
 # Add parent directory to path to import core modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -30,19 +30,24 @@ from core.compatibility import (
     simulate_binary_cluster_rct,
     simulate_min_detectable_effect,
     simulate_sample_size,
-    # Binary simulation functions
-    sample_size_binary_sim,
-    min_detectable_effect_binary_sim,
-    simulate_binary,
-    simulate_binary_non_inferiority,
-    sample_size_binary_non_inferiority_sim,
-    min_detectable_binary_non_inferiority_margin_sim
-)
-
-# Import binary outcome functions from analytical module
-from core.designs.parallel.analytical import (
+    # Binary outcome functions
     sample_size_binary,
-    power_binary
+    power_binary,
+    simulate_binary,
+    simulate_sample_size_binary,
+    # Non-inferiority testing functions for binary outcomes
+    sample_size_binary_non_inferiority,
+    power_binary_non_inferiority,
+    min_detectable_binary_non_inferiority_margin,
+    # Non-inferiority testing functions for continuous outcomes
+    sample_size_continuous_non_inferiority,
+    power_continuous_non_inferiority,
+    min_detectable_non_inferiority_margin,
+    # Simulation-based non-inferiority testing
+    simulate_continuous_non_inferiority,
+    simulate_binary_non_inferiority,
+    simulate_sample_size_non_inferiority,
+    simulate_binary_sample_size_non_inferiority
 )
 
 # Import from new structure (needed for new advanced options)
@@ -102,13 +107,16 @@ def generate_plain_language_summary(result, design_type, calculation_type):
             total = result["total_n"]
             p1 = result['parameters'].get('p1', 0)
             
+            # Check if this is a non-inferiority test based on method name
+            is_non_inferiority = 'non_inferiority' in result.get('method', '')
+            
             if is_non_inferiority:
                 nim = result['parameters'].get('non_inferiority_margin', 0)
                 direction = result['parameters'].get('direction', 'lower')
-                assumed_diff = result['parameters'].get('assumed_difference', 0)
+                assumed_p2 = result['parameters'].get('assumed_p2', p1)
                 direction_text = "not worse than" if direction == "lower" else "not better than"
                 
-                return f"For a non-inferiority test with margin of {nim:.2f} (testing that the new treatment proportion is {direction_text} standard by more than this margin), assuming a true difference of {assumed_diff:.2f}, with {result['parameters'].get('power', 0)*100:.0f}% power and a {result['parameters'].get('alpha', 0)*100:.0f}% significance level, you need **{n1}** participants in group 1 and **{n2}** participants in group 2, for a total of **{total}** participants."
+                return f"For a non-inferiority test with margin of {nim:.2f} in proportions (testing that the new treatment is {direction_text} standard by more than this margin), assuming a true proportion of {assumed_p2:.2f} in the intervention group, with {result['parameters'].get('power', 0)*100:.0f}% power and a {result['parameters'].get('alpha', 0)*100:.0f}% significance level, you need **{n1}** participants in group 1 and **{n2}** participants in group 2, for a total of **{total}** participants."
             else:  # Superiority
                 p2 = result['parameters'].get('p2', 0)
                 return f"For detecting a difference between proportions of {p1:.2f} and {p2:.2f} with {result['parameters'].get('power', 0)*100:.0f}% power and a {result['parameters'].get('alpha', 0)*100:.0f}% significance level, you need **{n1}** participants in group 1 and **{n2}** participants in group 2, for a total of **{total}** participants."
@@ -136,13 +144,16 @@ def generate_plain_language_summary(result, design_type, calculation_type):
             n2 = result['parameters'].get('n2', 0)
             p1 = result['parameters'].get('p1', 0)
             
+            # Check if this is a non-inferiority test based on method name
+            is_non_inferiority = 'non_inferiority' in result.get('method', '')
+            
             if is_non_inferiority:
                 nim = result['parameters'].get('non_inferiority_margin', 0)
                 direction = result['parameters'].get('direction', 'lower')
-                assumed_diff = result['parameters'].get('assumed_difference', 0)
+                assumed_p2 = result['parameters'].get('assumed_p2', p1)
                 direction_text = "not worse than" if direction == "lower" else "not better than"
                 
-                return f"With {n1} participants in group 1 and {n2} participants in group 2, you have **{power*100:.1f}%** power for a non-inferiority test with margin of {nim:.2f} (testing that the new treatment proportion is {direction_text} standard by more than this margin), assuming a true difference of {assumed_diff:.2f}, at a {result['parameters'].get('alpha', 0)*100:.0f}% significance level."
+                return f"With {n1} participants in group 1 and {n2} participants in group 2, you have **{power*100:.1f}%** power for a non-inferiority test with margin of {nim:.2f} in proportions (testing that the new treatment is {direction_text} standard by more than this margin), assuming a true proportion of {assumed_p2:.2f} in the intervention group, at a {result['parameters'].get('alpha', 0)*100:.0f}% significance level."
             else:  # Superiority
                 p2 = result['parameters'].get('p2', 0)
                 return f"With {n1} participants in group 1 and {n2} participants in group 2, you have **{power*100:.1f}%** power to detect a difference between proportions of {p1:.2f} and {p2:.2f} at a {result['parameters'].get('alpha', 0)*100:.0f}% significance level."
@@ -152,20 +163,38 @@ def generate_plain_language_summary(result, design_type, calculation_type):
             n1 = result['parameters'].get('n1', 0)
             n2 = result['parameters'].get('n2', 0)
             
+            # Check if this is a non-inferiority test
+            is_non_inferiority = result['parameters'].get('hypothesis_type') == 'non-inferiority' if 'parameters' in result and 'hypothesis_type' in result['parameters'] else 'non_inferiority' in result.get('method', '')
+            
             if is_non_inferiority:
                 margin = result["margin"]
                 direction = result['parameters'].get('direction', 'lower')
                 assumed_diff = result['parameters'].get('assumed_difference', 0)
                 direction_text = "not worse than" if direction == "lower" else "not better than"
                 
-                if "Continuous Outcome" in design_type:
-                    return f"With {n1} participants in group 1 and {n2} participants in group 2, the minimum non-inferiority margin you can detect with {result['parameters'].get('power', 0)*100:.0f}% power at a {result['parameters'].get('alpha', 0)*100:.0f}% significance level is **{margin:.2f}** units (testing that the new treatment is {direction_text} standard by more than this margin), assuming a true difference of {assumed_diff:.2f}."
-                else:  # Binary Outcome
-                    p1 = result['parameters'].get('p1', 0)
-                    return f"With {n1} participants in group 1 and {n2} participants in group 2, the minimum non-inferiority margin you can detect with {result['parameters'].get('power', 0)*100:.0f}% power at a {result['parameters'].get('alpha', 0)*100:.0f}% significance level is **{margin:.2f}** (testing that the new treatment proportion is {direction_text} standard proportion of {p1:.2f} by more than this margin), assuming a true difference of {assumed_diff:.2f}."
+                return f"With {n1} participants in group 1 and {n2} participants in group 2, the minimum non-inferiority margin you can detect with {result['parameters'].get('power', 0)*100:.0f}% power at a {result['parameters'].get('alpha', 0)*100:.0f}% significance level is **{margin:.2f}** units (testing that the new treatment is {direction_text} standard by more than this margin), assuming a true difference of {assumed_diff:.2f}."
             else:  # Superiority
                 delta = result["delta"]
                 return f"With {n1} participants in group 1 and {n2} participants in group 2, the smallest effect size you can detect with {result['parameters'].get('power', 0)*100:.0f}% power at a {result['parameters'].get('alpha', 0)*100:.0f}% significance level is **{delta:.2f}** units."
+        
+        elif "Binary Outcome" in design_type:
+            n1 = result['parameters'].get('n1', 0)
+            n2 = result['parameters'].get('n2', 0)
+            p1 = result['parameters'].get('p1', 0)
+            
+            # Check if this is a non-inferiority test based on method name
+            is_non_inferiority = 'non_inferiority' in result.get('method', '')
+            
+            if is_non_inferiority:
+                mde = result["minimum_detectable_non_inferiority_margin"]
+                direction = result['parameters'].get('direction', 'lower')
+                assumed_p2 = result['parameters'].get('assumed_p2', p1)
+                direction_text = "not worse than" if direction == "lower" else "not better than"
+                
+                return f"With {n1} participants in group 1 and {n2} participants in group 2, the minimum detectable non-inferiority margin is **{mde:.3f}** for binary outcomes (testing that the new treatment is {direction_text} standard by more than this margin), assuming a true proportion of {assumed_p2:.2f} in the intervention group, at {result['parameters'].get('power', 0)*100:.0f}% power and a {result['parameters'].get('alpha', 0)*100:.0f}% significance level."
+            else:  # Superiority
+                mde = result["minimum_detectable_effect"]
+                return f"With {n1} participants in group 1 and {n2} participants in group 2, the minimum detectable difference in proportions is **{mde:.3f}** at {result['parameters'].get('power', 0)*100:.0f}% power and a {result['parameters'].get('alpha', 0)*100:.0f}% significance level, where the control group proportion is {p1:.2f}."
     
     # Default case
     return "Sample size calculation complete. See the parameters and results above."
@@ -337,7 +366,78 @@ with tab1:
         
         # Show parameters based on selected design
         with st.expander("Basic Parameters", expanded=True):
-            if "Continuous Outcome" in design_type:
+            if "Continuous Outcome" in design_type and "Parallel" in design_type:
+                # Add hypothesis type selection to the top-level basic parameters
+                hypothesis_type = st.radio(
+                    "Hypothesis Type",
+                    ["Superiority", "Non-inferiority"], 
+                    index=0, 
+                    key="hypothesis_type_radio",
+                    help="Superiority: Test if one treatment is better than another. Non-inferiority: Test if a new treatment is not worse than standard by more than a specified margin."
+                )
+                
+                # Different parameter inputs based on hypothesis type
+                if hypothesis_type == "Non-inferiority":
+                    # For non-inferiority tests, we need margin and direction
+                    nim = st.number_input(
+                        "Non-inferiority Margin", 
+                        value=0.5, 
+                        step=0.1, 
+                        min_value=0.1, 
+                        key="nim_input",
+                        help="The maximum acceptable difference for still considering the new treatment non-inferior to the standard."
+                    )
+                    
+                    direction = st.radio(
+                        "Non-inferiority Direction",
+                        ["Lower", "Upper"], 
+                        index=0, 
+                        key="direction_radio",
+                        help="Lower: Test if new treatment is not worse than standard by more than margin. Upper: Test if new treatment is not better than standard by more than margin (rare)."
+                    ).lower()  # Convert to lowercase for our functions
+                    
+                    # For sample size calculation, we need assumed difference
+                    if calculation_type == "Sample Size" or calculation_type == "Power":
+                        assumed_difference = st.number_input(
+                            "Assumed True Difference", 
+                            value=0.0, 
+                            step=0.1, 
+                            key="assumed_diff_input",
+                            help="The true difference you expect between treatments. Typically 0 for non-inferiority (treatments are actually equivalent)."
+                        )
+                        
+                    std_dev = st.number_input("Standard Deviation", value=1.0, step=0.1, min_value=0.1)
+                    power = st.slider("Power", min_value=0.5, max_value=0.99, value=0.8, step=0.01)
+                    alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
+                    st.info("Non-inferiority tests use a one-sided alpha level (significance level).")
+                
+                else:  # Superiority hypothesis
+                    if calculation_type == "Sample Size":
+                        # Option to input effect size directly or as means (for all continuous outcome designs)
+                        effect_size_input_method = st.radio(
+                            "Effect Size Input Method",
+                            ["Direct Effect Size", "Group Means"],
+                            horizontal=True
+                        )
+                        
+                        if effect_size_input_method == "Direct Effect Size":
+                            delta = st.number_input("Effect Size (Difference in Means)", value=0.5, step=0.1)
+                        else:  # Group Means option
+                            if "Stepped Wedge" in design_type:
+                                mean_control = st.number_input("Mean Control Phase", value=0.0, step=0.1)
+                                mean_intervention = st.number_input("Mean Intervention Phase", value=0.5, step=0.1)
+                            else:  # Parallel or Cluster
+                                mean_control = st.number_input("Mean Control Group", value=0.0, step=0.1)
+                                mean_intervention = st.number_input("Mean Intervention Group", value=0.5, step=0.1)
+                            delta = abs(mean_intervention - mean_control)  # Calculate effect size automatically
+                            st.info(f"Calculated effect size (absolute difference): {delta}")
+                            
+                        std_dev = st.number_input("Standard Deviation", value=1.0, step=0.1, min_value=0.1)
+                        power = st.slider("Power", min_value=0.5, max_value=0.99, value=0.8, step=0.01)
+                        alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
+            
+            # For other designs and outcomes, keep the original code
+            elif "Continuous Outcome" in design_type:
                 if calculation_type == "Sample Size":
                     # Option to input effect size directly or as means (for all continuous outcome designs)
                     effect_size_input_method = st.radio(
@@ -409,6 +509,142 @@ with tab1:
                     power = st.slider("Power", min_value=0.5, max_value=0.99, value=0.8, step=0.01)
                     alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
                 
+            elif "Binary Outcome" in design_type and "Parallel" in design_type:
+                # Add hypothesis type selection for binary outcomes
+                hypothesis_type = st.radio(
+                    "Hypothesis Type",
+                    ["Superiority", "Non-inferiority"], 
+                    index=0, 
+                    key="hypothesis_type_binary_radio",
+                    help="Superiority: Test if one treatment is better than another. Non-inferiority: Test if a new treatment is not worse than standard by more than a specified margin."
+                )
+                
+                # Different parameter inputs based on hypothesis type
+                if hypothesis_type == "Non-inferiority":
+                    # For non-inferiority tests with binary outcomes
+                    if calculation_type == "Sample Size":
+                        p1 = st.slider("Control Group Proportion", min_value=0.01, max_value=0.99, value=0.5, step=0.01)
+                        
+                        nim = st.number_input(
+                            "Non-inferiority Margin (for difference in proportions)", 
+                            value=0.1, 
+                            step=0.01, 
+                            min_value=0.01, 
+                            max_value=0.5,
+                            key="binary_nim_input",
+                            help="The maximum acceptable difference for still considering the new treatment non-inferior to the standard."
+                        )
+                        
+                        direction = st.radio(
+                            "Non-inferiority Direction",
+                            ["Lower", "Upper"], 
+                            index=0, 
+                            key="binary_direction_radio",
+                            help="Lower: Test if new treatment is not worse than standard by more than margin. Upper: Test if new treatment is not better than standard by more than margin (rare)."
+                        ).lower()  # Convert to lowercase for our functions
+                        
+                        # For non-inferiority, we typically assume the true difference is 0 (treatments are equivalent)
+                        assumed_p2 = st.number_input(
+                            "Assumed Proportion in Intervention Group", 
+                            value=p1, 
+                            step=0.01, 
+                            min_value=0.01,
+                            max_value=0.99,
+                            key="assumed_p2_input",
+                            help="The true proportion you expect in the intervention group. Typically equal to control for non-inferiority (treatments are actually equivalent)."
+                        )
+                        
+                        power = st.slider("Power", min_value=0.5, max_value=0.99, value=0.8, step=0.01)
+                        alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
+                        st.info("Non-inferiority tests use a one-sided alpha level (significance level).")
+                    
+                    elif calculation_type == "Power":
+                        n1 = st.number_input("Sample Size (Control Group)", value=100, step=10, min_value=5)
+                        n2 = st.number_input("Sample Size (Intervention Group)", value=100, step=10, min_value=5)
+                        p1 = st.slider("Control Group Proportion", min_value=0.01, max_value=0.99, value=0.5, step=0.01)
+                        
+                        nim = st.number_input(
+                            "Non-inferiority Margin (for difference in proportions)", 
+                            value=0.1, 
+                            step=0.01, 
+                            min_value=0.01, 
+                            max_value=0.5,
+                            key="binary_nim_power_input",
+                            help="The maximum acceptable difference for still considering the new treatment non-inferior to the standard."
+                        )
+                        
+                        direction = st.radio(
+                            "Non-inferiority Direction",
+                            ["Lower", "Upper"], 
+                            index=0, 
+                            key="binary_direction_power_radio",
+                            help="Lower: Test if new treatment is not worse than standard by more than margin. Upper: Test if new treatment is not better than standard by more than margin (rare)."
+                        ).lower()  # Convert to lowercase for our functions
+                        
+                        # For non-inferiority, we typically assume the true difference is 0 (treatments are equivalent)
+                        assumed_p2 = st.number_input(
+                            "Assumed Proportion in Intervention Group", 
+                            value=p1, 
+                            step=0.01, 
+                            min_value=0.01,
+                            max_value=0.99,
+                            key="assumed_p2_power_input",
+                            help="The true proportion you expect in the intervention group. Typically equal to control for non-inferiority (treatments are actually equivalent)."
+                        )
+                        
+                        alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
+                        st.info("Non-inferiority tests use a one-sided alpha level (significance level).")
+                    
+                    elif calculation_type == "Minimum Detectable Effect (MDE)":
+                        n1 = st.number_input("Sample Size (Control Group)", value=100, step=10, min_value=5)
+                        n2 = st.number_input("Sample Size (Intervention Group)", value=100, step=10, min_value=5)
+                        p1 = st.slider("Control Group Proportion", min_value=0.01, max_value=0.99, value=0.5, step=0.01)
+                        
+                        direction = st.radio(
+                            "Non-inferiority Direction",
+                            ["Lower", "Upper"], 
+                            index=0, 
+                            key="binary_direction_mde_radio",
+                            help="Lower: Test if new treatment is not worse than standard by more than margin. Upper: Test if new treatment is not better than standard by more than margin (rare)."
+                        ).lower()  # Convert to lowercase for our functions
+                        
+                        # For non-inferiority, we typically assume the true difference is 0 (treatments are equivalent)
+                        assumed_p2 = st.number_input(
+                            "Assumed Proportion in Intervention Group", 
+                            value=p1, 
+                            step=0.01, 
+                            min_value=0.01,
+                            max_value=0.99,
+                            key="assumed_p2_mde_input",
+                            help="The true proportion you expect in the intervention group. Typically equal to control for non-inferiority (treatments are actually equivalent)."
+                        )
+                        
+                        power = st.slider("Power", min_value=0.5, max_value=0.99, value=0.8, step=0.01)
+                        alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
+                        st.info("Non-inferiority tests use a one-sided alpha level (significance level).")
+                        
+                else:  # Superiority hypothesis for binary outcomes
+                    if calculation_type == "Sample Size":
+                        p1 = st.slider("Control Group Proportion", min_value=0.01, max_value=0.99, value=0.5, step=0.01, key="binary_p1_superiority")
+                        p2 = st.slider("Intervention Group Proportion", min_value=0.01, max_value=0.99, value=0.6, step=0.01, key="binary_p2_superiority")
+                        power = st.slider("Power", min_value=0.5, max_value=0.99, value=0.8, step=0.01, key="binary_power_superiority")
+                        alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01, key="binary_alpha_superiority")
+                    
+                    elif calculation_type == "Power":
+                        n1 = st.number_input("Sample Size (Control Group)", value=100, step=10, min_value=5, key="binary_n1_power_superiority")
+                        n2 = st.number_input("Sample Size (Intervention Group)", value=100, step=10, min_value=5, key="binary_n2_power_superiority")
+                        p1 = st.slider("Control Group Proportion", min_value=0.01, max_value=0.99, value=0.5, step=0.01, key="binary_p1_power_superiority")
+                        p2 = st.slider("Intervention Group Proportion", min_value=0.01, max_value=0.99, value=0.6, step=0.01, key="binary_p2_power_superiority")
+                        alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01, key="binary_alpha_power_superiority")
+                    
+                    elif calculation_type == "Minimum Detectable Effect (MDE)":
+                        n1 = st.number_input("Sample Size (Control Group)", value=100, step=10, min_value=5, key="binary_n1_mde_superiority")
+                        n2 = st.number_input("Sample Size (Intervention Group)", value=100, step=10, min_value=5, key="binary_n2_mde_superiority")
+                        p1 = st.slider("Control Group Proportion", min_value=0.01, max_value=0.99, value=0.5, step=0.01, key="binary_p1_mde_superiority")
+                        power = st.slider("Power", min_value=0.5, max_value=0.99, value=0.8, step=0.01, key="binary_power_mde_superiority")
+                        alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01, key="binary_alpha_mde_superiority")
+            
+            # For other binary outcome designs (e.g., cluster), keep the original code
             elif "Binary Outcome" in design_type:
                 if calculation_type == "Sample Size":
                     p1 = st.slider("Control Group Proportion", min_value=0.01, max_value=0.99, value=0.5, step=0.01)
@@ -481,68 +717,9 @@ with tab1:
                 
         # Advanced parameters for specific designs
         with st.expander("Advanced Parameters", expanded=False):
-            # Advanced options for Parallel RCT with either Continuous or Binary Outcome
-            if "Parallel RCT (Continuous Outcome)" == design_type or "Parallel RCT (Binary Outcome)" == design_type:
+            # Advanced options for Parallel RCT with Continuous Outcome
+            if "Parallel RCT (Continuous Outcome)" == design_type:
                 st.write("Advanced Analysis Options:")
-                
-                # Hypothesis type selection
-                hypothesis_type = st.radio(
-                    "Hypothesis Type",
-                    ["Superiority", "Non-inferiority"], 
-                    index=0, 
-                    key="hypothesis_type_radio",
-                    help="Superiority: Test if one treatment is better than another. Non-inferiority: Test if a new treatment is not worse than standard by more than a specified margin."
-                )
-                
-                # Show non-inferiority specific parameters
-                if hypothesis_type == "Non-inferiority":
-                    st.write("Non-inferiority Parameters:")
-                    
-                    # Adjust default values based on outcome type
-                    if "Continuous Outcome" in design_type:
-                        default_margin = 0.5
-                        step_size = 0.1
-                    else:  # Binary Outcome
-                        default_margin = 0.1
-                        step_size = 0.01
-                    
-                    nim = st.number_input(
-                        "Non-inferiority Margin", 
-                        value=default_margin, 
-                        step=step_size, 
-                        min_value=0.01, 
-                        key="nim_input",
-                        help="The maximum acceptable difference for still considering the new treatment non-inferior to the standard."
-                    )
-                    
-                    direction = st.radio(
-                        "Non-inferiority Direction",
-                        ["Lower", "Upper"], 
-                        index=0, 
-                        key="direction_radio",
-                        help="Lower: Test if new treatment is not worse than standard by more than margin. Upper: Test if new treatment is not better than standard by more than margin (rare)."
-                    ).lower()  # Convert to lowercase for our functions
-                    
-                    if calculation_type == "Sample Size" or calculation_type == "Power":
-                        # Adjust step size and help text based on outcome type
-                        if "Continuous Outcome" in design_type:
-                            diff_step = 0.1
-                            help_text = "The true difference you expect between means. Typically 0 for non-inferiority (treatments are actually equivalent)."
-                        else:  # Binary Outcome
-                            diff_step = 0.01
-                            help_text = "The true difference you expect between proportions. Typically 0 for non-inferiority (treatments are actually equivalent)."
-                            
-                        assumed_difference = st.number_input(
-                            "Assumed True Difference", 
-                            value=0.0, 
-                            step=diff_step, 
-                            key="assumed_diff_input",
-                            help=help_text
-                        )
-                        
-                    st.info("Non-inferiority tests use a one-sided alpha level (significance level).")
-                
-                st.markdown("---")
                 
                 # Use checkboxes for the main options
                 col1, col2 = st.columns(2)
@@ -609,31 +786,74 @@ with tab1:
                 st.markdown("---")
                 allocation_ratio = st.slider("Allocation Ratio (n2/n1)", min_value=0.1, max_value=10.0, value=1.0, step=0.1)
         
-        # Simulation toggle for designs that support both analytical and simulation methods
-        if design_type != "Stepped Wedge Trial" and "Cluster" not in design_type and calculation_type in ["Sample Size", "Power", "Minimum Detectable Effect (MDE)"]:
-            use_simulation = st.checkbox("Use Simulation-based Estimation", value=False, key="use_simulation_checkbox")
-            if use_simulation:
-                nsim = st.slider("Number of Simulations", min_value=100, max_value=10000, value=1000, step=100, key="nsim_slider")
-                
-                if calculation_type == "Sample Size":
-                    st.info("Simulation iteratively finds the minimum sample size that achieves the target power.")
-                    
-                    # Parameters for sample size simulations
-                    if "Binary Outcome" in design_type:
-                        min_n = st.number_input("Minimum Sample Size to Try", value=10, min_value=2, step=1, key="min_n_slider")
-                        max_n = st.number_input("Maximum Sample Size to Try", value=1000, min_value=10, step=10, key="max_n_slider")
-                        step = st.number_input("Sample Size Step", value=10, min_value=1, step=1, key="step_slider")
-                    else:  # Continuous Outcome
-                        max_n = st.number_input("Maximum Sample Size to Try", value=1000, step=50, min_value=100)
-                        step_size = st.number_input("Sample Size Step", value=10, step=5, min_value=1)
-                elif calculation_type == "Power":
-                    st.info("Simulation provides empirical power estimates based on Monte Carlo methods.")
-                else:  # MDE
-                    st.info("Simulation uses an optimization approach to find the minimum detectable effect that achieves the desired power.")
-        else:
-            # Set simulation to always true for stepped wedge and cluster designs
-            use_simulation = True
+        # Advanced options for study designs that support different test methods
+        use_simulation = False  # Default value
+        test_method = "Normal approximation"  # Default test method
+        use_correction = False  # Default for continuity correction
         
+        # Only show advanced options for Parallel designs with binary outcomes
+        if "Parallel" in design_type and "Binary Outcome" in design_type and calculation_type in ["Sample Size", "Power", "Minimum Detectable Effect (MDE)"]:
+            with st.expander("Advanced Options", expanded=False):
+                # Test method selection
+                test_method = st.selectbox(
+                    "Statistical test", 
+                    options=[
+                        "Normal approximation", 
+                        "Score test", 
+                        "Likelihood ratio test", 
+                        "Fisher's exact test", 
+                        "Simulation"
+                    ],
+                    index=0,  # Default to normal approximation
+                    key="binary_test_method",
+                    help="Select the statistical test to use for hypothesis testing"
+                )
+                
+                # Use simulation if that test method is selected
+                use_simulation = (test_method == "Simulation")
+                
+                # Simulation parameters (only shown if simulation is selected)
+                if use_simulation:
+                    nsim = st.slider(
+                        "Number of simulations", 
+                        min_value=100, 
+                        max_value=10000, 
+                        value=1000, 
+                        step=100,
+                        key="nsim_slider"
+                    )
+                    
+                    if calculation_type == "Sample Size":
+                        max_n = st.slider(
+                            "Maximum sample size to try", 
+                            min_value=50, 
+                            max_value=5000, 
+                            value=1000, 
+                            step=50,
+                            key="max_n_slider"
+                        )
+                        step_size = st.slider(
+                            "Step size for sample size search", 
+                            min_value=1, 
+                            max_value=50, 
+                            value=10, 
+                            step=1,
+                            key="step_size"
+                        )
+                # Continuity correction option for non-simulation methods
+                elif test_method != "Fisher's exact test":  # No correction needed for Fisher's
+                    use_correction = st.checkbox(
+                        "Use continuity correction", 
+                        value=False, 
+                        key="binary_continuity_correction",
+                        help="Apply continuity correction for improved small sample accuracy"
+                    )
+        # For Stepped Wedge and Cluster designs, always use simulation
+        elif design_type == "Stepped Wedge Trial" or "Cluster" in design_type:
+            use_simulation = True
+            if design_type == "Stepped Wedge Trial" or ("Cluster" in design_type and calculation_type == "Power"):
+                nsim = st.slider("Number of Simulations", min_value=100, max_value=10000, value=1000, step=100, key="nsim_cluster_slider")
+
         # Option to generate power curve
         generate_curve = st.checkbox("Generate Power Curve", value=False)
         
@@ -697,7 +917,9 @@ with tab1:
                     
                     if calculation_type == "Sample Size":
                         # Get simulation checkbox state from session state
-                        use_simulation = st.session_state.get("use_simulation_checkbox", False)
+                        # Get the selected test method
+                        test_method = st.session_state.get("binary_test_method", "Normal approximation")
+                        use_simulation = test_method == "Simulation"
                         
                         # Get hypothesis type from session state
                         hypothesis_type = st.session_state.get("hypothesis_type_radio", "Superiority")
@@ -898,7 +1120,9 @@ with tab1:
                         # Get hypothesis type from session state
                         hypothesis_type = st.session_state.get("hypothesis_type_radio", "Superiority")
                         # Get simulation checkbox state from session state
-                        use_simulation = st.session_state.get("use_simulation_checkbox", False)
+                        # Get the selected test method
+                        test_method = st.session_state.get("binary_test_method", "Normal approximation")
+                        use_simulation = test_method == "Simulation"
                         
                         if hypothesis_type == "Non-inferiority":
                             # In non-inferiority context, MDE is the minimum non-inferiority margin
@@ -982,6 +1206,480 @@ with tab1:
                                     }
                                 method_name = "min_detectable_effect_analytical"
                 
+                # Parallel RCT with Binary Outcome
+                elif design_type == "Parallel RCT (Binary Outcome)":
+                    # Get hypothesis type from session state
+                    hypothesis_type = st.session_state.get("hypothesis_type_binary_radio", "Superiority")
+                    
+                    if calculation_type == "Sample Size":
+                        # Different calculation based on hypothesis type
+                        if hypothesis_type == "Non-inferiority":
+                            # Get non-inferiority parameters
+                            p1 = st.session_state.get("p1", 0.5)  # Control proportion
+                            nim = st.session_state.get("binary_nim_input", 0.1)  # Non-inferiority margin
+                            direction = st.session_state.get("binary_direction_radio", "Lower").lower()
+                            assumed_p2 = st.session_state.get("assumed_p2_input", p1)  # Assumed intervention proportion
+                            power_value = st.session_state.get("power", 0.8)
+                            alpha_value = st.session_state.get("alpha", 0.05)
+                            allocation_ratio_value = st.session_state.get("allocation_ratio", 1.0)
+                            
+                            # Check if using simulation
+                            # Get the selected test method
+                            test_method = st.session_state.get("binary_test_method", "Normal approximation")
+                            use_simulation = test_method == "Simulation"
+                            
+                            if use_simulation:
+                                # Get simulation parameters
+                                nsim_value = st.session_state.get("nsim_slider", 1000)
+                                max_n_value = st.session_state.get("max_n", 1000)
+                                step_size_value = st.session_state.get("step_size", 10)
+                                
+                                # Calculate sample size using simulation
+                                result = simulate_binary_sample_size_non_inferiority(
+                                    p1=p1,
+                                    non_inferiority_margin=nim,
+                                    power=power_value,
+                                    alpha=alpha_value,
+                                    allocation_ratio=allocation_ratio_value,
+                                    assumed_p2=assumed_p2,
+                                    direction=direction,
+                                    nsim=nsim_value,
+                                    max_n=max_n_value,
+                                    step=step_size_value
+                                )
+                                method_name = "simulate_binary_sample_size_non_inferiority"
+                            else:
+                                # Calculate sample size using analytical function
+                                result = sample_size_binary_non_inferiority(
+                                    p1=p1,
+                                    non_inferiority_margin=nim,
+                                    power=power_value,
+                                    alpha=alpha_value,
+                                    allocation_ratio=allocation_ratio_value,
+                                    assumed_p2=assumed_p2,
+                                    direction=direction
+                                )
+                                method_name = "sample_size_binary_non_inferiority"
+                        else:  # Superiority hypothesis
+                            # Get parameters for superiority test
+                            p1 = st.session_state.get("binary_p1_superiority", 0.5)  # Control proportion
+                            p2 = st.session_state.get("binary_p2_superiority", 0.6)  # Intervention proportion
+                            power_value = st.session_state.get("binary_power_superiority", 0.8)
+                            alpha_value = st.session_state.get("binary_alpha_superiority", 0.05)
+                            allocation_ratio_value = st.session_state.get("allocation_ratio", 1.0)
+                            
+                            # Check if using simulation
+                            # Get the selected test method
+                            test_method = st.session_state.get("binary_test_method", "Normal approximation")
+                            use_simulation = test_method == "Simulation"
+                            
+                            if use_simulation:
+                                # Get simulation parameters
+                                nsim_value = st.session_state.get("nsim_slider", 1000)
+                                max_n_value = st.session_state.get("max_n", 1000)
+                                step_size_value = st.session_state.get("step_size", 10)
+                                
+                                # Calculate sample size using simulation
+                                result = simulate_sample_size_binary(
+                                    p1=p1,
+                                    p2=p2,
+                                    power=power_value,
+                                    alpha=alpha_value,
+                                    allocation_ratio=allocation_ratio_value,
+                                    nsim=nsim_value,
+                                    max_n=max_n_value,
+                                    step=step_size_value,
+                                    test_method="chi2"  # Default to chi-square test for simulation
+                                )
+                                method_name = "simulate_sample_size_binary"
+                            else:
+                                # Get continuity correction setting
+                                use_correction = st.session_state.get("binary_continuity_correction", False)
+                                
+                                # Select the appropriate method based on the test method
+                                selected_test = st.session_state.get("binary_test_method", "Normal approximation")
+                                
+                                if selected_test == "Normal approximation":
+                                    # Calculate sample size using analytical formula with normal approximation
+                                    result = sample_size_binary(
+                                        p1=p1,
+                                        p2=p2,
+                                        power=power_value,
+                                        alpha=alpha_value,
+                                        allocation_ratio=allocation_ratio_value,
+                                        correction=use_correction
+                                    )
+                                elif selected_test == "Score test":
+                                    # Calculate sample size using score test
+                                    result = sample_size_binary(
+                                        p1=p1,
+                                        p2=p2,
+                                        power=power_value,
+                                        alpha=alpha_value,
+                                        allocation_ratio=allocation_ratio_value,
+                                        method="score",
+                                        correction=use_correction
+                                    )
+                                elif selected_test == "Likelihood ratio test":
+                                    # Calculate sample size using likelihood ratio test
+                                    result = sample_size_binary(
+                                        p1=p1,
+                                        p2=p2,
+                                        power=power_value,
+                                        alpha=alpha_value,
+                                        allocation_ratio=allocation_ratio_value,
+                                        method="lr",
+                                        correction=False  # No correction for LR test
+                                    )
+                                elif selected_test == "Fisher's exact test":
+                                    # For Fisher's exact, we'll use simulation with Fisher's test method
+                                    result = simulate_sample_size_binary(
+                                        p1=p1,
+                                        p2=p2,
+                                        power=power_value,
+                                        alpha=alpha_value,
+                                        allocation_ratio=allocation_ratio_value,
+                                        nsim=1000,  # Reasonable default
+                                        max_n=1000,  # Reasonable upper limit
+                                        step=10,     # Reasonable step size
+                                        test_method="fisher"  # Use Fisher's exact test
+                                    )
+                                method_name = "sample_size_binary"
+                    
+                    elif calculation_type == "Power":
+                        # Different calculation based on hypothesis type
+                        if hypothesis_type == "Non-inferiority":
+                            # Get non-inferiority parameters
+                            n1 = st.session_state.get("n1", 100)  # Control sample size
+                            n2 = st.session_state.get("n2", 100)  # Intervention sample size
+                            p1 = st.session_state.get("p1", 0.5)  # Control proportion
+                            nim = st.session_state.get("binary_nim_power_input", 0.1)  # Non-inferiority margin
+                            direction = st.session_state.get("binary_direction_power_radio", "Lower").lower()
+                            assumed_p2 = st.session_state.get("assumed_p2_power_input", p1)  # Assumed intervention proportion
+                            alpha_value = st.session_state.get("alpha", 0.05)
+                            
+                            # Check if using simulation
+                            # Get the selected test method
+                            test_method = st.session_state.get("binary_test_method", "Normal approximation")
+                            use_simulation = test_method == "Simulation"
+                            
+                            if use_simulation:
+                                # Get simulation parameters
+                                nsim_value = st.session_state.get("nsim_slider", 1000)
+                                
+                                # Calculate power using simulation
+                                result = simulate_binary_non_inferiority(
+                                    n1=n1,
+                                    n2=n2,
+                                    p1=p1,
+                                    non_inferiority_margin=nim,
+                                    alpha=alpha_value,
+                                    assumed_p2=assumed_p2,
+                                    direction=direction,
+                                    nsim=nsim_value
+                                )
+                                method_name = "simulate_binary_non_inferiority"
+                            else:
+                                # Calculate power using analytical function
+                                result = power_binary_non_inferiority(
+                                    n1=n1,
+                                    n2=n2,
+                                    p1=p1,
+                                    non_inferiority_margin=nim,
+                                    alpha=alpha_value,
+                                    assumed_p2=assumed_p2,
+                                    direction=direction
+                                )
+                                method_name = "power_binary_non_inferiority"
+                        else:  # Superiority hypothesis
+                            # Get parameters for superiority test
+                            n1 = st.session_state.get("binary_n1_power_superiority", 100)  # Control sample size
+                            n2 = st.session_state.get("binary_n2_power_superiority", 100)  # Intervention sample size
+                            p1 = st.session_state.get("binary_p1_power_superiority", 0.5)  # Control proportion
+                            p2 = st.session_state.get("binary_p2_power_superiority", 0.6)  # Intervention proportion
+                            alpha_value = st.session_state.get("binary_alpha_power_superiority", 0.05)
+                            
+                            # Check if using simulation
+                            # Get the selected test method
+                            test_method = st.session_state.get("binary_test_method", "Normal approximation")
+                            use_simulation = test_method == "Simulation"
+                    
+                    try:
+                        # Try to interpolate to find the MDE
+                        power_func = interp1d(unique_powers, unique_effect_sizes, bounds_error=False, fill_value="extrapolate")
+                        mde = float(power_func(power_value))
+                    except:
+                        if len(unique_powers) > 0:
+                            # If we have only one unique power, use that effect size
+                            mde = effect_sizes[list(power_indices.values())[0]]
+                        else:
+                            # If we couldn't reach target power, return the effect size with highest power
+                            best_idx = np.argmax(powers)
+                            mde = effect_sizes[best_idx]
+                
+                # Convert the tested_effect_sizes to a string to avoid Streamlit type errors
+                tested_effect_sizes_str = str([(float(e), float(p)) for e, p in zip(effect_sizes, powers)])
+                
+                result = {
+                "minimum_detectable_effect": mde,
+                "achieved_power": float(powers[np.argmin(np.abs(effect_sizes - mde))]),
+                "tested_effect_sizes_str": tested_effect_sizes_str,  # Use string version
+                "method": "simulate_binary_mde",
+                "parameters": {
+                    "n1": n1,
+                    "n2": n2,
+                    "p1": p1,
+                    "power": power_value,
+                    "alpha": alpha_value,
+                    "nsim": nsim_value
+                }
+                }
+                method_name = "simulate_binary_mde"
+        else:
+            # Calculate MDE using analytical formula
+            result = min_detectable_binary(
+                n1=n1,
+                n2=n2,
+                p1=p1,
+                power=power_value,
+                alpha=alpha_value,
+                test_method=test_method
+            )
+            method_name = "min_detectable_binary"
+                            # Get non-inferiority parameters
+                            n1 = st.session_state.get("n1", 100)  # Control sample size
+                            n2 = st.session_state.get("n2", 100)  # Intervention sample size
+                            p1 = st.session_state.get("p1", 0.5)  # Control proportion
+                            direction = st.session_state.get("binary_direction_mde_radio", "Lower").lower()
+                            assumed_p2 = st.session_state.get("assumed_p2_mde_input", p1)  # Assumed intervention proportion
+                            power_value = st.session_state.get("power", 0.8)
+                            alpha_value = st.session_state.get("alpha", 0.05)
+                            
+                            # Check if using simulation
+                            # Get the selected test method
+                            test_method = st.session_state.get("binary_test_method", "Normal approximation")
+                            use_simulation = test_method == "Simulation"
+                            
+                            if use_simulation:
+                                # Get simulation parameters
+                                nsim_value = st.session_state.get("nsim_slider", 1000)
+                                
+                                # For simulation-based MDE of non-inferiority margin, we need to try different margins
+                                # Start with an analytical estimate
+                                initial_margin = min_detectable_binary_non_inferiority_margin(
+                                    n1=n1,
+                                    n2=n2,
+                                    p1=p1,
+                                    power=power_value,
+                                    alpha=alpha_value,
+                                    assumed_p2=assumed_p2,
+                                    direction=direction
+                                )["minimum_detectable_non_inferiority_margin"]
+                                
+                                # Try a range of margins around the analytical estimate
+                                margins = np.linspace(max(0.01, initial_margin*0.5), initial_margin*1.5, 20)
+                                powers = []
+                                
+                                for margin in margins:
+                                    # Calculate power for this margin
+                                    sim_result = simulate_binary_non_inferiority(
+                                        n1=n1,
+                                        n2=n2,
+                                        p1=p1,
+                                        non_inferiority_margin=margin,
+                                        alpha=alpha_value,
+                                        assumed_p2=assumed_p2,
+                                        direction=direction,
+                                        nsim=nsim_value
+                                    )
+                                    powers.append(sim_result["power"])
+                                
+                                # Find the margin that gives power closest to the target
+                                # Use interpolation to get a more precise estimate
+                                from scipy.interpolate import interp1d
+                                if len(powers) > 1 and max(powers) >= power_value:
+                                    # Ensure powers and margins are the same length
+                                    if len(powers) != len(margins):
+                                        # Truncate to the shorter of the two
+                                        min_len = min(len(powers), len(margins))
+                                        powers = powers[:min_len]
+                                        margins = margins[:min_len]
+                                    
+                                    # Handle duplicate power values for interpolation
+                                    power_indices = {}
+                                    for i, p in enumerate(powers):
+                                        # If we have duplicate powers, keep the one with the smaller margin
+                                        if p not in power_indices:
+                                            power_indices[p] = i
+                                    
+                                    if len(power_indices) > 1:  # Need at least 2 points for interpolation
+                                        unique_indices = sorted(power_indices.values())
+                                        unique_powers = [powers[i] for i in unique_indices]
+                                        unique_margins = [margins[i] for i in unique_indices]
+                                        
+                                        power_func = interp1d(unique_powers, unique_margins, bounds_error=False, fill_value="extrapolate")
+                                        mde = float(power_func(power_value))
+                                    else:
+                                        # If we have only one unique power, use that margin
+                                        mde = margins[list(power_indices.values())[0]]
+                                else:
+                                    # If we couldn't reach target power, return the margin with highest power
+                                    best_idx = np.argmax(powers)
+                                    mde = margins[best_idx]
+                                
+                                # Convert the tested_margins to a string to avoid Streamlit type errors
+                                tested_margins_str = str([(float(m), float(p)) for m, p in zip(margins, powers)])
+                                
+                                result = {
+                                    "minimum_detectable_non_inferiority_margin": mde,
+                                    "achieved_power": float(powers[np.argmin(np.abs(margins - mde))]),
+                                    "tested_margins_str": tested_margins_str,  # Use string version
+                                    "method": "simulate_binary_non_inferiority_mde",
+                                    "parameters": {
+                                        "n1": n1,
+                                        "n2": n2,
+                                        "p1": p1,
+                                        "assumed_p2": assumed_p2,
+                                        "power": power_value,
+                                        "alpha": alpha_value,
+                                        "direction": direction,
+                                        "nsim": nsim_value
+                                    }
+                                }
+                                method_name = "simulate_binary_non_inferiority_mde"
+                            else:
+                                # Calculate minimum detectable non-inferiority margin using analytical method
+                                result = min_detectable_binary_non_inferiority_margin(
+                                    n1=n1,
+                                    n2=n2,
+                                    p1=p1,
+                                    power=power_value,
+                                    alpha=alpha_value,
+                                    assumed_p2=assumed_p2,
+                                    direction=direction
+                                )
+                                method_name = "min_detectable_binary_non_inferiority_margin"
+                        else:  # Superiority hypothesis
+                            # Get parameters for superiority test
+                            n1 = st.session_state.get("binary_n1_mde_superiority", 100)  # Control sample size
+                            n2 = st.session_state.get("binary_n2_mde_superiority", 100)  # Intervention sample size
+                            p1 = st.session_state.get("binary_p1_mde_superiority", 0.5)  # Control proportion
+                            power_value = st.session_state.get("binary_power_mde_superiority", 0.8)
+                            alpha_value = st.session_state.get("binary_alpha_mde_superiority", 0.05)
+                            
+                            # Check if using simulation
+                            # Get the selected test method
+                            test_method = st.session_state.get("binary_test_method", "Normal approximation")
+                            use_simulation = test_method == "Simulation"
+                            
+                            if use_simulation:
+                                # Get simulation parameters
+                                nsim_value = st.session_state.get("nsim_slider", 1000)
+                                
+                                # Calculate MDE using analytical formula first as a starting point
+                                z_alpha = stats.norm.ppf(1 - alpha_value/2)
+                                z_beta = stats.norm.ppf(power_value)
+                                variance_term = p1 * (1 - p1) * (1/n1 + 1/n2)
+                                analytical_mde = (z_alpha + z_beta) * math.sqrt(variance_term)
+                                
+                                # Try a range of effect sizes around the analytical estimate
+                                # For binary outcomes, the effect size is the difference in proportions
+                                effect_sizes = np.linspace(max(0.01, analytical_mde*0.5), min(0.9-p1, analytical_mde*1.5), 20)
+                                powers = []
+                                
+                                for effect_size in effect_sizes:
+                                    # Calculate the p2 value based on p1 and effect_size
+                                    p2 = p1 + effect_size
+                                    if p2 > 0.99:
+                                        p2 = 0.99
+                                    
+                                    # Calculate power for this effect size
+                                    sim_result = simulate_binary(
+                                        n1=n1,
+                                        n2=n2,
+                                        p1=p1,
+                                        p2=p2,
+                                        alpha=alpha_value,
+                                        nsim=nsim_value
+                                    )
+                                    powers.append(sim_result["power"])
+                                
+                                # Find the effect size that gives power closest to the target
+                                # Use interpolation to get a more precise estimate
+                                from scipy.interpolate import interp1d
+                                if len(powers) > 1 and max(powers) >= power_value:
+                                    # Ensure powers and effect_sizes are the same length
+                                    if len(powers) != len(effect_sizes):
+                                        # Truncate to the shorter of the two
+                                        min_len = min(len(powers), len(effect_sizes))
+                                        powers = powers[:min_len]
+                                        effect_sizes = effect_sizes[:min_len]
+                                    
+                                    # Handle duplicate power values for interpolation
+                                    power_indices = {}
+                                    for i, p in enumerate(powers):
+                                        # If we have duplicate powers, keep the one with the smaller effect size
+                                        if p not in power_indices:
+                                            power_indices[p] = i
+                                    
+                                    if len(power_indices) > 1:  # Need at least 2 points for interpolation
+                                        unique_indices = sorted(power_indices.values())
+                                        unique_powers = [powers[i] for i in unique_indices]
+                                        unique_effect_sizes = [effect_sizes[i] for i in unique_indices]
+                                        
+                                        power_func = interp1d(unique_powers, unique_effect_sizes, bounds_error=False, fill_value="extrapolate")
+                                        mde = float(power_func(power_value))
+                                    else:
+                                        # If we have only one unique power, use that effect size
+                                        mde = effect_sizes[list(power_indices.values())[0]]
+                                else:
+                                    # If we couldn't reach target power, return the effect size with highest power
+                                    best_idx = np.argmax(powers)
+                                    mde = effect_sizes[best_idx]
+                                
+                                # Convert the tested_effect_sizes to a string to avoid Streamlit type errors
+                                tested_effect_sizes_str = str([(float(e), float(p)) for e, p in zip(effect_sizes, powers)])
+                                
+                                result = {
+                                    "minimum_detectable_effect": mde,
+                                    "achieved_power": float(powers[np.argmin(np.abs(effect_sizes - mde))]),
+                                    "tested_effect_sizes_str": tested_effect_sizes_str,  # Use string version
+                                    "method": "simulate_binary_mde",
+                                    "parameters": {
+                                        "n1": n1,
+                                        "n2": n2,
+                                        "p1": p1,
+                                        "power": power_value,
+                                        "alpha": alpha_value,
+                                        "nsim": nsim_value
+                                    }
+                                }
+                                method_name = "simulate_binary_mde"
+                            else:
+                                # Calculate MDE using z-scores and sample size
+                                # This is based on the formula for binary outcomes rearranged to solve for delta (p2-p1)
+                                z_alpha = stats.norm.ppf(1 - alpha_value/2)
+                                z_beta = stats.norm.ppf(power_value)
+                                
+                                # Common variance term for binary outcome
+                                # Using p1 as the pooled proportion estimate for conservative MDE
+                                variance_term = p1 * (1 - p1) * (1/n1 + 1/n2)
+                                
+                                # Minimum detectable difference in proportions
+                                mde = (z_alpha + z_beta) * math.sqrt(variance_term)
+                                
+                                result = {
+                                    "minimum_detectable_effect": mde,
+                                    "parameters": {
+                                        "n1": n1,
+                                        "n2": n2,
+                                        "p1": p1,
+                                        "power": power_value,
+                                        "alpha": alpha_value
+                                    }
+                                }
+                                method_name = "min_detectable_effect_binary_analytical"
+                
                 # Cluster RCT with Continuous Outcome
                 elif design_type == "Cluster RCT (Continuous Outcome)":
                     if calculation_type == "Power":
@@ -996,210 +1694,6 @@ with tab1:
                             alpha=alpha
                         )
                         method_name = "simulate_cluster_rct"
-                
-                # Parallel RCT with Binary Outcome
-                elif design_type == "Parallel RCT (Binary Outcome)":
-                    # Get hypothesis type from session state
-                    hypothesis_type = st.session_state.get("hypothesis_type_radio", "Superiority")
-                    
-                    # Get simulation checkbox state from session state
-                    use_simulation = st.session_state.get("use_simulation_checkbox", False)
-                    
-                    if hypothesis_type == "Non-inferiority":
-                        # Get non-inferiority parameters from session state
-                        nim = st.session_state.get("nim_input", 0.1)
-                        direction = st.session_state.get("direction_radio", "Lower").lower()
-                        assumed_difference = st.session_state.get("assumed_diff_input", 0.0)
-                        
-                        if calculation_type == "Sample Size":
-                            if use_simulation:
-                                # Get simulation parameters from session state
-                                nsim_value = st.session_state.get("nsim_slider", 1000)
-                                min_n_value = st.session_state.get("min_n_slider", 10)
-                                max_n_value = st.session_state.get("max_n_slider", 1000)
-                                step_value = st.session_state.get("step_slider", 10)
-                                
-                                result = sample_size_binary_non_inferiority_sim(
-                                    p1=p1,
-                                    non_inferiority_margin=nim,
-                                    power=power,
-                                    alpha=alpha,
-                                    allocation_ratio=allocation_ratio,
-                                    assumed_difference=assumed_difference,
-                                    direction=direction,
-                                    nsim=nsim_value,
-                                    min_n=min_n_value,
-                                    max_n=max_n_value,
-                                    step=step_value
-                                )
-                                method_name = "sample_size_binary_non_inferiority_sim"
-                            else:
-                                result = sample_size_binary_non_inferiority(
-                                    p1=p1,
-                                    non_inferiority_margin=nim,
-                                    power=power,
-                                    alpha=alpha,
-                                    allocation_ratio=allocation_ratio,
-                                    assumed_difference=assumed_difference,
-                                    direction=direction
-                                )
-                                method_name = "sample_size_binary_non_inferiority"
-                        
-                        elif calculation_type == "Power":
-                            if use_simulation:
-                                # Get number of simulations from session state
-                                nsim_value = st.session_state.get("nsim_slider", 1000)
-                                
-                                result = simulate_binary_non_inferiority(
-                                    n1=n1,
-                                    n2=n2,
-                                    p1=p1,
-                                    non_inferiority_margin=nim,
-                                    alpha=alpha,
-                                    assumed_difference=assumed_difference,
-                                    direction=direction,
-                                    nsim=nsim_value
-                                )
-                                method_name = "simulate_binary_non_inferiority"
-                            else:
-                                result = power_binary_non_inferiority(
-                                    n1=n1,
-                                    n2=n2,
-                                    p1=p1,
-                                    non_inferiority_margin=nim,
-                                    alpha=alpha,
-                                    assumed_difference=assumed_difference,
-                                    direction=direction
-                                )
-                                method_name = "power_binary_non_inferiority"
-                        
-                        elif calculation_type == "Minimum Detectable Effect (MDE)":
-                            if use_simulation:
-                                # Get number of simulations from session state
-                                nsim_value = st.session_state.get("nsim_slider", 1000)
-                                
-                                result = min_detectable_binary_non_inferiority_margin_sim(
-                                    n1=n1,
-                                    n2=n2,
-                                    p1=p1,
-                                    power=power,
-                                    alpha=alpha,
-                                    assumed_difference=assumed_difference,
-                                    direction=direction,
-                                    nsim=nsim_value,
-                                    precision=0.01
-                                )
-                                method_name = "min_detectable_binary_non_inferiority_margin_sim"
-                            else:
-                                result = min_detectable_binary_non_inferiority_margin(
-                                    n1=n1,
-                                    n2=n2,
-                                    p1=p1,
-                                    power=power,
-                                    alpha=alpha,
-                                    assumed_difference=assumed_difference,
-                                    direction=direction
-                                )
-                                method_name = "min_detectable_binary_non_inferiority_margin"
-                    
-                    else:  # Superiority hypothesis
-                        if calculation_type == "Sample Size":
-                            if use_simulation:
-                                # Get simulation parameters from session state
-                                nsim_value = st.session_state.get("nsim_slider", 1000)
-                                min_n_value = st.session_state.get("min_n_slider", 10)
-                                max_n_value = st.session_state.get("max_n_slider", 1000)
-                                step_value = st.session_state.get("step_slider", 10)
-                                
-                                result = sample_size_binary_sim(
-                                    p1=p1,
-                                    p2=p2,
-                                    power=power,
-                                    alpha=alpha,
-                                    allocation_ratio=allocation_ratio,
-                                    nsim=nsim_value,
-                                    min_n=min_n_value,
-                                    max_n=max_n_value,
-                                    step=step_value
-                                )
-                                method_name = "sample_size_binary_sim"
-                            else:
-                                result = sample_size_binary(
-                                    p1=p1,
-                                    p2=p2,
-                                    power=power,
-                                    alpha=alpha,
-                                    allocation_ratio=allocation_ratio
-                                )
-                                method_name = "sample_size_binary"
-                        
-                        elif calculation_type == "Power":
-                            if use_simulation:
-                                # Get number of simulations from session state
-                                nsim_value = st.session_state.get("nsim_slider", 1000)
-                                
-                                result = simulate_binary(
-                                    n1=n1,
-                                    n2=n2,
-                                    p1=p1,
-                                    p2=p2,
-                                    nsim=nsim_value,
-                                    alpha=alpha
-                                )
-                                method_name = "simulate_binary"
-                            else:
-                                result = power_binary(
-                                    n1=n1,
-                                    n2=n2,
-                                    p1=p1,
-                                    p2=p2,
-                                    alpha=alpha
-                                )
-                                method_name = "power_binary"
-                        
-                        # For MDE, we get the minimum detectable p2 for a given p1, sample size, and power
-                        elif calculation_type == "Minimum Detectable Effect (MDE)":
-                            if use_simulation:
-                                # Get number of simulations from session state
-                                nsim_value = st.session_state.get("nsim_slider", 1000)
-                                
-                                result = min_detectable_effect_binary_sim(
-                                    n1=n1,
-                                    n2=n2,
-                                    p1=p1,
-                                    power=power,
-                                    nsim=nsim_value,
-                                    alpha=alpha,
-                                    precision=0.01
-                                )
-                                method_name = "min_detectable_effect_binary_sim"
-                            else:
-                                if p1 < 0.5:
-                                    # If p1 is low, look for increase in p2
-                                    min_p2 = p1
-                                    max_p2 = 0.99
-                                else:
-                                    # If p1 is high, look for decrease in p2
-                                    min_p2 = 0.01
-                                    max_p2 = p1
-                                
-                                def objective(p2):
-                                    # Using the power function to find p2 that gives us target power
-                                    return power_binary(n1, n2, p1, p2, alpha)["power"] - power
-                                
-                                result_p2 = optimize.brentq(objective, min_p2, max_p2)
-                                
-                                result = {
-                                    "p2": result_p2,
-                                    "parameters": {
-                                        "n1": n1,
-                                        "n2": n2,
-                                        "p1": p1,
-                                        "power": power,
-                                        "alpha": alpha
-                                    }
-                                }
-                                method_name = "min_detectable_p2"
                 
                 # Cluster RCT with Binary Outcome
                 elif design_type == "Cluster RCT (Binary Outcome)":
@@ -1272,7 +1766,39 @@ with tab1:
                         st.subheader("Calculation Results")
                         for key, value in result.items():
                             if key != "parameters" and not isinstance(value, dict):
-                                st.metric(label=key.replace("_", " ").title(), value=f"{value:.4f}" if isinstance(value, float) else value)
+                                # Skip string representations of lists/tuples
+                                if key.endswith("_str"):
+                                    # For sample sizes, display as a table instead
+                                    if "sample_size" in key or "margin" in key or "effect_size" in key:
+                                        try:
+                                            import ast
+                                            data = ast.literal_eval(value)
+                                            import pandas as pd
+                                            if "sample_size" in key:
+                                                df = pd.DataFrame(data, columns=["Sample Size", "Power"])
+                                            elif "margin" in key:
+                                                df = pd.DataFrame(data, columns=["Margin", "Power"])
+                                            else:  # effect_size
+                                                df = pd.DataFrame(data, columns=["Effect Size", "Power"])
+                                            st.dataframe(df)
+                                        except:
+                                            # Fall back to showing truncated string if conversion fails
+                                            display_key = key.replace("_str", "").replace("_", " ").title()
+                                            short_value = str(value)[:50] + "..." if len(str(value)) > 50 else value
+                                            st.write(f"**{display_key}:** {short_value}")
+                                elif key == "achieved_power" and value is not None:
+                                    # Format power as percentage
+                                    st.metric(label="Achieved Power", value=f"{float(value):.1%}")
+                                else:
+                                    # Format regular metrics
+                                    formatted_value = value
+                                    if isinstance(value, float):
+                                        if "power" in key.lower():
+                                            formatted_value = f"{value:.1%}"
+                                        else:
+                                            formatted_value = f"{value:.4f}"
+                                    
+                                    st.metric(label=key.replace("_", " ").title(), value=formatted_value)
                     
                     with col2:
                         st.subheader("Input Parameters")

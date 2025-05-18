@@ -380,7 +380,7 @@ def min_detectable_effect_continuous(n1, n2, std_dev, power=0.8, nsim=1000, alph
     
     # Get final simulation to report detailed results
     final_sim = simulate_continuous(n1=n1, n2=n2, mean1=0, mean2=result.x, std_dev=std_dev, nsim=nsim, alpha=alpha,
-                                repeated_measures=repeated_measures, correlation=correlation, method=method)
+                                 repeated_measures=repeated_measures, correlation=correlation, method=method)
     final_power = final_sim["power"]
     
     return {
