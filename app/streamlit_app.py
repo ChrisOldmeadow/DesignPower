@@ -30,6 +30,15 @@ from core.compatibility import (
     simulate_binary_cluster_rct,
     simulate_min_detectable_effect,
     simulate_sample_size,
+    # Continuous non-inferiority functions
+    sample_size_continuous_non_inferiority,
+    power_continuous_non_inferiority,
+    min_detectable_non_inferiority_margin,
+    simulate_continuous_non_inferiority,
+    # Binary analytical functions
+    sample_size_binary_non_inferiority,
+    power_binary_non_inferiority,
+    min_detectable_binary_non_inferiority_margin,
     # Binary simulation functions
     sample_size_binary_sim,
     min_detectable_effect_binary_sim,
@@ -337,30 +346,78 @@ with tab1:
         
         # Show parameters based on selected design
         with st.expander("Basic Parameters", expanded=True):
+            # Hypothesis type selection for Parallel RCT designs
+            if "Parallel RCT" in design_type and ("Continuous Outcome" in design_type or "Binary Outcome" in design_type):
+                hypothesis_type = st.radio(
+                    "Hypothesis Type",
+                    ["Superiority", "Non-inferiority"], 
+                    key="hypothesis_type_radio",
+                    horizontal=True,
+                    help="Superiority tests if one treatment is better than another. Non-inferiority tests if a new treatment is not worse than the standard by more than an acceptable margin."
+                )
+                
             if "Continuous Outcome" in design_type:
                 if calculation_type == "Sample Size":
-                    # Option to input effect size directly or as means (for all continuous outcome designs)
-                    effect_size_input_method = st.radio(
-                        "Effect Size Input Method",
-                        ["Direct Effect Size", "Group Means"],
-                        horizontal=True
-                    )
-                    
-                    if effect_size_input_method == "Direct Effect Size":
-                        delta = st.number_input("Effect Size (Difference in Means)", value=0.5, step=0.1)
-                    else:  # Group Means option
-                        if "Stepped Wedge" in design_type:
-                            mean_control = st.number_input("Mean Control Phase", value=0.0, step=0.1)
-                            mean_intervention = st.number_input("Mean Intervention Phase", value=0.5, step=0.1)
-                        else:  # Parallel or Cluster
-                            mean_control = st.number_input("Mean Control Group", value=0.0, step=0.1)
-                            mean_intervention = st.number_input("Mean Intervention Group", value=0.5, step=0.1)
-                        delta = abs(mean_intervention - mean_control)  # Calculate effect size automatically
-                        st.info(f"Calculated effect size (absolute difference): {delta}")
+                    # Show different parameters based on hypothesis type
+                    if "hypothesis_type_radio" in st.session_state and st.session_state["hypothesis_type_radio"] == "Non-inferiority":
+                        # Non-inferiority parameters for continuous outcomes
+                        std_dev = st.number_input("Standard Deviation", value=1.0, step=0.1, min_value=0.1)
                         
-                    std_dev = st.number_input("Standard Deviation", value=1.0, step=0.1, min_value=0.1)
+                        # Non-inferiority specific parameters
+                        default_margin = 0.5
+                        step_size = 0.1
+                        
+                        nim = st.number_input(
+                            "Non-inferiority Margin", 
+                            value=default_margin, 
+                            step=step_size, 
+                            min_value=0.01, 
+                            key="nim_input",
+                            help="The maximum acceptable difference for still considering the new treatment non-inferior to the standard."
+                        )
+                        
+                        direction = st.radio(
+                            "Non-inferiority Direction",
+                            ["Lower", "Upper"], 
+                            index=0, 
+                            key="direction_radio",
+                            help="Lower: Test if new treatment is not worse than standard by more than margin. Upper: Test if new treatment is not better than standard by more than margin (rare)."
+                        )
+                        
+                        assumed_difference = st.number_input(
+                            "Assumed True Difference", 
+                            value=0.0, 
+                            step=0.1, 
+                            key="assumed_diff_input",
+                            help="The true difference you expect between means. Typically 0 for non-inferiority (treatments are actually equivalent)."
+                        )
+                        
+                        st.info("Non-inferiority tests use a one-sided alpha level (significance level).")
+                    else:
+                        # Superiority parameters
+                        # Option to input effect size directly or as means (for all continuous outcome designs)
+                        effect_size_input_method = st.radio(
+                            "Effect Size Input Method",
+                            ["Direct Effect Size", "Group Means"],
+                            horizontal=True
+                        )
+                        
+                        if effect_size_input_method == "Direct Effect Size":
+                            delta = st.number_input("Effect Size (Difference in Means)", value=0.5, step=0.1)
+                        else:  # Group Means option
+                            if "Stepped Wedge" in design_type:
+                                mean_control = st.number_input("Mean Control Phase", value=0.0, step=0.1)
+                                mean_intervention = st.number_input("Mean Intervention Phase", value=0.5, step=0.1)
+                            else:  # Parallel or Cluster
+                                mean_control = st.number_input("Mean Control Group", value=0.0, step=0.1)
+                                mean_intervention = st.number_input("Mean Intervention Group", value=0.5, step=0.1)
+                            delta = abs(mean_intervention - mean_control)  # Calculate effect size automatically
+                            st.info(f"Calculated effect size (absolute difference): {delta}")
+                        
+                        std_dev = st.number_input("Standard Deviation", value=1.0, step=0.1, min_value=0.1)
+                    
                     power = st.slider("Power", min_value=0.5, max_value=0.99, value=0.8, step=0.01)
-                    alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
+                    alpha = st.slider("Significance Level (\u03b1)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
                     
                 elif calculation_type == "Power":
                     # Set up sample size inputs based on design
@@ -375,28 +432,65 @@ with tab1:
                         steps = st.number_input("Number of Time Steps", value=4, step=1, min_value=2)
                         individuals_per_cluster = st.number_input("Individuals per Cluster per Step", value=10, step=1, min_value=1)
                     
-                    # Option to input effect size directly or as means for all continuous designs
-                    effect_size_input_method = st.radio(
-                        "Effect Size Input Method",
-                        ["Direct Effect Size", "Group Means"],
-                        horizontal=True
-                    )
+                    # Show different parameters based on hypothesis type
+                    if "hypothesis_type_radio" in st.session_state and st.session_state["hypothesis_type_radio"] == "Non-inferiority":
+                        # Non-inferiority parameters for continuous outcomes
+                        std_dev = st.number_input("Standard Deviation", value=1.0, step=0.1, min_value=0.1)
+                        
+                        # Non-inferiority specific parameters
+                        default_margin = 0.5
+                        step_size = 0.1
+                        
+                        nim = st.number_input(
+                            "Non-inferiority Margin", 
+                            value=default_margin, 
+                            step=step_size, 
+                            min_value=0.01, 
+                            key="nim_input",
+                            help="The maximum acceptable difference for still considering the new treatment non-inferior to the standard."
+                        )
+                        
+                        direction = st.radio(
+                            "Non-inferiority Direction",
+                            ["Lower", "Upper"], 
+                            index=0, 
+                            key="direction_radio",
+                            help="Lower: Test if new treatment is not worse than standard by more than margin. Upper: Test if new treatment is not better than standard by more than margin (rare)."
+                        )
+                        
+                        assumed_difference = st.number_input(
+                            "Assumed True Difference", 
+                            value=0.0, 
+                            step=0.1, 
+                            key="assumed_diff_input",
+                            help="The true difference you expect between means. Typically 0 for non-inferiority (treatments are actually equivalent)."
+                        )
+                        
+                        st.info("Non-inferiority tests use a one-sided alpha level (significance level).")
+                    else:
+                        # Superiority parameters - Option to input effect size directly or as means
+                        effect_size_input_method = st.radio(
+                            "Effect Size Input Method",
+                            ["Direct Effect Size", "Group Means"],
+                            horizontal=True
+                        )
+                        
+                        if effect_size_input_method == "Direct Effect Size":
+                            delta = st.number_input("Effect Size (Difference in Means)", value=0.5, step=0.1)
+                        else:  # Group Means option
+                            if "Stepped Wedge" in design_type:
+                                mean_control = st.number_input("Mean Control Phase", value=0.0, step=0.1)
+                                mean_intervention = st.number_input("Mean Intervention Phase", value=0.5, step=0.1)
+                            else:  # Parallel or Cluster
+                                mean_control = st.number_input("Mean Control Group", value=0.0, step=0.1)
+                                mean_intervention = st.number_input("Mean Intervention Group", value=0.5, step=0.1)
+                            delta = abs(mean_intervention - mean_control)  # Calculate effect size automatically
+                            st.info(f"Calculated effect size (absolute difference): {delta}")
+                        
+                        std_dev = st.number_input("Standard Deviation", value=1.0, step=0.1, min_value=0.1)
                     
-                    if effect_size_input_method == "Direct Effect Size":
-                        delta = st.number_input("Effect Size (Difference in Means)", value=0.5, step=0.1)
-                    else:  # Group Means option
-                        if "Stepped Wedge" in design_type:
-                            mean_control = st.number_input("Mean Control Phase", value=0.0, step=0.1)
-                            mean_intervention = st.number_input("Mean Intervention Phase", value=0.5, step=0.1)
-                        else:  # Parallel or Cluster
-                            mean_control = st.number_input("Mean Control Group", value=0.0, step=0.1)
-                            mean_intervention = st.number_input("Mean Intervention Group", value=0.5, step=0.1)
-                        delta = abs(mean_intervention - mean_control)  # Calculate effect size automatically
-                        st.info(f"Calculated effect size (absolute difference): {delta}")
-                    
-                    std_dev = st.number_input("Standard Deviation", value=1.0, step=0.1, min_value=0.1)
-                    alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
-                    
+                    alpha = st.slider("Significance Level (\u03b1)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
+                
                 elif calculation_type == "Minimum Detectable Effect (MDE)":
                     if "Parallel" in design_type:
                         n1 = st.number_input("Sample Size (Group 1)", value=50, step=1, min_value=2)
@@ -405,14 +499,76 @@ with tab1:
                         n_clusters = st.number_input("Number of Clusters per Arm", value=10, step=1, min_value=2)
                         cluster_size = st.number_input("Cluster Size", value=20, step=1, min_value=2)
                     
-                    std_dev = st.number_input("Standard Deviation", value=1.0, step=0.1, min_value=0.1)
+                    # Show different parameters based on hypothesis type
+                    if "hypothesis_type_radio" in st.session_state and st.session_state["hypothesis_type_radio"] == "Non-inferiority":
+                        # Non-inferiority parameters for MDE (which is non-inferiority margin)
+                        std_dev = st.number_input("Standard Deviation", value=1.0, step=0.1, min_value=0.1)
+                        
+                        direction = st.radio(
+                            "Non-inferiority Direction",
+                            ["Lower", "Upper"], 
+                            index=0, 
+                            key="direction_radio",
+                            help="Lower: Test if new treatment is not worse than standard by more than margin. Upper: Test if new treatment is not better than standard by more than margin (rare)."
+                        )
+                        
+                        assumed_difference = st.number_input(
+                            "Assumed True Difference", 
+                            value=0.0, 
+                            step=0.1, 
+                            key="assumed_diff_input",
+                            help="The true difference you expect between means. Typically 0 for non-inferiority (treatments are actually equivalent)."
+                        )
+                        
+                        st.info("Non-inferiority tests use a one-sided alpha level (significance level).")
+                    else:
+                        # For superiority MDE
+                        std_dev = st.number_input("Standard Deviation", value=1.0, step=0.1, min_value=0.1)
+                    
                     power = st.slider("Power", min_value=0.5, max_value=0.99, value=0.8, step=0.01)
-                    alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
-                
+                    alpha = st.slider("Significance Level (\u03b1)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
+            
             elif "Binary Outcome" in design_type:
                 if calculation_type == "Sample Size":
+                    # Always show control group proportion
                     p1 = st.slider("Control Group Proportion", min_value=0.01, max_value=0.99, value=0.5, step=0.01)
-                    p2 = st.slider("Intervention Group Proportion", min_value=0.01, max_value=0.99, value=0.6, step=0.01)
+                    
+                    # Show different parameters based on hypothesis type
+                    if "hypothesis_type_radio" in st.session_state and st.session_state["hypothesis_type_radio"] == "Non-inferiority":
+                        # Non-inferiority parameters
+                        default_margin = 0.1
+                        step_size = 0.01
+                        
+                        nim = st.number_input(
+                            "Non-inferiority Margin", 
+                            value=default_margin, 
+                            step=step_size, 
+                            min_value=0.01, 
+                            key="nim_input",
+                            help="The maximum acceptable difference for still considering the new treatment non-inferior to the standard."
+                        )
+                        
+                        direction = st.radio(
+                            "Non-inferiority Direction",
+                            ["Lower", "Upper"], 
+                            index=0, 
+                            key="direction_radio",
+                            help="Lower: Test if new treatment is not worse than standard by more than margin. Upper: Test if new treatment is not better than standard by more than margin (rare)."
+                        )
+                        
+                        assumed_difference = st.number_input(
+                            "Assumed True Difference", 
+                            value=0.0, 
+                            step=0.01, 
+                            key="assumed_diff_input",
+                            help="The true difference you expect between proportions. Typically 0 for non-inferiority (treatments are actually equivalent)."
+                        )
+                        
+                        st.info("Non-inferiority tests use a one-sided alpha level (significance level).")
+                    else:
+                        # Superiority parameters
+                        p2 = st.slider("Intervention Group Proportion", min_value=0.01, max_value=0.99, value=0.6, step=0.01)
+                    
                     power = st.slider("Power", min_value=0.5, max_value=0.99, value=0.8, step=0.01)
                     alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
                     
@@ -424,8 +580,45 @@ with tab1:
                         n_clusters = st.number_input("Number of Clusters per Arm", value=10, step=1, min_value=2)
                         cluster_size = st.number_input("Cluster Size", value=20, step=1, min_value=2)
                     
+                    # Always show control group proportion
                     p1 = st.slider("Control Group Proportion", min_value=0.01, max_value=0.99, value=0.5, step=0.01)
-                    p2 = st.slider("Intervention Group Proportion", min_value=0.01, max_value=0.99, value=0.6, step=0.01)
+                    
+                    # Show different parameters based on hypothesis type
+                    if "hypothesis_type_radio" in st.session_state and st.session_state["hypothesis_type_radio"] == "Non-inferiority":
+                        # Non-inferiority parameters
+                        default_margin = 0.1
+                        step_size = 0.01
+                        
+                        nim = st.number_input(
+                            "Non-inferiority Margin", 
+                            value=default_margin, 
+                            step=step_size, 
+                            min_value=0.01, 
+                            key="nim_input",
+                            help="The maximum acceptable difference for still considering the new treatment non-inferior to the standard."
+                        )
+                        
+                        direction = st.radio(
+                            "Non-inferiority Direction",
+                            ["Lower", "Upper"], 
+                            index=0, 
+                            key="direction_radio",
+                            help="Lower: Test if new treatment is not worse than standard by more than margin. Upper: Test if new treatment is not better than standard by more than margin (rare)."
+                        )
+                        
+                        assumed_difference = st.number_input(
+                            "Assumed True Difference", 
+                            value=0.0, 
+                            step=0.01, 
+                            key="assumed_diff_input",
+                            help="The true difference you expect between proportions. Typically 0 for non-inferiority (treatments are actually equivalent)."
+                        )
+                        
+                        st.info("Non-inferiority tests use a one-sided alpha level (significance level).")
+                    else:
+                        # Superiority parameters
+                        p2 = st.slider("Intervention Group Proportion", min_value=0.01, max_value=0.99, value=0.6, step=0.01)
+                    
                     alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
                     
                 elif calculation_type == "Minimum Detectable Effect (MDE)":
@@ -436,7 +629,30 @@ with tab1:
                         n_clusters = st.number_input("Number of Clusters per Arm", value=10, step=1, min_value=2)
                         cluster_size = st.number_input("Cluster Size", value=20, step=1, min_value=2)
                     
+                    # Always show control group proportion
                     p1 = st.slider("Control Group Proportion", min_value=0.01, max_value=0.99, value=0.5, step=0.01)
+                    
+                    # Show different parameters based on hypothesis type
+                    if "hypothesis_type_radio" in st.session_state and st.session_state["hypothesis_type_radio"] == "Non-inferiority":
+                        # Non-inferiority parameters
+                        direction = st.radio(
+                            "Non-inferiority Direction",
+                            ["Lower", "Upper"], 
+                            index=0, 
+                            key="direction_radio",
+                            help="Lower: Test if new treatment is not worse than standard by more than margin. Upper: Test if new treatment is not better than standard by more than margin (rare)."
+                        )
+                        
+                        assumed_difference = st.number_input(
+                            "Assumed True Difference", 
+                            value=0.0, 
+                            step=0.01, 
+                            key="assumed_diff_input",
+                            help="The true difference you expect between proportions. Typically 0 for non-inferiority (treatments are actually equivalent)."
+                        )
+                        
+                        st.info("Non-inferiority tests use a one-sided alpha level (significance level).")
+                    
                     power = st.slider("Power", min_value=0.5, max_value=0.99, value=0.8, step=0.01)
                     alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
             
@@ -485,62 +701,7 @@ with tab1:
             if "Parallel RCT (Continuous Outcome)" == design_type or "Parallel RCT (Binary Outcome)" == design_type:
                 st.write("Advanced Analysis Options:")
                 
-                # Hypothesis type selection
-                hypothesis_type = st.radio(
-                    "Hypothesis Type",
-                    ["Superiority", "Non-inferiority"], 
-                    index=0, 
-                    key="hypothesis_type_radio",
-                    help="Superiority: Test if one treatment is better than another. Non-inferiority: Test if a new treatment is not worse than standard by more than a specified margin."
-                )
-                
-                # Show non-inferiority specific parameters
-                if hypothesis_type == "Non-inferiority":
-                    st.write("Non-inferiority Parameters:")
-                    
-                    # Adjust default values based on outcome type
-                    if "Continuous Outcome" in design_type:
-                        default_margin = 0.5
-                        step_size = 0.1
-                    else:  # Binary Outcome
-                        default_margin = 0.1
-                        step_size = 0.01
-                    
-                    nim = st.number_input(
-                        "Non-inferiority Margin", 
-                        value=default_margin, 
-                        step=step_size, 
-                        min_value=0.01, 
-                        key="nim_input",
-                        help="The maximum acceptable difference for still considering the new treatment non-inferior to the standard."
-                    )
-                    
-                    direction = st.radio(
-                        "Non-inferiority Direction",
-                        ["Lower", "Upper"], 
-                        index=0, 
-                        key="direction_radio",
-                        help="Lower: Test if new treatment is not worse than standard by more than margin. Upper: Test if new treatment is not better than standard by more than margin (rare)."
-                    ).lower()  # Convert to lowercase for our functions
-                    
-                    if calculation_type == "Sample Size" or calculation_type == "Power":
-                        # Adjust step size and help text based on outcome type
-                        if "Continuous Outcome" in design_type:
-                            diff_step = 0.1
-                            help_text = "The true difference you expect between means. Typically 0 for non-inferiority (treatments are actually equivalent)."
-                        else:  # Binary Outcome
-                            diff_step = 0.01
-                            help_text = "The true difference you expect between proportions. Typically 0 for non-inferiority (treatments are actually equivalent)."
-                            
-                        assumed_difference = st.number_input(
-                            "Assumed True Difference", 
-                            value=0.0, 
-                            step=diff_step, 
-                            key="assumed_diff_input",
-                            help=help_text
-                        )
-                        
-                    st.info("Non-inferiority tests use a one-sided alpha level (significance level).")
+                # No need for continuous non-inferiority parameters in advanced section as they're now in Basic Parameters
                 
                 st.markdown("---")
                 

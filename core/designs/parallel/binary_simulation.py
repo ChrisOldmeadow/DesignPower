@@ -39,6 +39,15 @@ def simulate_binary_non_inferiority(n1, n2, p1, non_inferiority_margin, nsim=100
     dict
         Dictionary containing the estimated power and simulation details
     """
+    # Print debug information
+    print(f"\nDEBUG: Binary non-inferiority simulation started")
+    print(f"DEBUG: Running {nsim} simulations with n1={n1}, n2={n2}, p1={p1}, margin={non_inferiority_margin}")
+    print(f"DEBUG: Direction={direction}, assumed_difference={assumed_difference}\n")
+    
+    # Add a small delay proportional to the number of simulations to verify it's working
+    import time
+    time.sleep(nsim / 1000)  # Add a small delay (1 second per 1000 simulations)
+    
     if seed is not None:
         np.random.seed(seed)
     
