@@ -27,7 +27,8 @@ from core.compatibility import (
     simulate_cluster_rct,
     simulate_stepped_wedge,
     simulate_binary_cluster_rct,
-    simulate_min_detectable_effect
+    simulate_min_detectable_effect,
+    simulate_sample_size
 )
 
 # Import from new structure (needed for new advanced options)
@@ -105,7 +106,11 @@ def get_method_information(result, design_type, calculation_type):
     # Build method description and references based on design type
     if "Parallel RCT" in design_type and "Continuous Outcome" in design_type:
         if "nsim" in result["parameters"] or simulation_used:
-            if calculation_type == "Minimum Detectable Effect (MDE)":
+            if calculation_type == "Sample Size":
+                achieved_power = result["parameters"].get("achieved_power", 0.8)
+                return (f"**Method:** Simulation-based sample size determination. Achieved power: {achieved_power:.3f}.\n\n"
+                       f"**Reference:** Burton A, Altman DG, Royston P, Holder RL. The design of simulation studies in medical statistics. *Statistics in Medicine*. 2006;25(24):4279-4292.")
+            elif calculation_type == "Minimum Detectable Effect (MDE)":
                 return ("**Method:** Simulation-based optimization approach for minimum detectable effect.\n\n"
                        "**Reference:** Morris TP, White IR, Crowther MJ. Using simulation studies to evaluate statistical methods. *Statistics in Medicine*. 2019;38(11):2074-2102.")
             else:
@@ -441,11 +446,15 @@ with tab1:
                 allocation_ratio = st.slider("Allocation Ratio (n2/n1)", min_value=0.1, max_value=10.0, value=1.0, step=0.1)
         
         # Simulation toggle for designs that support both analytical and simulation methods
-        if design_type != "Stepped Wedge Trial" and "Cluster" not in design_type and (calculation_type == "Power" or calculation_type == "Minimum Detectable Effect (MDE)"):
+        if design_type != "Stepped Wedge Trial" and "Cluster" not in design_type and calculation_type in ["Sample Size", "Power", "Minimum Detectable Effect (MDE)"]:
             use_simulation = st.checkbox("Use Simulation-based Estimation", value=False, key="use_simulation_checkbox")
             if use_simulation:
                 nsim = st.slider("Number of Simulations", min_value=100, max_value=10000, value=1000, step=100, key="nsim_slider")
-                if calculation_type == "Power":
+                if calculation_type == "Sample Size":
+                    st.info("Simulation iteratively finds the minimum sample size that achieves the target power.")
+                    max_n = st.number_input("Maximum Sample Size to Try", value=1000, step=50, min_value=100)
+                    step_size = st.number_input("Sample Size Step", value=10, step=5, min_value=1)
+                elif calculation_type == "Power":
                     st.info("Simulation provides empirical power estimates based on Monte Carlo methods.")
                 else:  # MDE
                     st.info("Simulation uses an optimization approach to find the minimum detectable effect that achieves the desired power.")
@@ -515,42 +524,94 @@ with tab1:
                         pass  # Fallback to standard analysis if advanced options not found
                     
                     if calculation_type == "Sample Size":
-                        # Decide which calculation function to use
-                        if repeated_measures:
-                            result = sample_size_repeated_measures(
-                                delta=delta,
-                                std_dev=std_dev,
-                                correlation=correlation,
-                                power=power,
-                                alpha=alpha,
-                                allocation_ratio=allocation_ratio,
-                                method=analysis_method
-                            )
-                        else:  # Standard or Unequal Variances
-                            result = sample_size_difference_in_means(
-                                delta=delta,
-                                std_dev=std_dev,
-                                power=power,
-                                alpha=alpha,
-                                allocation_ratio=allocation_ratio,
-                                std_dev2=std_dev2
-                            )
-                        method_name = "sample_size_difference_in_means"
+                        # Get simulation checkbox state from session state
+                        use_simulation = st.session_state.get("use_simulation_checkbox", False)
+                        
+                        if use_simulation:
+                            # Use simulation-based approach for sample size calculation
+                            nsim_value = st.session_state.get("nsim_slider", 1000)
+                            max_n_value = st.session_state.get("Maximum Sample Size to Try", 1000)
+                            step_size_value = st.session_state.get("Sample Size Step", 10)
+                            
+                            # Handle repeated measures parameters if enabled
+                            if repeated_measures:
+                                result = simulate_sample_size(
+                                    delta=delta,
+                                    std_dev=std_dev,
+                                    power=power,
+                                    alpha=alpha,
+                                    allocation_ratio=allocation_ratio,
+                                    nsim=nsim_value,
+                                    max_n=max_n_value,
+                                    step=step_size_value,
+                                    repeated_measures=True,
+                                    correlation=correlation,
+                                    method=analysis_method
+                                )
+                            else:
+                                result = simulate_sample_size(
+                                    delta=delta,
+                                    std_dev=std_dev,
+                                    power=power,
+                                    alpha=alpha,
+                                    allocation_ratio=allocation_ratio,
+                                    nsim=nsim_value,
+                                    max_n=max_n_value,
+                                    step=step_size_value
+                                )
+                            method_name = "simulate_sample_size"
+                        else:
+                            # Decide which analytical calculation function to use
+                            if repeated_measures:
+                                result = sample_size_repeated_measures(
+                                    delta=delta,
+                                    std_dev=std_dev,
+                                    correlation=correlation,
+                                    power=power,
+                                    alpha=alpha,
+                                    allocation_ratio=allocation_ratio,
+                                    method=analysis_method
+                                )
+                            else:  # Standard or Unequal Variances
+                                result = sample_size_difference_in_means(
+                                    delta=delta,
+                                    std_dev=std_dev,
+                                    power=power,
+                                    alpha=alpha,
+                                    allocation_ratio=allocation_ratio,
+                                    std_dev2=std_dev2
+                                )
+                            method_name = "sample_size_difference_in_means"
                     
                     elif calculation_type == "Power":
                         # Get simulation checkbox state (should already be defined from UI)
                         if use_simulation:
                             # Get number of simulations from session state
                             nsim_value = st.session_state.get("nsim_slider", 1000)
-                            result = simulate_parallel_rct(
-                                n1=n1,
-                                n2=n2,
-                                mean1=0,
-                                mean2=delta,
-                                std_dev=std_dev,
-                                nsim=nsim_value,
-                                alpha=alpha
-                            )
+                            # Handle repeated measures parameters if enabled
+                            if repeated_measures:
+                                result = simulate_parallel_rct(
+                                    n1=n1,
+                                    n2=n2,
+                                    mean1=0,
+                                    mean2=delta,
+                                    std_dev=std_dev,
+                                    nsim=nsim_value,
+                                    alpha=alpha,
+                                    repeated_measures=True,
+                                    correlation=correlation,
+                                    method=analysis_method
+                                )
+                            else:
+                                result = simulate_parallel_rct(
+                                    n1=n1,
+                                    n2=n2,
+                                    mean1=0,
+                                    mean2=delta,
+                                    std_dev=std_dev,
+                                    nsim=nsim_value,
+                                    alpha=alpha
+                                )
                             method_name = "simulate_parallel_rct"
                         else:
                             # Decide which calculation function to use
@@ -582,14 +643,28 @@ with tab1:
                         if use_simulation:
                             # Use simulation-based approach for MDE calculation
                             nsim_value = st.session_state.get("nsim_slider", 1000)
-                            result = simulate_min_detectable_effect(
-                                n1=n1,
-                                n2=n2,
-                                std_dev=std_dev,
-                                power=power,
-                                nsim=nsim_value,
-                                alpha=alpha
-                            )
+                            # Handle repeated measures parameters if enabled
+                            if repeated_measures:
+                                result = simulate_min_detectable_effect(
+                                    n1=n1,
+                                    n2=n2,
+                                    std_dev=std_dev,
+                                    power=power,
+                                    nsim=nsim_value,
+                                    alpha=alpha,
+                                    repeated_measures=True,
+                                    correlation=correlation,
+                                    method=analysis_method
+                                )
+                            else:
+                                result = simulate_min_detectable_effect(
+                                    n1=n1,
+                                    n2=n2,
+                                    std_dev=std_dev,
+                                    power=power,
+                                    nsim=nsim_value,
+                                    alpha=alpha
+                                )
                             method_name = "simulate_min_detectable_effect"
                         else:
                             # Decide which analytical calculation function to use

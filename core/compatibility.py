@@ -24,7 +24,8 @@ from core.designs.cluster.analytical import (
 # Import from new structure - simulation methods
 from core.designs.parallel.simulation import (
     simulate_continuous as simulate_parallel_rct,
-    min_detectable_effect_continuous as simulate_min_detectable_effect
+    min_detectable_effect_continuous as simulate_min_detectable_effect,
+    sample_size_continuous as simulate_sample_size
 )
 
 from core.designs.cluster.simulation import (
@@ -48,6 +49,7 @@ __all__ = [
     'power_repeated_measures',
     'min_detectable_effect_repeated_measures',
     'simulate_min_detectable_effect',
+    'simulate_sample_size',
     
     # Simulation methods
     'simulate_parallel_rct',
