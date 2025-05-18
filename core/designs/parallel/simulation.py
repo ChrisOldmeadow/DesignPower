@@ -469,7 +469,7 @@ def simulate_binary(n1, n2, p1, p2, nsim=1000, alpha=0.05):
     # Calculate power
     power = sig_count / nsim
     
-    return {
+    results = {
         "power": power,
         "mean_p_value": np.mean(p_values),
         "median_p_value": np.median(p_values),
@@ -479,6 +479,377 @@ def simulate_binary(n1, n2, p1, p2, nsim=1000, alpha=0.05):
             "n2": n2,
             "p1": p1,
             "p2": p2,
-            "alpha": alpha
+            "alpha": alpha,
+            "nsim": nsim
+        }
+    }
+
+    return results
+
+
+# Non-inferiority testing simulation functions
+
+def simulate_continuous_non_inferiority(
+    n1, 
+    n2, 
+    non_inferiority_margin, 
+    std_dev, 
+    nsim=1000, 
+    alpha=0.05, 
+    seed=None, 
+    assumed_difference=0.0,
+    direction="lower",
+    repeated_measures=False,
+    correlation=0.5,
+    method="change_score"
+):
+    """
+    Simulate a parallel group RCT for non-inferiority hypothesis with continuous outcome.
+    
+    Parameters
+    ----------
+    n1 : int
+        Sample size in group 1 (standard treatment)
+    n2 : int
+        Sample size in group 2 (new treatment)
+    non_inferiority_margin : float
+        Non-inferiority margin (must be positive)
+    std_dev : float
+        Standard deviation of the outcome (assumed equal in both groups)
+    nsim : int, optional
+        Number of simulations, by default 1000
+    alpha : float, optional
+        Significance level (one-sided for non-inferiority), by default 0.05
+    seed : int, optional
+        Random seed for reproducibility, by default None
+    assumed_difference : float, optional
+        Assumed true difference between treatments (0 = treatments truly equivalent), by default 0.0
+    direction : str, optional
+        Direction of non-inferiority test ("lower" or "upper"), by default "lower"
+    repeated_measures : bool, optional
+        Whether to simulate repeated measures design with baseline and follow-up, by default False
+    correlation : float, optional
+        Correlation between baseline and follow-up measurements, by default 0.5
+    method : str, optional
+        Analysis method for repeated measures: "change_score" or "ancova", by default "change_score"
+    
+    Returns
+    -------
+    dict
+        Dictionary containing the estimated power and simulation details
+    """
+    if seed is not None:
+        np.random.seed(seed)
+    
+    if non_inferiority_margin <= 0:
+        raise ValueError("Non-inferiority margin must be positive")
+    
+    if direction not in ["lower", "upper"]:
+        raise ValueError("Direction must be 'lower' or 'upper'")
+    
+    # Store p-values and test results
+    p_values = np.zeros(nsim)
+    test_results = np.zeros(nsim)
+    
+    # Set up means based on assumed difference
+    # In non-inferiority, we typically assume they're equal (0) or slightly different
+    mean1 = 0  # Standard treatment
+    mean2 = assumed_difference  # New treatment
+    
+    # Run simulations
+    for i in range(nsim):
+        if repeated_measures:
+            # Control group (standard treatment)
+            std_mean1 = [0, 0]  # Same mean at baseline and follow-up
+            std_cov1 = [
+                [std_dev**2, correlation * std_dev**2],
+                [correlation * std_dev**2, std_dev**2]
+            ]
+            std_data1 = np.random.multivariate_normal(std_mean1, std_cov1, size=n1)
+            std_baseline1 = std_data1[:, 0]
+            std_followup1 = std_data1[:, 1]
+            
+            # Treatment group (new treatment) with the assumed difference at follow-up
+            new_mean2 = [0, assumed_difference]  # Baseline is same, follow-up has assumed diff
+            new_cov2 = [
+                [std_dev**2, correlation * std_dev**2],
+                [correlation * std_dev**2, std_dev**2]
+            ]
+            new_data2 = np.random.multivariate_normal(new_mean2, new_cov2, size=n2)
+            new_baseline2 = new_data2[:, 0]
+            new_followup2 = new_data2[:, 1]
+            
+            # Analyze based on chosen method
+            if method == "change_score":
+                # Calculate change scores
+                changes1 = std_followup1 - std_baseline1
+                changes2 = new_followup2 - new_baseline2
+                
+                # Perform t-test on change scores
+                _, p_value = stats.ttest_ind(changes2, changes1, equal_var=True)
+                
+            elif method == "ancova":
+                # Simple ANCOVA simulation (use regression residuals)
+                combined_baseline = np.concatenate([std_baseline1, new_baseline2])
+                combined_followup = np.concatenate([std_followup1, new_followup2])
+                group = np.concatenate([np.zeros(n1), np.ones(n2)])
+                
+                # Fit regression model
+                X = np.column_stack([np.ones(n1 + n2), combined_baseline, group])
+                beta = np.linalg.lstsq(X, combined_followup, rcond=None)[0]
+                
+                # Extract treatment effect and SE
+                treatment_effect = beta[2]
+                residuals = combined_followup - X @ beta
+                MSE = np.sum(residuals**2) / (n1 + n2 - 3)
+                SE = np.sqrt(MSE * np.linalg.inv(X.T @ X)[2, 2])
+                
+                # Calculate t-statistic and p-value
+                t_stat = treatment_effect / SE
+                # For two-sided test, convert to one-sided based on direction
+                p_value = stats.t.cdf(t_stat, n1 + n2 - 3) if direction == "upper" else \
+                          1 - stats.t.cdf(t_stat, n1 + n2 - 3)
+            else:
+                raise ValueError(f"Invalid method: {method}. Use 'change_score' or 'ancova'.")
+                
+        else:  # Not repeated measures
+            # Generate data
+            group1 = np.random.normal(mean1, std_dev, n1)
+            group2 = np.random.normal(mean2, std_dev, n2)
+            
+            # Perform t-test
+            _, p_value = stats.ttest_ind(group2, group1, equal_var=True)
+            
+            # For non-inferiority, we need to adjust for one-sided test and direction
+            if direction == "lower":
+                # Lower: H0: μ_new - μ_std ≤ -NIM (new is worse by margin)
+                #       H1: μ_new - μ_std > -NIM (new is non-inferior)
+                t_stat = (np.mean(group2) - np.mean(group1) + non_inferiority_margin) / \
+                         (std_dev * np.sqrt(1/n1 + 1/n2))
+                p_value = 1 - stats.t.cdf(t_stat, n1 + n2 - 2)
+            else:  # "upper"
+                # Upper: H0: μ_new - μ_std ≥ NIM (new is better by margin)
+                #       H1: μ_new - μ_std < NIM (new is non-superior)
+                t_stat = (np.mean(group2) - np.mean(group1) - non_inferiority_margin) / \
+                         (std_dev * np.sqrt(1/n1 + 1/n2))
+                p_value = stats.t.cdf(t_stat, n1 + n2 - 2)
+        
+        # Store results
+        p_values[i] = p_value
+        test_results[i] = p_value < alpha
+    
+    # Calculate power as proportion of significant test results
+    power = np.mean(test_results)
+    
+    # Store results
+    results = {
+        'power': power,
+        'success_count': int(np.sum(test_results)),
+        'total_simulations': nsim,
+        'parameters': {
+            'n1': n1,
+            'n2': n2,
+            'non_inferiority_margin': non_inferiority_margin,
+            'std_dev': std_dev,
+            'alpha': alpha,
+            'assumed_difference': assumed_difference,
+            'direction': direction,
+            'hypothesis_type': 'non-inferiority',
+            'repeated_measures': repeated_measures,
+            'correlation': correlation if repeated_measures else None,
+            'method': method if repeated_measures else None,
+            'nsim': nsim
+        }
+    }
+    
+    return results
+
+
+def sample_size_continuous_non_inferiority(
+    non_inferiority_margin, 
+    std_dev, 
+    power=0.8, 
+    alpha=0.05, 
+    allocation_ratio=1.0, 
+    nsim=1000, 
+    min_n=10, 
+    max_n=1000, 
+    step=10, 
+    assumed_difference=0.0,
+    direction="lower",
+    repeated_measures=False,
+    correlation=0.5,
+    method="change_score"
+):
+    """
+    Calculate sample size for non-inferiority test with continuous outcome using simulation.
+    
+    Parameters
+    ----------
+    non_inferiority_margin : float
+        Non-inferiority margin (must be positive)
+    std_dev : float
+        Standard deviation of the outcome
+    power : float, optional
+        Desired power, by default 0.8
+    alpha : float, optional
+        Significance level (one-sided for non-inferiority), by default 0.05
+    allocation_ratio : float, optional
+        Ratio of sample sizes (n2/n1), by default 1.0
+    nsim : int, optional
+        Number of simulations per sample size, by default 1000
+    min_n : int, optional
+        Minimum sample size to try for group 1, by default 10
+    max_n : int, optional
+        Maximum sample size to try for group 1, by default 1000
+    step : int, optional
+        Step size for incrementing sample size, by default 10
+    assumed_difference : float, optional
+        Assumed true difference between treatments (0 = treatments truly equivalent), by default 0.0
+    direction : str, optional
+        Direction of non-inferiority test ("lower" or "upper"), by default "lower"
+    repeated_measures : bool, optional
+        Whether to simulate repeated measures design, by default False
+    correlation : float, optional
+        Correlation between baseline and follow-up measurements, by default 0.5
+    method : str, optional
+        Analysis method for repeated measures: "change_score" or "ancova", by default "change_score"
+    
+    Returns
+    -------
+    dict
+        Dictionary containing the required sample sizes
+    """
+    if non_inferiority_margin <= 0:
+        raise ValueError("Non-inferiority margin must be positive")
+    
+    if direction not in ["lower", "upper"]:
+        raise ValueError("Direction must be 'lower' or 'upper'")
+    
+    # Start with initial estimate from analytical calculation
+    # For non-inferiority, use one-sided alpha
+    z_alpha = stats.norm.ppf(1 - alpha)  # One-sided test
+    z_beta = stats.norm.ppf(power)
+    
+    # Calculate effective delta based on direction and margin
+    if direction == "lower":
+        # Testing that new treatment is not worse than standard by more than NIM
+        delta = assumed_difference + non_inferiority_margin
+    else:  # "upper"
+        # Testing that new treatment is not better than standard by more than NIM
+        delta = non_inferiority_margin - assumed_difference
+    
+    # Initial estimate for sample size
+    n1_est = ((1 + 1/allocation_ratio) * (std_dev**2) * (z_alpha + z_beta)**2) / (delta**2)
+    n1_est = math.ceil(n1_est)
+    
+    # Adjust the min_n based on our analytical estimate if it's higher
+    min_n = max(min_n, int(0.5 * n1_est))
+    
+    # Ensure we don't exceed max_n in our search
+    if min_n > max_n:
+        n1 = max_n
+        n2 = math.ceil(n1 * allocation_ratio)
+        
+        # Run a single simulation to get the power at max_n
+        sim_result = simulate_continuous_non_inferiority(
+            n1, 
+            n2, 
+            non_inferiority_margin, 
+            std_dev, 
+            nsim=nsim, 
+            alpha=alpha, 
+            assumed_difference=assumed_difference,
+            direction=direction,
+            repeated_measures=repeated_measures,
+            correlation=correlation,
+            method=method
+        )
+        
+        return {
+            "n1": n1,
+            "n2": n2,
+            "total_n": n1 + n2,
+            "achieved_power": sim_result["power"],
+            "target_power": power,
+            "parameters": {
+                "non_inferiority_margin": non_inferiority_margin,
+                "std_dev": std_dev,
+                "alpha": alpha,
+                "allocation_ratio": allocation_ratio,
+                "assumed_difference": assumed_difference,
+                "direction": direction,
+                "hypothesis_type": "non-inferiority",
+                "repeated_measures": repeated_measures,
+                "correlation": correlation if repeated_measures else None,
+                "method": method if repeated_measures else None,
+                "nsim": nsim,
+                "max_n_reached": True
+            }
+        }
+    
+    # Search for the smallest sample size that achieves the desired power
+    for n1 in range(min_n, max_n + 1, step):
+        n2 = math.ceil(n1 * allocation_ratio)
+        
+        # Run simulation
+        sim_result = simulate_continuous_non_inferiority(
+            n1, 
+            n2, 
+            non_inferiority_margin, 
+            std_dev, 
+            nsim=nsim, 
+            alpha=alpha, 
+            assumed_difference=assumed_difference,
+            direction=direction,
+            repeated_measures=repeated_measures,
+            correlation=correlation,
+            method=method
+        )
+        
+        # Check if desired power is achieved
+        if sim_result["power"] >= power:
+            return {
+                "n1": n1,
+                "n2": n2,
+                "total_n": n1 + n2,
+                "achieved_power": sim_result["power"],
+                "target_power": power,
+                "parameters": {
+                    "non_inferiority_margin": non_inferiority_margin,
+                    "std_dev": std_dev,
+                    "alpha": alpha,
+                    "allocation_ratio": allocation_ratio,
+                    "assumed_difference": assumed_difference,
+                    "direction": direction,
+                    "hypothesis_type": "non-inferiority",
+                    "repeated_measures": repeated_measures,
+                    "correlation": correlation if repeated_measures else None,
+                    "method": method if repeated_measures else None,
+                    "nsim": nsim,
+                    "max_n_reached": False
+                }
+            }
+    
+    # If we reach here, desired power not achieved at max_n
+    return {
+        "n1": max_n,
+        "n2": math.ceil(max_n * allocation_ratio),
+        "total_n": max_n + math.ceil(max_n * allocation_ratio),
+        "achieved_power": sim_result["power"],
+        "target_power": power,
+        "parameters": {
+            "non_inferiority_margin": non_inferiority_margin,
+            "std_dev": std_dev,
+            "alpha": alpha,
+            "allocation_ratio": allocation_ratio,
+            "assumed_difference": assumed_difference,
+            "direction": direction,
+            "hypothesis_type": "non-inferiority",
+            "repeated_measures": repeated_measures,
+            "correlation": correlation if repeated_measures else None,
+            "method": method if repeated_measures else None,
+            "nsim": nsim,
+            "max_n_reached": True
         }
     }

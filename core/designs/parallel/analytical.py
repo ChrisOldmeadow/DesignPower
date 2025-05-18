@@ -8,7 +8,7 @@ analytical formulas.
 import math
 import numpy as np
 from scipy import stats
-from typing import Literal
+from typing import Literal, Union
 
 
 def sample_size_continuous(delta, std_dev, power=0.8, alpha=0.05, allocation_ratio=1.0, std_dev2=None):
@@ -386,5 +386,231 @@ def power_binary(n1, n2, p1, p2, alpha=0.05):
             "p1": p1,
             "p2": p2,
             "alpha": alpha
+        }
+    }
+
+
+# Non-inferiority testing functions
+
+def sample_size_continuous_non_inferiority(
+    non_inferiority_margin, 
+    std_dev, 
+    power=0.8, 
+    alpha=0.05, 
+    allocation_ratio=1.0, 
+    assumed_difference=0.0,
+    direction="lower"
+):
+    """
+    Calculate sample size for non-inferiority test with continuous outcome.
+    
+    Parameters
+    ----------
+    non_inferiority_margin : float
+        Non-inferiority margin (must be positive)
+    std_dev : float
+        Standard deviation of the outcome
+    power : float, optional
+        Desired power, by default 0.8
+    alpha : float, optional
+        Significance level (one-sided for non-inferiority), by default 0.05
+    allocation_ratio : float, optional
+        Ratio of sample sizes (n2/n1), by default 1.0
+    assumed_difference : float, optional
+        Assumed true difference between treatments (0 = treatments truly equivalent), by default 0.0
+    direction : str, optional
+        Direction of non-inferiority test ("lower" or "upper"), by default "lower"
+        
+    Returns
+    -------
+    dict
+        Dictionary containing the required sample sizes
+    
+    Notes
+    -----
+    For non-inferiority tests, we typically use a one-sided alpha level.
+    - "lower" direction: Testing that the new treatment is not worse than the standard by more than the margin
+    - "upper" direction: Testing that the new treatment is not better than the standard by more than the margin (rare)
+    """
+    # Validate inputs
+    if non_inferiority_margin <= 0:
+        raise ValueError("Non-inferiority margin must be positive")
+    
+    if direction not in ["lower", "upper"]:
+        raise ValueError("Direction must be 'lower' or 'upper'")
+    
+    # For non-inferiority, use one-sided alpha
+    z_alpha = stats.norm.ppf(1 - alpha)  # One-sided test
+    z_beta = stats.norm.ppf(power)
+    
+    # Calculate effective delta based on direction and margin
+    if direction == "lower":
+        # Testing that new treatment is not worse than standard by more than NIM
+        # For lower bound testing: H0: μ_new - μ_std ≤ -NIM, H1: μ_new - μ_std > -NIM
+        delta = assumed_difference + non_inferiority_margin
+    else:  # "upper"
+        # Testing that new treatment is not better than standard by more than NIM
+        # For upper bound testing: H0: μ_new - μ_std ≥ NIM, H1: μ_new - μ_std < NIM
+        delta = non_inferiority_margin - assumed_difference
+    
+    # Calculate sample size
+    n1 = ((1 + 1/allocation_ratio) * (std_dev**2) * (z_alpha + z_beta)**2) / (delta**2)
+    n1 = math.ceil(n1)
+    n2 = math.ceil(n1 * allocation_ratio)
+    
+    return {
+        "n1": n1,
+        "n2": n2,
+        "total_n": n1 + n2,
+        "parameters": {
+            "non_inferiority_margin": non_inferiority_margin,
+            "std_dev": std_dev,
+            "power": power,
+            "alpha": alpha,
+            "allocation_ratio": allocation_ratio,
+            "assumed_difference": assumed_difference,
+            "direction": direction,
+            "hypothesis_type": "non-inferiority"
+        }
+    }
+
+
+def power_continuous_non_inferiority(
+    n1, 
+    n2, 
+    non_inferiority_margin, 
+    std_dev, 
+    alpha=0.05, 
+    assumed_difference=0.0,
+    direction="lower"
+):
+    """
+    Calculate power for non-inferiority test with continuous outcome.
+    
+    Parameters
+    ----------
+    n1 : int
+        Sample size in group 1
+    n2 : int
+        Sample size in group 2
+    non_inferiority_margin : float
+        Non-inferiority margin (must be positive)
+    std_dev : float
+        Standard deviation of the outcome
+    alpha : float, optional
+        Significance level (one-sided for non-inferiority), by default 0.05
+    assumed_difference : float, optional
+        Assumed true difference between treatments (0 = treatments truly equivalent), by default 0.0
+    direction : str, optional
+        Direction of non-inferiority test ("lower" or "upper"), by default "lower"
+        
+    Returns
+    -------
+    dict
+        Dictionary containing the calculated power and parameters
+    """
+    # Validate inputs
+    if non_inferiority_margin <= 0:
+        raise ValueError("Non-inferiority margin must be positive")
+    
+    if direction not in ["lower", "upper"]:
+        raise ValueError("Direction must be 'lower' or 'upper'")
+    
+    # For non-inferiority, use one-sided alpha
+    z_alpha = stats.norm.ppf(1 - alpha)  # One-sided
+    
+    # Calculate effective delta based on direction and margin
+    if direction == "lower":
+        # Testing that new treatment is not worse than standard by more than NIM
+        delta = assumed_difference + non_inferiority_margin
+    else:  # "upper"
+        # Testing that new treatment is not better than standard by more than NIM
+        delta = non_inferiority_margin - assumed_difference
+    
+    # Calculate non-centrality parameter
+    ncp = delta / (std_dev * math.sqrt(1/n1 + 1/n2))
+    
+    # Calculate power
+    power = stats.norm.cdf(ncp - z_alpha)
+    
+    return {
+        "power": power,
+        "parameters": {
+            "n1": n1,
+            "n2": n2,
+            "non_inferiority_margin": non_inferiority_margin,
+            "std_dev": std_dev,
+            "alpha": alpha,
+            "assumed_difference": assumed_difference,
+            "direction": direction,
+            "hypothesis_type": "non-inferiority"
+        }
+    }
+
+
+def min_detectable_non_inferiority_margin(
+    n1,
+    n2,
+    std_dev,
+    power=0.8,
+    alpha=0.05,
+    assumed_difference=0.0,
+    direction="lower"
+):
+    """
+    Calculate the minimum detectable non-inferiority margin for a given sample size.
+    
+    Parameters
+    ----------
+    n1 : int
+        Sample size in group 1
+    n2 : int
+        Sample size in group 2
+    std_dev : float
+        Standard deviation of the outcome
+    power : float, optional
+        Desired power, by default 0.8
+    alpha : float, optional
+        Significance level (one-sided for non-inferiority), by default 0.05
+    assumed_difference : float, optional
+        Assumed true difference between treatments (0 = treatments truly equivalent), by default 0.0
+    direction : str, optional
+        Direction of non-inferiority test ("lower" or "upper"), by default "lower"
+    
+    Returns
+    -------
+    dict
+        Dictionary containing the minimum detectable non-inferiority margin
+    """
+    if direction not in ["lower", "upper"]:
+        raise ValueError("Direction must be 'lower' or 'upper'")
+    
+    # For non-inferiority, use one-sided alpha
+    z_alpha = stats.norm.ppf(1 - alpha)  # One-sided
+    z_beta = stats.norm.ppf(power)
+    
+    # Calculate the minimum margin based on the sample size
+    delta = (z_alpha + z_beta) * std_dev * math.sqrt(1/n1 + 1/n2)
+    
+    # Adjust for the assumed difference based on direction
+    if direction == "lower":
+        margin = delta - assumed_difference
+    else:  # "upper"
+        margin = delta + assumed_difference
+    
+    # Ensure we return a positive margin
+    margin = max(margin, 1e-10)
+    
+    return {
+        "margin": margin,
+        "parameters": {
+            "n1": n1,
+            "n2": n2,
+            "std_dev": std_dev,
+            "power": power,
+            "alpha": alpha,
+            "assumed_difference": assumed_difference,
+            "direction": direction,
+            "hypothesis_type": "non-inferiority"
         }
     }

@@ -63,28 +63,76 @@ def generate_code_snippet(function_name, params):
 
 def generate_plain_language_summary(result, design_type, calculation_type):
     """Generate a plain language summary of the results."""
-    # Start with the basic summary
+    # Check if this is a non-inferiority test based on parameters
+    is_non_inferiority = result['parameters'].get('hypothesis_type') == 'non-inferiority' if 'parameters' in result and 'hypothesis_type' in result['parameters'] else False
+    
     if calculation_type == "Sample Size":
-        if "total_n" in result:
-            basic_summary = f"The study requires a total of {result['total_n']} participants to detect the specified effect size with {result['parameters'].get('power', 0.8)*100:.0f}% power at a significance level of {result['parameters'].get('alpha', 0.05)}."
-        elif "n_clusters" in result:
-            total_n = result['n_clusters'] * 2 * result['parameters'].get('cluster_size', 0)
-            basic_summary = f"The study requires {result['n_clusters']} clusters per arm ({result['n_clusters']*2} total clusters) with {result['parameters'].get('cluster_size', 0)} individuals per cluster, for a total of {total_n} participants."
+        if "Continuous Outcome" in design_type:
+            n1 = result["n1"]
+            n2 = result["n2"]
+            total = result["total_n"]
+            
+            if is_non_inferiority:
+                nim = result['parameters'].get('non_inferiority_margin', 0)
+                direction = result['parameters'].get('direction', 'lower')
+                assumed_diff = result['parameters'].get('assumed_difference', 0)
+                direction_text = "not worse than" if direction == "lower" else "not better than"
+                
+                return f"For a non-inferiority test with margin of {nim:.2f} units (testing that the new treatment is {direction_text} standard by more than this margin), assuming a true difference of {assumed_diff:.2f}, with {result['parameters'].get('power', 0)*100:.0f}% power and a {result['parameters'].get('alpha', 0)*100:.0f}% significance level, you need **{n1}** participants in group 1 and **{n2}** participants in group 2, for a total of **{total}** participants."
+            else:  # Superiority
+                return f"For detecting an effect size of {result['parameters'].get('delta', 0):.2f} units with {result['parameters'].get('power', 0)*100:.0f}% power and a {result['parameters'].get('alpha', 0)*100:.0f}% significance level, you need **{n1}** participants in group 1 and **{n2}** participants in group 2, for a total of **{total}** participants."
+        
+        elif "Binary Outcome" in design_type:
+            n1 = result["n1"]
+            n2 = result["n2"]
+            total = result["total_n"]
+            p1 = result['parameters'].get('p1', 0)
+            p2 = result['parameters'].get('p2', 0)
+            return f"For detecting a difference between proportions of {p1:.2f} and {p2:.2f} with {result['parameters'].get('power', 0)*100:.0f}% power and a {result['parameters'].get('alpha', 0)*100:.0f}% significance level, you need **{n1}** participants in group 1 and **{n2}** participants in group 2, for a total of **{total}** participants."
+    
     elif calculation_type == "Power":
-        basic_summary = f"With the specified sample size, the study has {result['power']*100:.1f}% power to detect the specified effect size at a significance level of {result['parameters'].get('alpha', 0.05)}."
-    elif calculation_type == "Minimum Detectable Effect":
-        if "delta" in result:
-            basic_summary = f"With the specified sample size, the smallest effect that can be detected with {result['parameters'].get('power', 0.8)*100:.0f}% power is {result['delta']:.3f}."
-        elif "p2" in result:
-            basic_summary = f"With the specified sample size and control proportion of {result['parameters'].get('p1', 0)}, the smallest detectable proportion in the intervention group is {result['p2']:.3f}."
-    else:
-        return "Results summary not available for this calculation type."
+        if "Continuous Outcome" in design_type:
+            power = result["power"]
+            n1 = result['parameters'].get('n1', 0)
+            n2 = result['parameters'].get('n2', 0)
+            
+            if is_non_inferiority:
+                nim = result['parameters'].get('non_inferiority_margin', 0)
+                direction = result['parameters'].get('direction', 'lower')
+                assumed_diff = result['parameters'].get('assumed_difference', 0)
+                direction_text = "not worse than" if direction == "lower" else "not better than"
+                
+                return f"With {n1} participants in group 1 and {n2} participants in group 2, you have **{power*100:.1f}%** power for a non-inferiority test with margin of {nim:.2f} units (testing that the new treatment is {direction_text} standard by more than this margin), assuming a true difference of {assumed_diff:.2f}, at a {result['parameters'].get('alpha', 0)*100:.0f}% significance level."
+            else:  # Superiority
+                delta = result['parameters'].get('delta', 0)
+                return f"With {n1} participants in group 1 and {n2} participants in group 2, you have **{power*100:.1f}%** power to detect an effect size of {delta:.2f} units at a {result['parameters'].get('alpha', 0)*100:.0f}% significance level."
+        
+        elif "Binary Outcome" in design_type:
+            power = result["power"]
+            n1 = result['parameters'].get('n1', 0)
+            n2 = result['parameters'].get('n2', 0)
+            p1 = result['parameters'].get('p1', 0)
+            p2 = result['parameters'].get('p2', 0)
+            return f"With {n1} participants in group 1 and {n2} participants in group 2, you have **{power*100:.1f}%** power to detect a difference between proportions of {p1:.2f} and {p2:.2f} at a {result['parameters'].get('alpha', 0)*100:.0f}% significance level."
     
-    # Add method information and references
-    method_info = get_method_information(result, design_type, calculation_type)
+    elif calculation_type == "Minimum Detectable Effect (MDE)":
+        if "Continuous Outcome" in design_type:
+            n1 = result['parameters'].get('n1', 0)
+            n2 = result['parameters'].get('n2', 0)
+            
+            if is_non_inferiority:
+                margin = result["margin"]
+                direction = result['parameters'].get('direction', 'lower')
+                assumed_diff = result['parameters'].get('assumed_difference', 0)
+                direction_text = "not worse than" if direction == "lower" else "not better than"
+                
+                return f"With {n1} participants in group 1 and {n2} participants in group 2, the minimum non-inferiority margin you can detect with {result['parameters'].get('power', 0)*100:.0f}% power at a {result['parameters'].get('alpha', 0)*100:.0f}% significance level is **{margin:.2f}** units (testing that the new treatment is {direction_text} standard by more than this margin), assuming a true difference of {assumed_diff:.2f}."
+            else:  # Superiority
+                delta = result["delta"]
+                return f"With {n1} participants in group 1 and {n2} participants in group 2, the smallest effect size you can detect with {result['parameters'].get('power', 0)*100:.0f}% power at a {result['parameters'].get('alpha', 0)*100:.0f}% significance level is **{delta:.2f}** units."
     
-    return f"{basic_summary}\n\n{method_info}"    
-
+    # Default case
+    return "Sample size calculation complete. See the parameters and results above."
 
 def get_method_information(result, design_type, calculation_type):
     """Get information about the method used and relevant references."""
@@ -103,57 +151,78 @@ def get_method_information(result, design_type, calculation_type):
     # Check if simulation was used
     simulation = "nsim" in result["parameters"] if "parameters" in result else False
     
-    # Build method description and references based on design type
-    if "Parallel RCT" in design_type and "Continuous Outcome" in design_type:
-        if "nsim" in result["parameters"] or simulation_used:
-            if calculation_type == "Sample Size":
-                achieved_power = result["parameters"].get("achieved_power", 0.8)
-                return (f"**Method:** Simulation-based sample size determination. Achieved power: {achieved_power:.3f}.\n\n"
-                       f"**Reference:** Burton A, Altman DG, Royston P, Holder RL. The design of simulation studies in medical statistics. *Statistics in Medicine*. 2006;25(24):4279-4292.")
-            elif calculation_type == "Minimum Detectable Effect (MDE)":
-                return ("**Method:** Simulation-based optimization approach for minimum detectable effect.\n\n"
-                       "**Reference:** Morris TP, White IR, Crowther MJ. Using simulation studies to evaluate statistical methods. *Statistics in Medicine*. 2019;38(11):2074-2102.")
-            else:
-                return "**Method:** Simulation-based estimation with Monte Carlo methods."
-        else:
+    # Continuous outcome methods
+    if "Continuous Outcome" in design_type:
+        # Handle non-inferiority tests
+        if is_non_inferiority:
+            method_text = "Non-inferiority test sample size calculation for comparison of means."
+            ref = "Blackwelder WC. 'Proving the null hypothesis' in clinical trials. Controlled Clinical Trials. 1982;3(4):345-353."
+            additional_ref = "Julious SA. Sample sizes for clinical trials with normal data. Statistics in Medicine. 2004;23(12):1921-1986."
+            
+            # Add direction-specific information
+            if "parameters" in result and "direction" in result["parameters"]:
+                direction = result["parameters"]["direction"]
+                if direction == "lower":
+                    method_text += " Testing that new treatment is not worse than standard by more than the margin."
+                else:  # upper
+                    method_text += " Testing that new treatment is not better than standard by more than the margin (non-superiority)."
+            
+            # Add information about one-sided test
+            method_text += " Uses one-sided alpha level as is standard for non-inferiority tests."
+        
+        # Parallel RCT methods for superiority
+        elif "Parallel" in design_type:
+            # Check for repeated measures
+            repeated_measures = False
+            if "parameters" in result and "correlation" in result["parameters"]:
+                repeated_measures = True
+            
             if repeated_measures:
-                method_type = "change score analysis" if analysis_method == "change_score" else "ANCOVA"
-                return (f"**Method:** Analytical formula for repeated measures design using {method_type}.\n\n"
-                        f"**Reference:** Frison L, Pocock SJ. Repeated measures in clinical trials: analysis using mean summary statistics and its implications for design. *Statistics in Medicine*. 1992;11(13):1685-1704.")
-            elif unequal_var:
-                return ("**Method:** Analytical formula for two-sample t-test with unequal variances (Welch's t-test).\n\n"
-                        "**Reference:** Welch BL. The generalization of 'Student's' problem when several different population variances are involved. *Biometrika*. 1947;34(1-2):28-35.")
+                if "method" in result["parameters"] and result["parameters"]["method"] == "ancova":
+                    method_text = "ANCOVA analysis for repeated measures design."
+                    ref = "Frison L, Pocock SJ. Repeated measures in clinical trials: analysis using mean summary statistics and its implications for design. Statistics in Medicine. 1992;11(13):1685-1704."
+                else:  # Default to change score
+                    method_text = "Change score analysis for repeated measures design."
+                    ref = "Vickers AJ, Altman DG. Statistics Notes: Analysing controlled trials with baseline and follow up measurements. BMJ. 2001;323(7321):1123-1124."
             else:
-                return ("**Method:** Analytical formula for two-sample t-test with equal variances.\n\n"
-                        "**Reference:** Cohen J. Statistical Power Analysis for the Behavioral Sciences. 2nd ed. Lawrence Erlbaum Associates; 1988.")
+                # Standard parallel design
+                if "std_dev2" in result["parameters"] and result["parameters"]["std_dev2"] is not None:
+                    method_text = "Sample size calculation for unequal variances (Welch's t-test)."
+                    ref = "Chow S, Shao J, Wang H. Sample Size Calculations in Clinical Research. CRC Press; 2008."
+                else:
+                    method_text = "Standard sample size calculation for comparison of means in parallel groups."
+                    ref = "Lachin JM. Introduction to sample size determination and power analysis for clinical trials. Controlled Clinical Trials. 1981;2(2):93-113."
+        
+        # Cluster RCT methods
+        elif "Cluster" in design_type:
+            method_text = "Cluster randomized trial design accounting for intraclass correlation."
+            ref = "Donner A, Klar N. Design and Analysis of Cluster Randomization Trials in Health Research. Arnold; 2000."
     
-    elif "Cluster RCT" in design_type and "Continuous Outcome" in design_type:
-        if simulation:
-            return "**Method:** Simulation-based estimation accounting for clustering effects."
+    # Binary outcome methods
+    elif "Binary Outcome" in design_type:
+        if "Cluster" in design_type:
+            method_text = "Sample size calculation for binary outcomes in cluster randomized trials."
+            ref = "Hayes RJ, Moulton LH. Cluster Randomised Trials. CRC Press; 2009."
         else:
-            return ("**Method:** Analytical formula for cluster randomized trials.\n\n"
-                    "**Reference:** Donner A, Klar N. Design and Analysis of Cluster Randomization Trials in Health Research. Arnold; 2000.")
+            method_text = "Sample size calculation for comparison of proportions in parallel groups."
+            ref = "Fleiss JL, Levin B, Paik MC. Statistical Methods for Rates and Proportions. Wiley; 2003."
     
-    elif "Cluster RCT" in design_type and "Binary Outcome" in design_type:
-        if simulation:
-            return "**Method:** Simulation-based estimation for binary outcomes in cluster randomized trials."
-        else:
-            return ("**Method:** Analytical formula for binary outcomes in cluster randomized trials.\n\n"
-                    "**Reference:** Hayes RJ, Moulton LH. Cluster Randomised Trials. 2nd ed. Chapman & Hall/CRC; 2017.")
-    
+    # Stepped wedge design
     elif "Stepped Wedge" in design_type:
-        return ("**Method:** Simulation-based estimation for stepped wedge cluster randomized trial.\n\n"
-                "**Reference:** Hussey MA, Hughes JP. Design and analysis of stepped wedge cluster randomized trials. *Contemporary Clinical Trials*. 2007;28(2):182-191.")
+        method_text = "Simulation-based power calculation for stepped wedge cluster randomized design."
+        ref = "Hussey MA, Hughes JP. Design and analysis of stepped wedge cluster randomized trials. Contemporary Clinical Trials. 2007;28(2):182-191."
     
-    elif "Parallel RCT" in design_type and "Binary Outcome" in design_type:
-        if simulation:
-            return "**Method:** Simulation-based estimation for binary outcomes."
-        else:
-            return ("**Method:** Analytical formula for comparing proportions.\n\n"
-                    "**Reference:** Fleiss JL, Levin B, Paik MC. Statistical Methods for Rates and Proportions. 3rd ed. Wiley; 2003.")
+    # Simulation-specific information
+    if simulation_used:
+        simulation_info = f"Results estimated using Monte Carlo simulation with {result['parameters']['nsim']} iterations."
+    else:
+        simulation_info = "Results calculated using analytical formulas."
     
-    # Default case
-    return "**Method:** Standard analytical formula."
+    # For non-inferiority, add the additional reference
+    if is_non_inferiority:
+        return f"**Method:** {method_text}\n\n{simulation_info}\n\n**References:**\n1. {ref}\n2. {additional_ref}"
+    else:
+        return f"**Method:** {method_text}\n\n{simulation_info}\n\n**Reference:** {ref}"
 
 # Set page config
 st.set_page_config(
@@ -232,7 +301,78 @@ with tab1:
         
         # Show parameters based on selected design
         with st.expander("Basic Parameters", expanded=True):
-            if "Continuous Outcome" in design_type:
+            if "Continuous Outcome" in design_type and "Parallel" in design_type:
+                # Add hypothesis type selection to the top-level basic parameters
+                hypothesis_type = st.radio(
+                    "Hypothesis Type",
+                    ["Superiority", "Non-inferiority"], 
+                    index=0, 
+                    key="hypothesis_type_radio",
+                    help="Superiority: Test if one treatment is better than another. Non-inferiority: Test if a new treatment is not worse than standard by more than a specified margin."
+                )
+                
+                # Different parameter inputs based on hypothesis type
+                if hypothesis_type == "Non-inferiority":
+                    # For non-inferiority tests, we need margin and direction
+                    nim = st.number_input(
+                        "Non-inferiority Margin", 
+                        value=0.5, 
+                        step=0.1, 
+                        min_value=0.1, 
+                        key="nim_input",
+                        help="The maximum acceptable difference for still considering the new treatment non-inferior to the standard."
+                    )
+                    
+                    direction = st.radio(
+                        "Non-inferiority Direction",
+                        ["Lower", "Upper"], 
+                        index=0, 
+                        key="direction_radio",
+                        help="Lower: Test if new treatment is not worse than standard by more than margin. Upper: Test if new treatment is not better than standard by more than margin (rare)."
+                    ).lower()  # Convert to lowercase for our functions
+                    
+                    # For sample size calculation, we need assumed difference
+                    if calculation_type == "Sample Size" or calculation_type == "Power":
+                        assumed_difference = st.number_input(
+                            "Assumed True Difference", 
+                            value=0.0, 
+                            step=0.1, 
+                            key="assumed_diff_input",
+                            help="The true difference you expect between treatments. Typically 0 for non-inferiority (treatments are actually equivalent)."
+                        )
+                        
+                    std_dev = st.number_input("Standard Deviation", value=1.0, step=0.1, min_value=0.1)
+                    power = st.slider("Power", min_value=0.5, max_value=0.99, value=0.8, step=0.01)
+                    alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
+                    st.info("Non-inferiority tests use a one-sided alpha level (significance level).")
+                
+                else:  # Superiority hypothesis
+                    if calculation_type == "Sample Size":
+                        # Option to input effect size directly or as means (for all continuous outcome designs)
+                        effect_size_input_method = st.radio(
+                            "Effect Size Input Method",
+                            ["Direct Effect Size", "Group Means"],
+                            horizontal=True
+                        )
+                        
+                        if effect_size_input_method == "Direct Effect Size":
+                            delta = st.number_input("Effect Size (Difference in Means)", value=0.5, step=0.1)
+                        else:  # Group Means option
+                            if "Stepped Wedge" in design_type:
+                                mean_control = st.number_input("Mean Control Phase", value=0.0, step=0.1)
+                                mean_intervention = st.number_input("Mean Intervention Phase", value=0.5, step=0.1)
+                            else:  # Parallel or Cluster
+                                mean_control = st.number_input("Mean Control Group", value=0.0, step=0.1)
+                                mean_intervention = st.number_input("Mean Intervention Group", value=0.5, step=0.1)
+                            delta = abs(mean_intervention - mean_control)  # Calculate effect size automatically
+                            st.info(f"Calculated effect size (absolute difference): {delta}")
+                            
+                        std_dev = st.number_input("Standard Deviation", value=1.0, step=0.1, min_value=0.1)
+                        power = st.slider("Power", min_value=0.5, max_value=0.99, value=0.8, step=0.01)
+                        alpha = st.slider("Significance Level (α)", min_value=0.01, max_value=0.1, value=0.05, step=0.01)
+            
+            # For other designs and outcomes, keep the original code
+            elif "Continuous Outcome" in design_type:
                 if calculation_type == "Sample Size":
                     # Option to input effect size directly or as means (for all continuous outcome designs)
                     effect_size_input_method = st.radio(
@@ -527,181 +667,288 @@ with tab1:
                         # Get simulation checkbox state from session state
                         use_simulation = st.session_state.get("use_simulation_checkbox", False)
                         
-                        if use_simulation:
-                            # Use simulation-based approach for sample size calculation
-                            nsim_value = st.session_state.get("nsim_slider", 1000)
-                            max_n_value = st.session_state.get("Maximum Sample Size to Try", 1000)
-                            step_size_value = st.session_state.get("Sample Size Step", 10)
+                        # Get hypothesis type from session state
+                        hypothesis_type = st.session_state.get("hypothesis_type_radio", "Superiority")
+                        
+                        if hypothesis_type == "Non-inferiority":
+                            # Get non-inferiority parameters from session state
+                            nim = st.session_state.get("nim_input", 0.5)
+                            direction = st.session_state.get("direction_radio", "Lower").lower()
+                            assumed_difference = st.session_state.get("assumed_diff_input", 0.0)
                             
-                            # Handle repeated measures parameters if enabled
-                            if repeated_measures:
-                                result = simulate_sample_size(
-                                    delta=delta,
+                            if use_simulation:
+                                # Get simulation parameters from session state
+                                nsim_value = st.session_state.get("nsim_slider", 1000)
+                                max_n_value = st.session_state.get("max_n_slider", 200)
+                                step_size_value = st.session_state.get("step_size_slider", 10)
+                                
+                                # Call the appropriate non-inferiority simulation function
+                                result = simulate_sample_size_non_inferiority(
+                                    non_inferiority_margin=nim,
                                     std_dev=std_dev,
                                     power=power,
                                     alpha=alpha,
                                     allocation_ratio=allocation_ratio,
                                     nsim=nsim_value,
+                                    min_n=10,
                                     max_n=max_n_value,
                                     step=step_size_value,
-                                    repeated_measures=True,
-                                    correlation=correlation,
-                                    method=analysis_method
+                                    assumed_difference=assumed_difference,
+                                    direction=direction,
+                                    repeated_measures=repeated_measures,
+                                    correlation=correlation if repeated_measures else 0.5,
+                                    method=analysis_method if repeated_measures else "change_score"
                                 )
+                                method_name = "simulate_sample_size_non_inferiority"
                             else:
-                                result = simulate_sample_size(
-                                    delta=delta,
+                                # Use analytical non-inferiority function
+                                result = sample_size_continuous_non_inferiority(
+                                    non_inferiority_margin=nim,
                                     std_dev=std_dev,
                                     power=power,
                                     alpha=alpha,
                                     allocation_ratio=allocation_ratio,
-                                    nsim=nsim_value,
-                                    max_n=max_n_value,
-                                    step=step_size_value
+                                    assumed_difference=assumed_difference,
+                                    direction=direction
                                 )
-                            method_name = "simulate_sample_size"
-                        else:
-                            # Decide which analytical calculation function to use
-                            if repeated_measures:
-                                result = sample_size_repeated_measures(
-                                    delta=delta,
-                                    std_dev=std_dev,
-                                    correlation=correlation,
-                                    power=power,
-                                    alpha=alpha,
-                                    allocation_ratio=allocation_ratio,
-                                    method=analysis_method
-                                )
-                            else:  # Standard or Unequal Variances
-                                result = sample_size_difference_in_means(
-                                    delta=delta,
-                                    std_dev=std_dev,
-                                    power=power,
-                                    alpha=alpha,
-                                    allocation_ratio=allocation_ratio,
-                                    std_dev2=std_dev2
-                                )
-                            method_name = "sample_size_difference_in_means"
+                                method_name = "sample_size_continuous_non_inferiority"
+                        else:  # Superiority hypothesis
+                            if use_simulation:
+                                # Get number of simulations from session state
+                                nsim_value = st.session_state.get("nsim_slider", 1000)
+                                max_n_value = st.session_state.get("max_n_slider", 200)
+                                step_size_value = st.session_state.get("step_size_slider", 10)
+                                
+                                # Call the appropriate simulation function
+                                if repeated_measures:
+                                    result = simulate_sample_size(
+                                        delta=delta,
+                                        std_dev=std_dev,
+                                        power=power,
+                                        alpha=alpha,
+                                        allocation_ratio=allocation_ratio,
+                                        nsim=nsim_value,
+                                        max_n=max_n_value,
+                                        step=step_size_value,
+                                        repeated_measures=True,
+                                        correlation=correlation,
+                                        method=analysis_method
+                                    )
+                                else:
+                                    result = simulate_sample_size(
+                                        delta=delta,
+                                        std_dev=std_dev,
+                                        power=power,
+                                        alpha=alpha,
+                                        allocation_ratio=allocation_ratio,
+                                        nsim=nsim_value,
+                                        max_n=max_n_value,
+                                        step=step_size_value
+                                    )
+                                method_name = "simulate_sample_size"
+                            else:
+                                # Decide which analytical calculation function to use
+                                if repeated_measures:
+                                    result = sample_size_repeated_measures(
+                                        delta=delta,
+                                        std_dev=std_dev,
+                                        correlation=correlation,
+                                        power=power,
+                                        alpha=alpha,
+                                        allocation_ratio=allocation_ratio,
+                                        method=analysis_method
+                                    )
+                                else:  # Standard or Unequal Variances
+                                    result = sample_size_difference_in_means(
+                                        delta=delta,
+                                        std_dev=std_dev,
+                                        power=power,
+                                        alpha=alpha,
+                                        allocation_ratio=allocation_ratio,
+                                        std_dev2=std_dev2
+                                    )
+                                method_name = "sample_size_difference_in_means"
                     
                     elif calculation_type == "Power":
-                        # Get simulation checkbox state (should already be defined from UI)
-                        if use_simulation:
-                            # Get number of simulations from session state
-                            nsim_value = st.session_state.get("nsim_slider", 1000)
-                            # Handle repeated measures parameters if enabled
-                            if repeated_measures:
-                                result = simulate_parallel_rct(
+                        # Get hypothesis type from session state
+                        hypothesis_type = st.session_state.get("hypothesis_type_radio", "Superiority")
+                        
+                        if hypothesis_type == "Non-inferiority":
+                            # Get non-inferiority parameters from session state
+                            nim = st.session_state.get("nim_input", 0.5)
+                            direction = st.session_state.get("direction_radio", "Lower").lower()
+                            assumed_difference = st.session_state.get("assumed_diff_input", 0.0)
+                            
+                            if use_simulation:
+                                # Get simulation parameters
+                                nsim_value = st.session_state.get("nsim_slider", 1000)
+                                
+                                # Call non-inferiority simulation for power
+                                result = simulate_continuous_non_inferiority(
                                     n1=n1,
                                     n2=n2,
-                                    mean1=0,
-                                    mean2=delta,
+                                    non_inferiority_margin=nim,
                                     std_dev=std_dev,
                                     nsim=nsim_value,
                                     alpha=alpha,
-                                    repeated_measures=True,
-                                    correlation=correlation,
-                                    method=analysis_method
+                                    assumed_difference=assumed_difference,
+                                    direction=direction,
+                                    repeated_measures=repeated_measures,
+                                    correlation=correlation if repeated_measures else 0.5,
+                                    method=analysis_method if repeated_measures else "change_score"
                                 )
+                                method_name = "simulate_continuous_non_inferiority"
                             else:
-                                result = simulate_parallel_rct(
+                                # Use analytical non-inferiority function for power
+                                result = power_continuous_non_inferiority(
                                     n1=n1,
                                     n2=n2,
-                                    mean1=0,
-                                    mean2=delta,
-                                    std_dev=std_dev,
-                                    nsim=nsim_value,
-                                    alpha=alpha
-                                )
-                            method_name = "simulate_parallel_rct"
-                        else:
-                            # Decide which calculation function to use
-                            if repeated_measures:
-                                result = power_repeated_measures(
-                                    n1=n1,
-                                    n2=n2,
-                                    delta=delta,
-                                    std_dev=std_dev,
-                                    correlation=correlation,
-                                    alpha=alpha,
-                                    method=analysis_method
-                                )
-                            else:  # Standard or Unequal Variances
-                                result = power_difference_in_means(
-                                    n1=n1,
-                                    n2=n2,
-                                    delta=delta,
+                                    non_inferiority_margin=nim,
                                     std_dev=std_dev,
                                     alpha=alpha,
-                                    std_dev2=std_dev2
+                                    assumed_difference=assumed_difference,
+                                    direction=direction
                                 )
-                            method_name = "power_difference_in_means"
+                                method_name = "power_continuous_non_inferiority"
+                        else:  # Superiority hypothesis
+                            if use_simulation:
+                                # Get number of simulations from session state
+                                nsim_value = st.session_state.get("nsim_slider", 1000)
+                                # Handle repeated measures parameters if enabled
+                                if repeated_measures:
+                                    result = simulate_parallel_rct(
+                                        n1=n1,
+                                        n2=n2,
+                                        mean1=0,
+                                        mean2=delta,
+                                        std_dev=std_dev,
+                                        nsim=nsim_value,
+                                        alpha=alpha,
+                                        repeated_measures=True,
+                                        correlation=correlation,
+                                        method=analysis_method
+                                    )
+                                else:
+                                    result = simulate_parallel_rct(
+                                        n1=n1,
+                                        n2=n2,
+                                        mean1=0,
+                                        mean2=delta,
+                                        std_dev=std_dev,
+                                        nsim=nsim_value,
+                                        alpha=alpha
+                                    )
+                                method_name = "simulate_parallel_rct"
+                            else:
+                                # Decide which calculation function to use
+                                if repeated_measures:
+                                    result = power_repeated_measures(
+                                        n1=n1,
+                                        n2=n2,
+                                        delta=delta,
+                                        std_dev=std_dev,
+                                        correlation=correlation,
+                                        alpha=alpha, 
+                                        method=analysis_method
+                                    )
+                                else:  # Standard or Unequal Variances
+                                    result = power_difference_in_means(
+                                        n1=n1,
+                                        n2=n2,
+                                        delta=delta,
+                                        std_dev=std_dev,
+                                        alpha=alpha,
+                                        std_dev2=std_dev2
+                                    )
+                                method_name = "power_difference_in_means"
                     
                     elif calculation_type == "Minimum Detectable Effect (MDE)":
+                        # Get hypothesis type from session state
+                        hypothesis_type = st.session_state.get("hypothesis_type_radio", "Superiority")
                         # Get simulation checkbox state from session state
                         use_simulation = st.session_state.get("use_simulation_checkbox", False)
                         
-                        if use_simulation:
-                            # Use simulation-based approach for MDE calculation
-                            nsim_value = st.session_state.get("nsim_slider", 1000)
-                            # Handle repeated measures parameters if enabled
-                            if repeated_measures:
-                                result = simulate_min_detectable_effect(
-                                    n1=n1,
-                                    n2=n2,
-                                    std_dev=std_dev,
-                                    power=power,
-                                    nsim=nsim_value,
-                                    alpha=alpha,
-                                    repeated_measures=True,
-                                    correlation=correlation,
-                                    method=analysis_method
-                                )
-                            else:
-                                result = simulate_min_detectable_effect(
-                                    n1=n1,
-                                    n2=n2,
-                                    std_dev=std_dev,
-                                    power=power,
-                                    nsim=nsim_value,
-                                    alpha=alpha
-                                )
-                            method_name = "simulate_min_detectable_effect"
-                        else:
-                            # Decide which analytical calculation function to use
-                            if repeated_measures:
-                                result = min_detectable_effect_repeated_measures(
-                                    n1=n1,
-                                    n2=n2,
-                                    std_dev=std_dev,
-                                    correlation=correlation,
-                                    power=power,
-                                    alpha=alpha,
-                                    method=analysis_method
-                                )
-                            else:  # Standard or Unequal Variances
-                                # For unequal variances, calculate MDE
-                                z_alpha = stats.norm.ppf(1 - alpha/2)
-                                z_beta = stats.norm.ppf(power)
-                                
-                                if unequal_var and std_dev2 is not None:
-                                    # Welch-Satterthwaite approximation for unequal variances
-                                    delta = (z_alpha + z_beta) * math.sqrt((std_dev**2 / n1) + (std_dev2**2 / n2))
+                        if hypothesis_type == "Non-inferiority":
+                            # In non-inferiority context, MDE is the minimum non-inferiority margin
+                            # Get non-inferiority direction from session state
+                            direction = st.session_state.get("direction_radio", "Lower").lower()
+                            assumed_difference = st.session_state.get("assumed_diff_input", 0.0)
+                            
+                            # For non-inferiority, we use analytical calculation as simulation is complex
+                            result = min_detectable_non_inferiority_margin(
+                                n1=n1,
+                                n2=n2,
+                                std_dev=std_dev,
+                                power=power,
+                                alpha=alpha,
+                                assumed_difference=assumed_difference,
+                                direction=direction
+                            )
+                            method_name = "min_detectable_non_inferiority_margin"
+                        else:  # Superiority hypothesis
+                            if use_simulation:
+                                # Use simulation-based approach for MDE calculation
+                                nsim_value = st.session_state.get("nsim_slider", 1000)
+                                # Handle repeated measures parameters if enabled
+                                if repeated_measures:
+                                    result = simulate_min_detectable_effect(
+                                        n1=n1,
+                                        n2=n2,
+                                        std_dev=std_dev,
+                                        power=power,
+                                        nsim=nsim_value,
+                                        alpha=alpha,
+                                        repeated_measures=True,
+                                        correlation=correlation,
+                                        method=analysis_method
+                                    )
                                 else:
-                                    # Standard calculation for equal variances
-                                    delta = (z_alpha + z_beta) * std_dev * math.sqrt(1/n1 + 1/n2)
-                                
-                                result = {
-                                    "delta": delta,
-                                    "parameters": {
-                                        "n1": n1,
-                                        "n2": n2,
-                                        "std_dev": std_dev,
-                                        "std_dev2": std_dev2,
-                                        "power": power,
-                                        "alpha": alpha
+                                    result = simulate_min_detectable_effect(
+                                        n1=n1,
+                                        n2=n2,
+                                        std_dev=std_dev,
+                                        power=power,
+                                        nsim=nsim_value,
+                                        alpha=alpha
+                                    )
+                                method_name = "simulate_min_detectable_effect"
+                            else:
+                                # Decide which analytical calculation function to use
+                                if repeated_measures:
+                                    result = min_detectable_effect_repeated_measures(
+                                        n1=n1,
+                                        n2=n2,
+                                        std_dev=std_dev,
+                                        correlation=correlation,
+                                        power=power,
+                                        alpha=alpha,
+                                        method=analysis_method
+                                    )
+                                else:  # Standard parallel design
+                                    # For MDE, we use the power function but solve for delta
+                                    # We know given n1, n2, power, and alpha, what delta can we detect?
+                                    # Calculate the critical values for hypothesis test
+                                    z_alpha = stats.norm.ppf(1 - alpha/2)
+                                    z_beta = stats.norm.ppf(power)
+                                    
+                                    # Calculate MDE
+                                    if std_dev2 is not None:  # Unequal variances
+                                        delta = (z_alpha + z_beta) * np.sqrt((std_dev**2 / n1) + (std_dev2**2 / n2))
+                                    else:  # Equal variances
+                                        delta = (z_alpha + z_beta) * std_dev * np.sqrt((1/n1) + (1/n2))
+                                    
+                                    result = {
+                                        'delta': delta,
+                                        'parameters': {
+                                            'n1': n1,
+                                            'n2': n2,
+                                            'std_dev': std_dev,
+                                            'std_dev2': std_dev2,
+                                            'power': power,
+                                            'alpha': alpha
+                                        }
                                     }
-                                }
-                            method_name = "min_detectable_effect"
+                                method_name = "min_detectable_effect_analytical"
                 
                 # Cluster RCT with Continuous Outcome
                 elif design_type == "Cluster RCT (Continuous Outcome)":

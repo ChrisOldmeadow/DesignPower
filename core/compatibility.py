@@ -11,7 +11,10 @@ from core.designs.parallel.analytical import (
     power_continuous as power_difference_in_means,
     sample_size_repeated_measures,
     power_repeated_measures,
-    min_detectable_effect_repeated_measures
+    min_detectable_effect_repeated_measures,
+    sample_size_continuous_non_inferiority,
+    power_continuous_non_inferiority,
+    min_detectable_non_inferiority_margin
 )
 
 # Import from new structure - cluster design analytical methods
@@ -25,7 +28,9 @@ from core.designs.cluster.analytical import (
 from core.designs.parallel.simulation import (
     simulate_continuous as simulate_parallel_rct,
     min_detectable_effect_continuous as simulate_min_detectable_effect,
-    sample_size_continuous as simulate_sample_size
+    sample_size_continuous as simulate_sample_size,
+    simulate_continuous_non_inferiority,
+    sample_size_continuous_non_inferiority as simulate_sample_size_non_inferiority
 )
 
 from core.designs.cluster.simulation import (
@@ -48,6 +53,12 @@ __all__ = [
     'sample_size_repeated_measures',
     'power_repeated_measures',
     'min_detectable_effect_repeated_measures',
+    # Non-inferiority testing methods
+    'sample_size_continuous_non_inferiority',
+    'power_continuous_non_inferiority',
+    'min_detectable_non_inferiority_margin',
+    'simulate_continuous_non_inferiority',
+    'simulate_sample_size_non_inferiority',
     'simulate_min_detectable_effect',
     'simulate_sample_size',
     
