@@ -698,86 +698,82 @@ with tab1:
         # Advanced parameters for specific designs
         with st.expander("Advanced Parameters", expanded=False):
             # Advanced options for Parallel RCT with either Continuous or Binary Outcome
-            if "Parallel RCT (Continuous Outcome)" == design_type or "Parallel RCT (Binary Outcome)" == design_type:
+            # Advanced options section - different handling for continuous vs binary outcomes
+            if "Parallel RCT (Continuous Outcome)" == design_type:
+                # Show title and separator for continuous outcomes
                 st.write("Advanced Analysis Options:")
-                
-                # No need for continuous non-inferiority parameters in advanced section as they're now in Basic Parameters
-                
                 st.markdown("---")
                 
-                # Show different advanced options based on outcome type
-                if "Continuous Outcome" in design_type:
-                    # For continuous outcomes, show variance and repeated measures options
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        unequal_var = st.checkbox("Unequal Variances", value=False, key="unequal_var_checkbox")
-                        
-                    with col2:
-                        repeated_measures = st.checkbox("Repeated Measures (Baseline + Follow-up)", value=False, key="repeated_measures_checkbox")
-                    
-                    # Show a horizontal separator
-                    if unequal_var or repeated_measures:
-                        st.markdown("---")
-                    
-                    # Unequal variances option
-                    if unequal_var and not repeated_measures:  # Only show if unequal selected and repeated not selected
-                        st.write("Specify different standard deviations for each group:")
-                        std_dev = st.number_input("Standard Deviation (Group 1)", value=1.0, step=0.1, min_value=0.1, key="sd_group1_unequal")
-                        std_dev2 = st.number_input("Standard Deviation (Group 2)", value=1.2, step=0.1, min_value=0.1, key="sd_group2")
-                        st.info("Using Welch's t-test approximation for unequal variances.")
-                    
-                    # Repeated measures option
-                    elif repeated_measures:
-                        st.write("Repeated Measures Analysis Settings:")
-                        correlation = st.slider("Correlation between Baseline and Follow-up", 
-                                               min_value=0.0, max_value=0.95, value=0.5, step=0.05,
-                                               key="correlation_slider")
-                        
-                        analysis_method = st.radio(
-                            "Analysis Method",
-                            ["Change Score", "ANCOVA"],
-                            horizontal=True,
-                            key="analysis_method_radio"
-                        )
-                        
-                        # Show explanation based on selected method
-                        if analysis_method == "Change Score":
-                            st.info("Change score analysis compares the differences (follow-up minus baseline) between groups.")
-                            if correlation > 0.5:
-                                st.warning("Note: When correlation > 0.5, ANCOVA is typically more efficient than change score analysis.")
-                        else:  # ANCOVA
-                            st.info("ANCOVA adjusts follow-up scores for baseline differences, typically more efficient when correlation > 0.5.")
-                            
-                # Set default values for binary outcomes (these will be used in calculations)
-                elif "Binary Outcome" in design_type:
-                    # Binary outcomes don't use unequal variances or repeated measures
-                    unequal_var = False
-                    repeated_measures = False
+                # For continuous outcomes, show variance and repeated measures options
+                col1, col2 = st.columns(2)
                 
-                # Binary outcome specific options
-                if "Binary Outcome" in design_type:
-                    # Add cleaner spacing and remove unnecessary separator
-                    st.write("") # Add a small vertical space without a separator line
-                    test_type = st.radio(
-                        "Statistical Test",
-                        ["Normal Approximation", "Likelihood Ratio Test", "Exact Test"],
-                        index=0,  # Default to Normal Approximation
-                        key="binary_test_type",
-                        horizontal=True
+                with col1:
+                    unequal_var = st.checkbox("Unequal Variances", value=False, key="unequal_var_checkbox")
+                    
+                with col2:
+                    repeated_measures = st.checkbox("Repeated Measures (Baseline + Follow-up)", value=False, key="repeated_measures_checkbox")
+                
+                # Show a horizontal separator if options are selected
+                if unequal_var or repeated_measures:
+                    st.markdown("---")
+                
+                # Unequal variances option
+                if unequal_var and not repeated_measures:
+                    st.write("Specify different standard deviations for each group:")
+                    std_dev = st.number_input("Standard Deviation (Group 1)", value=1.0, step=0.1, min_value=0.1, key="sd_group1_unequal")
+                    std_dev2 = st.number_input("Standard Deviation (Group 2)", value=1.2, step=0.1, min_value=0.1, key="sd_group2")
+                    st.info("Using Welch's t-test approximation for unequal variances.")
+                
+                # Repeated measures option
+                elif repeated_measures:
+                    st.write("Repeated Measures Analysis Settings:")
+                    correlation = st.slider("Correlation between Baseline and Follow-up", 
+                                           min_value=0.0, max_value=0.95, value=0.5, step=0.05,
+                                           key="correlation_slider")
+                    
+                    analysis_method = st.radio(
+                        "Analysis Method",
+                        ["Change Score", "ANCOVA"],
+                        horizontal=True,
+                        key="analysis_method_radio"
                     )
                     
-                    # Explain the selected test type
-                    if test_type == "Normal Approximation":
-                        st.info("Normal approximation uses the z-test to compare proportions. Fast and reliable for moderate to large sample sizes.")
-                    elif test_type == "Likelihood Ratio Test":
-                        st.info("Likelihood Ratio Test often has better statistical properties than the Normal approximation, especially with smaller sample sizes.")
-                    else:  # Exact Test
-                        st.info("Fisher's Exact Test provides the most accurate results for small sample sizes, but is computationally intensive for large samples.")
+                    # Show explanation based on selected method
+                    if analysis_method == "Change Score":
+                        st.info("Change score analysis compares the differences (follow-up minus baseline) between groups.")
+                        if correlation > 0.5:
+                            st.warning("Note: When correlation > 0.5, ANCOVA is typically more efficient than change score analysis.")
+                    else:  # ANCOVA
+                        st.info("ANCOVA adjusts follow-up scores for baseline differences, typically more efficient when correlation > 0.5.")
                 
-                # Standard option - no additional parameters needed
-                if not unequal_var and not repeated_measures and "Continuous Outcome" in design_type:
+                # Standard option - only display message if no additional parameters are selected
+                if not unequal_var and not repeated_measures:
                     st.info("Standard analysis assumes equal variances across groups.")
+                
+            elif "Parallel RCT (Binary Outcome)" == design_type:
+                # For binary outcomes, skip the header and separator
+                # Set default values that will be used in calculations
+                unequal_var = False
+                repeated_measures = False
+                
+                # Binary outcome specific options - immediately show test type options
+                test_type = st.radio(
+                    "Statistical Test",
+                    ["Normal Approximation", "Likelihood Ratio Test", "Exact Test"],
+                    index=0,  # Default to Normal Approximation
+                    key="binary_test_type",
+                    horizontal=True
+                )
+                
+                # Explain the selected test type
+                if test_type == "Normal Approximation":
+                    st.info("Normal approximation uses the z-test to compare proportions. Fast and reliable for moderate to large sample sizes.")
+                elif test_type == "Likelihood Ratio Test":
+                    st.info("Likelihood Ratio Test often has better statistical properties than the Normal approximation, especially with smaller sample sizes.")
+                else:  # Exact Test
+                    st.info("Fisher's Exact Test provides the most accurate results for small sample sizes, but is computationally intensive for large samples.")
+                
+                # This section has been moved up to the continuous outcome section
             
             # Add simulation-specific options
             if design_type == "Stepped Wedge Trial" or "Cluster" in design_type:
