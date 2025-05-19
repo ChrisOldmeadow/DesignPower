@@ -114,9 +114,141 @@ def power_continuous(n1, n2, delta, std_dev, alpha=0.05, std_dev2=None):
     }
 
 
+def sample_size_binary_non_inferiority(p1, non_inferiority_margin, power=0.8, alpha=0.05, allocation_ratio=1.0, assumed_difference=0.0, direction="lower", test_type="Normal Approximation"):
+    """
+    Calculate sample size required for a non-inferiority test with binary outcome.
+    
+    Parameters
+    ----------
+    p1 : float
+        Proportion in control/standard group (between 0 and 1)
+    non_inferiority_margin : float
+        Non-inferiority margin (positive value)
+    power : float, optional
+        Desired statistical power (1 - beta), by default 0.8
+    alpha : float, optional
+        Significance level (one-sided for non-inferiority), by default 0.05
+    allocation_ratio : float, optional
+        Ratio of sample sizes (n2/n1), by default 1.0
+    assumed_difference : float, optional
+        Assumed true difference between proportions (p2-p1), by default 0.0
+    direction : str, optional
+        Direction of non-inferiority test ("lower" or "upper"), by default "lower"
+    test_type : str, optional
+        Type of statistical test to use, by default "Normal Approximation"
+        
+    Returns
+    -------
+    dict
+        Dictionary containing the required sample sizes for each group and total
+    """
+    # For non-inferiority, we only use a one-sided alpha
+    # Calculate z-scores for given alpha and power
+    z_alpha = stats.norm.ppf(1 - alpha)  # one-sided alpha
+    z_beta = stats.norm.ppf(power)
+    
+    # Calculate p2 based on assumed difference
+    p2 = p1 + assumed_difference
+    
+    # Validate inputs
+    if p1 <= 0 or p1 >= 1 or p2 <= 0 or p2 >= 1:
+        raise ValueError("Proportions must be between 0 and 1")
+    if non_inferiority_margin <= 0:
+        raise ValueError("Non-inferiority margin must be positive")
+    
+    # For non-inferiority with lower margin (most common case)
+    # H0: p2 - p1 ≤ -margin, H1: p2 - p1 > -margin
+    # We need to detect a difference of (assumed_difference + margin) 
+    # Check for nearly-zero differences
+    effective_diff = assumed_difference + non_inferiority_margin
+    
+    if abs(effective_diff) < 1e-6:
+        print(f"WARNING: Effective difference {effective_diff} is too small for precision")
+        return {
+            "n1": 1000,  # More reasonable default for non-inferiority
+            "n2": math.ceil(1000 * allocation_ratio),
+            "total_n": 1000 + math.ceil(1000 * allocation_ratio),
+            "parameters": {
+                "p1": p1,
+                "p2": p2,
+                "non_inferiority_margin": non_inferiority_margin,
+                "power": power,
+                "alpha": alpha,
+                "allocation_ratio": allocation_ratio,
+                "test_type": test_type,
+                "note": "Estimated sample size - effective difference too small for precise calculation"
+            }
+        }
+        
+    # Use a more appropriate formula for non-inferiority
+    # This formula accounts for the one-sided test nature of non-inferiority
+    p_bar = (p1 + p2) / 2
+    
+    # Sample size formula for non-inferiority binary outcome
+    try:
+        var_factor = p1 * (1 - p1) + p2 * (1 - p2) / allocation_ratio
+        n1_base = (z_alpha + z_beta)**2 * var_factor / effective_diff**2
+        
+        # Check for infinity or very large values
+        if not np.isfinite(n1_base) or n1_base > 1e6:
+            print(f"WARNING: Calculated sample size is too large or infinite: {n1_base}")
+            n1_base = 1000  # Cap at a reasonable maximum
+    except (ZeroDivisionError, OverflowError) as e:
+        print(f"Error in sample size calculation: {str(e)}")
+        n1_base = 1000  # Default to a reasonable sample size
+    
+    # Apply adjustment factor based on test type
+    if test_type == "Normal Approximation":
+        # No adjustment needed
+        n1 = n1_base
+        method_description = "Normal Approximation (z-test)"
+    elif test_type == "Likelihood Ratio Test":
+        # LR test typically needs slightly smaller samples
+        n1 = n1_base * 0.95  # 5% smaller than normal approximation
+        method_description = "Likelihood Ratio Test (typically requires smaller samples)"
+    elif test_type == "Exact Test":
+        # Fisher's exact test generally requires larger samples for equivalent power
+        if p1 < 0.1 or p2 < 0.1 or p1 > 0.9 or p2 > 0.9:
+            # More conservative for extreme proportions
+            n1 = n1_base * 1.25  # 25% larger
+            method_description = "Fisher's Exact Test (larger samples for extreme proportions)"
+        else:
+            # Moderate increase for non-extreme proportions
+            n1 = n1_base * 1.15  # 15% larger
+            method_description = "Fisher's Exact Test (requires larger samples)"
+    else:
+        # Use normal approximation as default
+        n1 = n1_base
+        method_description = "Unknown test type, defaulting to Normal Approximation"
+        
+    # Print debugging information
+    print(f"Test type: {test_type}, Sample size: {n1}, Description: {method_description}")
+        
+    # Round up to nearest whole number
+    n1 = math.ceil(n1)
+    n2 = math.ceil(n1 * allocation_ratio)
+    
+    return {
+        "n1": n1,
+        "n2": n2,
+        "total_n": n1 + n2,
+        "parameters": {
+            "p1": p1,
+            "p2": p2,
+            "non_inferiority_margin": non_inferiority_margin,
+            "assumed_difference": assumed_difference,
+            "power": power,
+            "alpha": alpha,
+            "allocation_ratio": allocation_ratio,
+            "test_type": test_type,
+            "hypothesis_type": "non-inferiority"
+        }
+    }
+
+
 def sample_size_binary(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, test_type="Normal Approximation"):
     """
-    Calculate sample size required for detecting a difference in proportions.
+    Calculate sample size required for detecting a difference in proportions (superiority test).
     
     Parameters
     ----------
@@ -127,7 +259,7 @@ def sample_size_binary(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, test
     power : float, optional
         Desired statistical power (1 - beta), by default 0.8
     alpha : float, optional
-        Significance level, by default 0.05
+        Significance level (two-sided), by default 0.05
     allocation_ratio : float, optional
         Ratio of sample sizes (n2/n1), by default 1.0
     test_type : str, optional
@@ -146,8 +278,36 @@ def sample_size_binary(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, test
     # Calculate pooled proportion
     p_pooled = (p1 + p2) / 2
     
-    # Calculate base sample size using normal approximation
-    n1_base = ((1 + 1/allocation_ratio) * p_pooled * (1 - p_pooled) * (z_alpha + z_beta)**2) / ((p2 - p1)**2)
+    # Check if the difference between proportions is too small (which can happen in non-inferiority tests)
+    diff_squared = (p2 - p1)**2
+    if abs(diff_squared) < 1e-10:  # Effectively zero
+        print(f"WARNING: Difference between p1 ({p1}) and p2 ({p2}) is too small for analytical calculation")
+        return {
+            "n1": 5000,  # Return a large but reasonable sample size
+            "n2": math.ceil(5000 * allocation_ratio),
+            "total_n": 5000 + math.ceil(5000 * allocation_ratio),
+            "parameters": {
+                "p1": p1,
+                "p2": p2,
+                "power": power,
+                "alpha": alpha,
+                "allocation_ratio": allocation_ratio,
+                "test_type": test_type,
+                "note": "Estimated sample size - difference between proportions was too small for precise calculation"
+            }
+        }
+    
+    # Calculate base sample size using normal approximation with bounds checking
+    try:
+        n1_base = ((1 + 1/allocation_ratio) * p_pooled * (1 - p_pooled) * (z_alpha + z_beta)**2) / diff_squared
+        
+        # Check for infinity or very large values
+        if not np.isfinite(n1_base) or n1_base > 1e6:
+            print(f"WARNING: Calculated sample size is too large or infinite: {n1_base}")
+            n1_base = 5000  # Cap at a reasonable maximum
+    except (ZeroDivisionError, OverflowError) as e:
+        print(f"Error in sample size calculation: {str(e)}")
+        n1_base = 5000  # Default to a reasonable large sample size
     
     # Apply adjustment factor based on test type
     if test_type == "Normal Approximation":

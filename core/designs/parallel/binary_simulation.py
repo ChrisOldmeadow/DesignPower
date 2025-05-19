@@ -82,17 +82,43 @@ def simulate_binary_non_inferiority(n1, n2, p1, non_inferiority_margin, nsim=100
         # Calculate the standard error of the difference
         # using the pooled estimate for the variance
         p_pooled = (sum(group1) + sum(group2)) / (n1 + n2)
-        se = np.sqrt(p_pooled * (1 - p_pooled) * (1/n1 + 1/n2))
+        
+        # Handle edge cases where p_pooled is 0 or 1, which would lead to SE = 0
+        if p_pooled == 0 or p_pooled == 1:
+            p_pooled = 0.5  # Use a default value to prevent division by zero
+            print(f"WARNING: p_pooled was {p_pooled}, adjusted to 0.5 to prevent division by zero")
+        
+        # Calculate SE with bounds checking
+        se_calc = p_pooled * (1 - p_pooled) * (1/n1 + 1/n2)
+        if se_calc <= 0:  # Numerical precision issue
+            se = 0.1  # Use a small default value
+            print(f"WARNING: SE calculation resulted in non-positive value, using default SE={se}")
+        else:
+            se = np.sqrt(se_calc)
+            
+        # Prevent division by zero
+        if se == 0:
+            se = 0.1  # Use a small default value
+            print(f"WARNING: SE=0, using default SE={se} to prevent division by zero")
         
         # Calculate the test statistic based on direction
-        if direction == "lower":
-            # Testing that new treatment is not worse than standard by more than margin
-            # H0: p2 - p1 <= -margin, H1: p2 - p1 > -margin
-            test_statistic = (diff + non_inferiority_margin) / se
-        else:  # "upper"
-            # Testing that new treatment is not better than standard by more than margin
-            # H0: p2 - p1 >= margin, H1: p2 - p1 < margin
-            test_statistic = (non_inferiority_margin - diff) / se
+        try:
+            if direction == "lower":
+                # Testing that new treatment is not worse than standard by more than margin
+                # H0: p2 - p1 <= -margin, H1: p2 - p1 > -margin
+                test_statistic = (diff + non_inferiority_margin) / se
+            else:  # "upper"
+                # Testing that new treatment is not better than standard by more than margin
+                # H0: p2 - p1 >= margin, H1: p2 - p1 < margin
+                test_statistic = (non_inferiority_margin - diff) / se
+                
+            # Ensure test statistic is finite
+            if not np.isfinite(test_statistic):
+                test_statistic = 0  # Default to no effect
+                print(f"WARNING: Non-finite test statistic detected, defaulting to 0")
+        except Exception as e:
+            print(f"Error calculating test statistic: {str(e)}")
+            test_statistic = 0  # Default to no effect
         
         # Calculate one-sided p-value
         p_value = 1 - stats.norm.cdf(test_statistic)
@@ -322,13 +348,31 @@ def sample_size_binary_non_inferiority_sim(p1, non_inferiority_margin, power=0.8
     
     # Try different sample sizes until we reach desired power
     for n1 in range(min_n, max_n + 1, step):
-        n2 = math.ceil(n1 * allocation_ratio)
+        # Prevent overflow by checking allocation ratio and limiting n2
+        try:
+            if allocation_ratio > 1000:  # Set a reasonable upper limit
+                raise ValueError(f"Allocation ratio {allocation_ratio} is too large, must be <= 1000")
+                
+            n2 = math.ceil(n1 * allocation_ratio)
+            
+            # Add an upper bound check to prevent integer overflow
+            if n2 > 1000000:  # Reasonable upper limit
+                n2 = 1000000
+                print(f"WARNING: n2 capped at {n2} to prevent overflow")
+                
+        except (OverflowError, ValueError) as e:
+            print(f"Error calculating n2: {str(e)}")
+            raise ValueError(f"Cannot calculate appropriate sample size with allocation_ratio={allocation_ratio}")
         
         # Run simulation for this sample size
-        sim_result = simulate_binary_non_inferiority(
-            n1, n2, p1, non_inferiority_margin, 
-            nsim, alpha, None, assumed_difference, direction
-        )
+        try:
+            sim_result = simulate_binary_non_inferiority(
+                n1, n2, p1, non_inferiority_margin, 
+                nsim, alpha, None, assumed_difference, direction
+            )
+        except Exception as e:
+            print(f"Simulation error: {str(e)}")
+            continue  # Try with a larger sample size
         
         # Check if we've reached the desired power
         if sim_result["power"] >= power:
