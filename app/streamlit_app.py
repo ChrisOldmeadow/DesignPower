@@ -747,8 +747,31 @@ with tab1:
                     else:  # ANCOVA
                         st.info("ANCOVA adjusts follow-up scores for baseline differences, typically more efficient when correlation > 0.5.")
                 
+                # Binary outcome specific options
+                if "Binary Outcome" in design_type:
+                    # Add a separator if we've already shown other options
+                    if not (unequal_var or repeated_measures):
+                        st.markdown("---")
+                    
+                    st.write("Binary Test Options:")
+                    test_type = st.radio(
+                        "Statistical Test",
+                        ["Normal Approximation", "Likelihood Ratio Test", "Exact Test"],
+                        index=0,  # Default to Normal Approximation
+                        key="binary_test_type",
+                        horizontal=True
+                    )
+                    
+                    # Explain the selected test type
+                    if test_type == "Normal Approximation":
+                        st.info("Normal approximation uses the z-test to compare proportions. Fast and reliable for moderate to large sample sizes.")
+                    elif test_type == "Likelihood Ratio Test":
+                        st.info("Likelihood Ratio Test often has better statistical properties than the Normal approximation, especially with smaller sample sizes.")
+                    else:  # Exact Test
+                        st.info("Fisher's Exact Test provides the most accurate results for small sample sizes, but is computationally intensive for large samples.")
+                
                 # Standard option - no additional parameters needed
-                elif not unequal_var and not repeated_measures:
+                if not unequal_var and not repeated_measures and "Continuous Outcome" in design_type:
                     st.info("Standard analysis assumes equal variances across groups.")
             
             # Add simulation-specific options
@@ -1272,6 +1295,9 @@ with tab1:
                                 max_n_value = st.session_state.get("max_n_slider", 1000)
                                 step_value = st.session_state.get("step_slider", 10)
                                 
+                                # Get the selected test type from session state
+                                test_type = st.session_state.get("binary_test_type", "Normal Approximation")
+                                
                                 result = sample_size_binary_sim(
                                     p1=p1,
                                     p2=p2,
@@ -1281,16 +1307,21 @@ with tab1:
                                     nsim=nsim_value,
                                     min_n=min_n_value,
                                     max_n=max_n_value,
-                                    step=step_value
+                                    step=step_value,
+                                    test_type=test_type
                                 )
                                 method_name = "sample_size_binary_sim"
                             else:
+                                # Get the selected test type from session state
+                                test_type = st.session_state.get("binary_test_type", "Normal Approximation")
+                                
                                 result = sample_size_binary(
                                     p1=p1,
                                     p2=p2,
                                     power=power,
                                     alpha=alpha,
-                                    allocation_ratio=allocation_ratio
+                                    allocation_ratio=allocation_ratio,
+                                    test_type=test_type
                                 )
                                 method_name = "sample_size_binary"
                         
@@ -1299,22 +1330,30 @@ with tab1:
                                 # Get number of simulations from session state
                                 nsim_value = st.session_state.get("nsim_slider", 1000)
                                 
+                                # Get the selected test type from session state
+                                test_type = st.session_state.get("binary_test_type", "Normal Approximation")
+                                
                                 result = simulate_binary(
                                     n1=n1,
                                     n2=n2,
                                     p1=p1,
                                     p2=p2,
                                     nsim=nsim_value,
-                                    alpha=alpha
+                                    alpha=alpha,
+                                    test_type=test_type
                                 )
                                 method_name = "simulate_binary"
                             else:
+                                # Get the selected test type from session state
+                                test_type = st.session_state.get("binary_test_type", "Normal Approximation")
+                                
                                 result = power_binary(
                                     n1=n1,
                                     n2=n2,
                                     p1=p1,
                                     p2=p2,
-                                    alpha=alpha
+                                    alpha=alpha,
+                                    test_type=test_type
                                 )
                                 method_name = "power_binary"
                         
@@ -1324,6 +1363,9 @@ with tab1:
                                 # Get number of simulations from session state
                                 nsim_value = st.session_state.get("nsim_slider", 1000)
                                 
+                                # Get the selected test type from session state
+                                test_type = st.session_state.get("binary_test_type", "Normal Approximation")
+                                
                                 result = min_detectable_effect_binary_sim(
                                     n1=n1,
                                     n2=n2,
@@ -1331,7 +1373,8 @@ with tab1:
                                     power=power,
                                     nsim=nsim_value,
                                     alpha=alpha,
-                                    precision=0.01
+                                    precision=0.01,
+                                    test_type=test_type
                                 )
                                 method_name = "min_detectable_effect_binary_sim"
                             else:

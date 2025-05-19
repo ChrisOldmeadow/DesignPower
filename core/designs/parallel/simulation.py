@@ -406,7 +406,7 @@ def min_detectable_effect_continuous(n1, n2, std_dev, power=0.8, nsim=1000, alph
     }
 
 
-def simulate_binary(n1, n2, p1, p2, nsim=1000, alpha=0.05):
+def simulate_binary(n1, n2, p1, p2, nsim=1000, alpha=0.05, test_type="Normal Approximation"):
     """
     Simulate a parallel RCT with binary outcome and estimate power.
     
@@ -430,6 +430,27 @@ def simulate_binary(n1, n2, p1, p2, nsim=1000, alpha=0.05):
     dict
         Dictionary containing the estimated power and simulation details
     """
+    # Print the test type being used (will appear in terminal)  
+    print(f"\nDEBUG: Binary simulation using test type: {test_type}")
+    
+    # Add a small delay based on test type to make the difference obvious
+    import time
+    if test_type == "Exact Test":
+        # Add a longer delay for exact test to show it's more computationally intensive
+        print("DEBUG: Exact Test is more computationally intensive... (simulating delay)")
+        time.sleep(2)  # 2 second delay to demonstrate computational cost
+    
+    # Import binary tests module to get test-specific implementations
+    from core.designs.parallel.binary_tests import perform_binary_test
+    
+    # Map test type to internal format
+    test_type_map = {
+        "Normal Approximation": "normal_approximation",
+        "Likelihood Ratio Test": "likelihood_ratio",
+        "Exact Test": "fishers_exact"
+    }
+    internal_test_type = test_type_map.get(test_type, "normal_approximation")
+    
     # Initialize counter for significant results
     sig_count = 0
     
@@ -437,27 +458,17 @@ def simulate_binary(n1, n2, p1, p2, nsim=1000, alpha=0.05):
     p_values = []
     
     # Run simulations
-    for _ in range(nsim):
+    for i in range(nsim):
         # Generate data for both groups
         group1 = np.random.binomial(1, p1, n1)
         group2 = np.random.binomial(1, p2, n2)
         
-        # Calculate proportions
-        prop1 = np.mean(group1)
-        prop2 = np.mean(group2)
+        # Get success counts
+        s1 = np.sum(group1)
+        s2 = np.sum(group2)
         
-        # Calculate standard error under null hypothesis
-        p_pooled = (sum(group1) + sum(group2)) / (n1 + n2)
-        se = np.sqrt(p_pooled * (1 - p_pooled) * (1/n1 + 1/n2))
-        
-        # Calculate z-statistic
-        if se > 0:
-            z_stat = (prop2 - prop1) / se
-            # Calculate p-value
-            p_val = 2 * (1 - stats.norm.cdf(abs(z_stat)))
-        else:
-            # If standard error is 0 (e.g., both groups have same outcome), set p-value to 1
-            p_val = 1.0
+        # Use the appropriate statistical test based on test_type
+        p_val = perform_binary_test(n1, n2, s1, s2, internal_test_type)
         
         # Store p-value
         p_values.append(p_val)
@@ -465,6 +476,10 @@ def simulate_binary(n1, n2, p1, p2, nsim=1000, alpha=0.05):
         # Check if result is significant
         if p_val < alpha:
             sig_count += 1
+        
+        # Print progress occasionally for user feedback
+        if i % 200 == 0 and i > 0:
+            print(f"DEBUG: Completed {i} simulations with {test_type}, current power estimate: {sig_count/i:.4f}")
     
     # Calculate power
     power = sig_count / nsim

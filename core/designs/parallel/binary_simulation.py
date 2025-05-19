@@ -120,7 +120,7 @@ def simulate_binary_non_inferiority(n1, n2, p1, non_inferiority_margin, nsim=100
     }
 
 
-def sample_size_binary_sim(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, nsim=1000, min_n=10, max_n=1000, step=10):
+def sample_size_binary_sim(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, nsim=1000, min_n=10, max_n=1000, step=10, test_type="Normal Approximation"):
     """
     Calculate sample size required for detecting a difference in proportions using simulation.
     
@@ -165,8 +165,9 @@ def sample_size_binary_sim(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, 
     for n1 in range(min_n, max_n + 1, step):
         n2 = math.ceil(n1 * allocation_ratio)
         
-        # Run simulation for this sample size
-        sim_result = simulate_binary(n1, n2, p1, p2, nsim, alpha)
+        # Run simulation for this sample size using the specified test type
+        print(f"DEBUG: Using {test_type} in sample size simulation")
+        sim_result = simulate_binary(n1, n2, p1, p2, nsim, alpha, test_type)
         
         # Check if we've reached the desired power
         if sim_result["power"] >= power:
@@ -189,7 +190,7 @@ def sample_size_binary_sim(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, 
     raise ValueError(f"Could not achieve desired power with max_n={max_n}. Try increasing max_n.")
 
 
-def min_detectable_effect_binary_sim(n1, n2, p1, power=0.8, nsim=1000, alpha=0.05, precision=0.01):
+def min_detectable_effect_binary_sim(n1, n2, p1, power=0.8, nsim=1000, alpha=0.05, precision=0.01, test_type="Normal Approximation"):
     """
     Calculate minimum detectable effect for binary outcomes using simulation-based approach.
     
@@ -228,7 +229,7 @@ def min_detectable_effect_binary_sim(n1, n2, p1, power=0.8, nsim=1000, alpha=0.0
         if p2 <= 0 or p2 >= 1:
             return float('inf')
         
-        sim_result = simulate_binary(n1, n2, p1, p2, nsim, alpha)
+        sim_result = simulate_binary(n1, n2, p1, p2, nsim, alpha, test_type)
         return sim_result["power"] - power
     
     # Set search bounds based on p1
