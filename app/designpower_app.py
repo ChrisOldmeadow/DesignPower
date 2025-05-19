@@ -1444,7 +1444,7 @@ if component_key in COMPONENTS:
                 ax.text(1, n2 + 2, str(n2), ha='center', fontweight='bold')
                 ax.text(0.5, max(n1, n2) + 8, f"Total: {n1 + n2}", ha='center', fontweight='bold')
             elif calc_type == "Power":
-                power = st.session_state.results["power"]
+                power = st.session_state.results.get("power", 0.0)
                 ax.bar(["Power"], [power], color='green')
                 ax.set_ylim(0, 1.1)
                 ax.set_ylabel("Statistical Power")
@@ -1462,7 +1462,7 @@ if component_key in COMPONENTS:
                 ax.set_ylabel("Sample Size")
                 ax.text(0, n + 2, str(n), ha='center', fontweight='bold')
             elif calc_type == "Power" and "power" in st.session_state.results:
-                power = st.session_state.results["power"]
+                power = st.session_state.results.get("power", 0.0)
                 ax.bar(["Power"], [power], color='green')
                 ax.set_ylim(0, 1.1)
                 ax.set_ylabel("Statistical Power")
