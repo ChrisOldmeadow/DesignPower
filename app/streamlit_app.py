@@ -705,55 +705,60 @@ with tab1:
                 
                 st.markdown("---")
                 
-                # Use checkboxes for the main options
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    unequal_var = st.checkbox("Unequal Variances", value=False, key="unequal_var_checkbox")
+                # Show different advanced options based on outcome type
+                if "Continuous Outcome" in design_type:
+                    # For continuous outcomes, show variance and repeated measures options
+                    col1, col2 = st.columns(2)
                     
-                with col2:
-                    repeated_measures = st.checkbox("Repeated Measures (Baseline + Follow-up)", value=False, key="repeated_measures_checkbox")
-                
-                # Show a horizontal separator
-                if unequal_var or repeated_measures:
-                    st.markdown("---")
-                
-                # Unequal variances option
-                if unequal_var and not repeated_measures:  # Only show if unequal selected and repeated not selected
-                    st.write("Specify different standard deviations for each group:")
-                    std_dev = st.number_input("Standard Deviation (Group 1)", value=1.0, step=0.1, min_value=0.1, key="sd_group1_unequal")
-                    std_dev2 = st.number_input("Standard Deviation (Group 2)", value=1.2, step=0.1, min_value=0.1, key="sd_group2")
-                    st.info("Using Welch's t-test approximation for unequal variances.")
-                
-                # Repeated measures option
-                elif repeated_measures:
-                    st.write("Repeated Measures Analysis Settings:")
-                    correlation = st.slider("Correlation between Baseline and Follow-up", 
-                                           min_value=0.0, max_value=0.95, value=0.5, step=0.05,
-                                           key="correlation_slider")
+                    with col1:
+                        unequal_var = st.checkbox("Unequal Variances", value=False, key="unequal_var_checkbox")
+                        
+                    with col2:
+                        repeated_measures = st.checkbox("Repeated Measures (Baseline + Follow-up)", value=False, key="repeated_measures_checkbox")
                     
-                    analysis_method = st.radio(
-                        "Analysis Method",
-                        ["Change Score", "ANCOVA"],
-                        horizontal=True,
-                        key="analysis_method_radio"
-                    )
+                    # Show a horizontal separator
+                    if unequal_var or repeated_measures:
+                        st.markdown("---")
                     
-                    # Show explanation based on selected method
-                    if analysis_method == "Change Score":
-                        st.info("Change score analysis compares the differences (follow-up minus baseline) between groups.")
-                        if correlation > 0.5:
-                            st.warning("Note: When correlation > 0.5, ANCOVA is typically more efficient than change score analysis.")
-                    else:  # ANCOVA
-                        st.info("ANCOVA adjusts follow-up scores for baseline differences, typically more efficient when correlation > 0.5.")
+                    # Unequal variances option
+                    if unequal_var and not repeated_measures:  # Only show if unequal selected and repeated not selected
+                        st.write("Specify different standard deviations for each group:")
+                        std_dev = st.number_input("Standard Deviation (Group 1)", value=1.0, step=0.1, min_value=0.1, key="sd_group1_unequal")
+                        std_dev2 = st.number_input("Standard Deviation (Group 2)", value=1.2, step=0.1, min_value=0.1, key="sd_group2")
+                        st.info("Using Welch's t-test approximation for unequal variances.")
+                    
+                    # Repeated measures option
+                    elif repeated_measures:
+                        st.write("Repeated Measures Analysis Settings:")
+                        correlation = st.slider("Correlation between Baseline and Follow-up", 
+                                               min_value=0.0, max_value=0.95, value=0.5, step=0.05,
+                                               key="correlation_slider")
+                        
+                        analysis_method = st.radio(
+                            "Analysis Method",
+                            ["Change Score", "ANCOVA"],
+                            horizontal=True,
+                            key="analysis_method_radio"
+                        )
+                        
+                        # Show explanation based on selected method
+                        if analysis_method == "Change Score":
+                            st.info("Change score analysis compares the differences (follow-up minus baseline) between groups.")
+                            if correlation > 0.5:
+                                st.warning("Note: When correlation > 0.5, ANCOVA is typically more efficient than change score analysis.")
+                        else:  # ANCOVA
+                            st.info("ANCOVA adjusts follow-up scores for baseline differences, typically more efficient when correlation > 0.5.")
+                            
+                # Set default values for binary outcomes (these will be used in calculations)
+                elif "Binary Outcome" in design_type:
+                    # Binary outcomes don't use unequal variances or repeated measures
+                    unequal_var = False
+                    repeated_measures = False
                 
                 # Binary outcome specific options
                 if "Binary Outcome" in design_type:
-                    # Add a separator if we've already shown other options
-                    if not (unequal_var or repeated_measures):
-                        st.markdown("---")
-                    
-                    st.write("Binary Test Options:")
+                    # Add cleaner spacing and remove unnecessary separator
+                    st.write("") # Add a small vertical space without a separator line
                     test_type = st.radio(
                         "Statistical Test",
                         ["Normal Approximation", "Likelihood Ratio Test", "Exact Test"],
