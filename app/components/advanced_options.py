@@ -121,12 +121,82 @@ def render_survival_advanced_options():
     Returns:
         dict: Dictionary containing the advanced options settings
     """
-    # Currently no advanced options specific to survival outcomes
+    # Basic options for survival analysis
     options = {
         "unequal_var": False,
-        "repeated_measures": False
+        "repeated_measures": False,
+        "method": "analytical",  # Default to analytical method
+        "nsim": 1000,  # Default number of simulations
+        "min_n": 10,  # Default minimum sample size to try
+        "max_n": 1000,  # Default maximum sample size to try
+        "step": 10  # Default step size for incrementing sample size
     }
     
-    st.info("No additional advanced options available for survival outcomes.")
+    # Add method selection (Analytical vs Simulation)
+    method_col1, method_col2 = st.columns([1, 2])
+    with method_col1:
+        method = st.radio(
+            "Calculation Method",
+            ["Analytical", "Simulation"],
+            index=0,  # Default to Analytical
+            key="survival_calc_method",
+            horizontal=True
+        )
+        options["method"] = method.lower()
+    
+    # Show simulation options only if simulation method is selected
+    if method == "Simulation":
+        with method_col2:
+            st.info("Simulation provides more realistic estimates but takes longer to compute.")
+        
+        st.markdown("---")
+        st.write("Simulation Settings:")
+        
+        sim_col1, sim_col2 = st.columns(2)
+        
+        with sim_col1:
+            nsim = st.number_input(
+                "Number of Simulations", 
+                min_value=100, 
+                max_value=10000, 
+                value=1000, 
+                step=100,
+                key="survival_nsim"
+            )
+            options["nsim"] = nsim
+        
+        with sim_col2:
+            st.write("Sample Size Search Range:")
+            min_n = st.number_input(
+                "Minimum Sample Size", 
+                min_value=2, 
+                max_value=100, 
+                value=10, 
+                step=2,
+                key="survival_min_n"
+            )
+            max_n = st.number_input(
+                "Maximum Sample Size", 
+                min_value=100, 
+                max_value=10000, 
+                value=1000, 
+                step=50,
+                key="survival_max_n"
+            )
+            step = st.number_input(
+                "Step Size", 
+                min_value=1, 
+                max_value=50, 
+                value=10, 
+                step=1,
+                key="survival_step"
+            )
+            
+            options["min_n"] = min_n
+            options["max_n"] = max_n
+            options["step"] = step
+    else:
+        with method_col2:
+            st.info("Analytical calculations are fast but make assumptions about the data distribution.")
     
     return options

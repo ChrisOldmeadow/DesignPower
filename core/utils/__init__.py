@@ -5,4 +5,8 @@ This package contains utility modules for supporting calculations:
 - statistics.py: Common statistical functions
 - visualization.py: Plotting and visualization helpers
 - validation.py: Input validation functions
+- formatting.py: Number and text formatting utilities
 """
+
+# Import common formatting functions
+from .formatting import format_number_with_precision, format_percentage, format_p_value

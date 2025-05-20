@@ -1,50 +1,83 @@
-# Sample Size Calculator
+# DesignPower: Power and Sample Size Calculator
 
-A full-stack application for statistical power analysis and sample size calculation across various study designs.
+A comprehensive application for statistical power analysis and sample size calculation across various study designs, featuring both analytical and simulation-based methods.
 
 ## Features
 
-- Calculate sample size requirements for a desired power level
-- Calculate power for a given sample size
-- Estimate minimum detectable effects
-- Support for multiple study designs:
-  - Parallel RCTs with continuous or binary outcomes
-  - Cluster RCTs with continuous or binary outcomes
-  - Stepped wedge trials
-- Interactive web interface built with Streamlit
-- REST API powered by FastAPI
-- Command-line interface using Typer
-- High-performance simulation via Julia integration
+### Calculation Types
+- **Sample Size Calculation**: Determine required sample sizes for a desired power level
+- **Power Calculation**: Calculate statistical power for a given sample size
+- **Minimum Detectable Effect**: Estimate the smallest effect size detectable with a given sample size and power
+
+### Study Designs
+- **Parallel RCTs** with multiple outcome types:
+  - Continuous outcomes (with equal or unequal variance options)
+  - Binary outcomes (with various statistical test options)
+  - Survival outcomes
+- **Single Arm Trials** with multiple outcome types
+  - Continuous outcomes
+  - Binary outcomes 
+  - Survival outcomes
+
+### Hypothesis Types
+- **Superiority**: Testing if a new treatment is better than a control
+- **Non-Inferiority**: Testing if a new treatment is not worse than a control by a pre-specified margin
+
+### Calculation Methods
+- **Analytical**: Based on established statistical formulas
+- **Simulation**: Monte Carlo simulations for more complex designs and robust estimates
+
+## Advanced Features
+
+### Binary Outcome Advanced Options
+
+#### Statistical Test Types
+- **Normal Approximation**: Standard chi-square test approach (z-test)
+- **Fisher's Exact Test**: More conservative exact test, ideal for small sample sizes
+- **Likelihood Ratio Test**: Often more powerful than chi-square tests
+
+#### Continuity Correction
+- Optional continuity correction for improved accuracy in discrete data
+
+### Simulation Features
+- **Customizable Simulations**: Set the number of simulations and random seed
+- **Reproducibility**: Fixed random seeds ensure reproducible results
+- **Parameter Optimization**: Automatic optimization for sample size and MDE calculations
+
+### Unequal Variance Support
+- For continuous outcomes, option to specify different standard deviations for treatment and control groups
 
 ## Project Structure
 
 ```
-sample-size-dashboard/
+DesignPower/
 ├── app/
-│   └── streamlit_app.py        # Streamlit frontend
-├── api/
-│   └── main.py                 # FastAPI app
+│   ├── designpower_app.py     # Streamlit main application
+│   └── components/            # Modular UI components
+│       ├── parallel_rct.py    # Parallel RCT components
+│       └── single_arm.py      # Single arm trial components
 ├── core/
-│   ├── power.py                # Core calculation functions
-│   ├── simulation.py           # Simulation-based methods
-│   └── utils.py                # Shared utilities
-├── julia_backend/
-│   └── stepped_wedge.jl        # High-performance Julia code
-├── cli.py                      # Command-line interface
-├── tests/
-│   ├── test_power.py           # Unit tests for power calculations
-│   ├── test_simulation.py      # Unit tests for simulations
-│   └── test_julia_interop.py   # Tests for Julia integration
-├── requirements.txt            # Python dependencies
-└── README.md                   # This file
+│   ├── compatibility.py       # Backward compatibility
+│   ├── power.py               # Main interface for calculations
+│   └── designs/               # Design-specific implementations
+│       ├── parallel/          # Parallel design modules
+│       │   ├── analytical_continuous.py  # Analytical methods for continuous outcomes
+│       │   ├── simulation_continuous.py  # Simulation methods for continuous outcomes
+│       │   ├── analytical_binary.py      # Analytical methods for binary outcomes
+│       │   ├── simulation_binary.py      # Simulation methods for binary outcomes
+│       │   ├── analytical_survival.py    # Analytical methods for survival outcomes
+│       │   └── simulation_survival.py    # Simulation methods for survival outcomes
+│       └── single/            # Single arm design modules
+├── requirements.txt           # Python dependencies
+└── README.md                  # This documentation
 ```
 
 ## Installation
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd sample-size-dashboard
+   git clone https://github.com/yourusername/DesignPower.git
+   cd DesignPower
    ```
 
 2. Install Python dependencies:
@@ -52,9 +85,77 @@ sample-size-dashboard/
    pip install -r requirements.txt
    ```
 
-3. (Optional) Install Julia for high-performance simulation:
-   - Download and install Julia from https://julialang.org/downloads/
-   - Configure PyJulia:
+## Usage
+
+### Running the Streamlit App
+
+```bash
+cd DesignPower
+streamlit run app/designpower_app.py
+```
+
+This will start the web application locally and open a browser window with the interface.
+
+### Using the Application
+
+1. **Select Study Design and Outcome Type**
+   - Choose between Parallel RCT or Single Arm Trial
+   - Select the outcome type (Continuous, Binary, or Survival)
+
+2. **Choose Hypothesis Type**
+   - Select between Superiority or Non-Inferiority hypothesis
+
+3. **Select Calculation Type**
+   - Sample Size: Calculate required sample size for a given power
+   - Power: Calculate power for a given sample size
+   - Minimum Detectable Effect: Determine the smallest effect size detectable
+
+4. **Input Parameters**
+   - Enter basic parameters specific to your chosen design
+   - Configure advanced options as needed (test type, simulation parameters, etc.)
+
+5. **Calculate Results**
+   - Click the Calculate button to perform the analysis
+   - View results including visualizations
+
+### Advanced Options
+
+#### Simulation vs. Analytical Methods
+
+For more complex designs or to verify analytical results, the simulation method provides:  
+- More robust estimates through Monte Carlo simulation
+- Customizable number of simulations (higher = more precision)
+- Ability to set a random seed for reproducibility
+
+#### Binary Outcome Test Types
+
+Different test types affect the calculated sample size and power:
+- **Normal Approximation**: Standard approach, efficient for larger samples
+- **Fisher's Exact Test**: More conservative, better for smaller samples
+- **Likelihood Ratio Test**: Often more powerful than chi-square tests
+
+Applying continuity correction improves accuracy but generally increases required sample sizes.
+
+## Modular Structure
+
+The application follows a modular design pattern:
+- **UI Components**: Separated by study design and outcome type
+- **Calculation Modules**: Organized by analytical vs. simulation methods
+- **Core Functions**: Shared utilities and interfaces
+
+## Contributing
+
+Contributions to DesignPower are welcome! To contribute:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature-name`)
+3. Commit your changes (`git commit -m 'Add some feature'`)
+4. Push to the branch (`git push origin feature/your-feature-name`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
      ```python
      import julia
      julia.install()
