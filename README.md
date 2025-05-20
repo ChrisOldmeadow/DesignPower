@@ -16,7 +16,10 @@ A comprehensive application for statistical power analysis and sample size calcu
   - Survival outcomes
 - **Single Arm Trials** with multiple outcome types
   - Continuous outcomes
-  - Binary outcomes 
+  - Binary outcomes
+    - Standard design
+    - A'Hern's design
+    - Simon's two-stage design
   - Survival outcomes
 
 ### Hypothesis Types
@@ -38,6 +41,22 @@ A comprehensive application for statistical power analysis and sample size calcu
 
 #### Continuity Correction
 - Optional continuity correction for improved accuracy in discrete data
+
+### Single Arm Binary Outcome Designs
+
+#### A'Hern's Design
+- Exact binomial calculations for smaller sample sizes
+- More precise than normal approximation methods
+- Single-stage design with clear decision rules
+
+#### Simon's Two-Stage Design
+- Allows early stopping for futility after the first stage
+- Reduces expected sample size when treatment is ineffective
+- Multiple optimality criteria:
+  - **Optimal**: Minimizes expected sample size under null hypothesis
+  - **Minimax**: Minimizes maximum sample size
+- Provides stage-specific decision thresholds
+- Highly optimized calculation algorithm based on industry-standard methods
 
 ### Simulation Features
 - **Customizable Simulations**: Set the number of simulations and random seed

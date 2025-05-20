@@ -185,11 +185,11 @@ The refactoring has been successfully completed for the following outcome types 
 | Continuous  | ✅ Complete       | ✅ Complete       | ✅ Complete              |
 | Survival    | ✅ Complete       | ✅ Complete       | ✅ Complete              |
 
-### Single Arm Designs (Future Work)
+### Single Arm Designs
 
 | Outcome Type | Analytical Methods | Simulation Methods | Non-inferiority Support |
-|-------------|-------------------|-------------------|--------------------------|
-| Binary      | 🔄 In Progress    | 🔄 In Progress    | 🔄 In Progress           |
+|-------------|-------------------|-------------------|---------------------------|
+| Binary      | ✅ Complete       | 🔄 In Progress    | 🔄 In Progress           |
 | Continuous  | 🔄 In Progress    | 🔄 In Progress    | 🔄 In Progress           |
 | Survival    | 🔄 In Progress    | 🔄 In Progress    | 🔄 In Progress           |
 
