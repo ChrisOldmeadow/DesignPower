@@ -1,0 +1,717 @@
+"""
+Module for generating human-readable report text based on calculation results.
+
+This module provides functions that format power calculation results into clear,
+publication-ready text descriptions with appropriate references.
+"""
+
+import textwrap
+
+# Dictionary of references for different analysis methods
+METHOD_REFERENCES = {
+    # Continuous outcomes
+    "continuous_analytical": {
+        "citation": "Cohen J. (1988). Statistical Power Analysis for the Behavioral Sciences. New York, NY: Routledge Academic",
+        "doi": "https://doi.org/10.4324/9780203771587"
+    },
+    "continuous_simulation": {
+        "citation": "Morris TP, White IR, Crowther MJ. (2019). Using simulation studies to evaluate statistical methods. Statistics in Medicine, 38(11), 2074-2102",
+        "doi": "https://doi.org/10.1002/sim.8086"
+    },
+    "continuous_repeated_measures": {
+        "citation": "Guo Y, Logan HL, Glueck DH, Muller KE. (2013). Selecting a sample size for studies with repeated measures. BMC Medical Research Methodology, 13(1), 100",
+        "doi": "https://doi.org/10.1186/1471-2288-13-100"
+    },
+    # Survival outcomes
+    "survival_exponential": {
+        "citation": "Schoenfeld DA. (1983). Sample-size formula for the proportional-hazards regression model. Biometrics, 39(2), 499-503",
+        "doi": "https://doi.org/10.2307/2531021"
+    },
+    # Binary outcomes
+    "binary_normal_approximation": {
+        "citation": "Fleiss JL, Levin B, Paik MC. (2003). Statistical Methods for Rates and Proportions. New York: John Wiley & Sons",
+        "doi": "https://doi.org/10.1002/0471445428"
+    },
+    "binary_fishers_exact": {
+        "citation": "Chow S, Shao J, Wang H. (2008). Sample Size Calculations in Clinical Research. New York: Marcel Dekker",
+        "doi": "https://doi.org/10.1201/9781584889830"
+    },
+    "binary_likelihood_ratio": {
+        "citation": "Self SG, Mauritsen RH. (1988). Power/Sample Size Calculations for Generalized Linear Models. Biometrics, 44(1), 79-86",
+        "doi": "https://doi.org/10.2307/2531896"
+    },
+    # Survival outcomes
+    "survival_analytical": {
+        "citation": "Schoenfeld DA. (1983). Sample-size formula for the proportional-hazards regression model. Biometrics, 39(2), 499-503",
+        "doi": "https://doi.org/10.2307/2531021"
+    },
+    "survival_simulation": {
+        "citation": "Hsieh FY, Lavori PW. (2000). Sample-Size Calculations for the Cox Proportional Hazards Regression Model with Nonbinary Covariates. Controlled Clinical Trials, 21(6), 552-560",
+        "doi": "https://doi.org/10.1016/S0197-2456(00)00104-5"
+    }
+}
+
+def get_method_reference(outcome_type, test_type=None, method="analytical", design=None):
+    """
+    Get the appropriate reference for the specific calculation method.
+    
+    Parameters
+    ----------
+    outcome_type : str
+        Type of outcome ('continuous', 'binary', or 'survival')
+    test_type : str, optional
+        Statistical test type (primarily for binary outcomes)
+    method : str, optional
+        Calculation method ('analytical' or 'simulation')
+    design : str, optional
+        Specific design type (e.g., 'repeated_measures')
+        
+    Returns
+    -------
+    dict
+        Dictionary containing citation and DOI
+    """
+    # Default reference
+    default_ref = {
+        "citation": "Lachin JM. (1981). Introduction to sample size determination and power analysis for clinical trials. Controlled Clinical Trials, 2(2), 93-113",
+        "doi": "https://doi.org/10.1016/0197-2456(81)90001-5"
+    }
+    
+    if outcome_type == "continuous":
+        if design == "repeated_measures":
+            # For repeated measures designs
+            return METHOD_REFERENCES.get("continuous_repeated_measures", default_ref)
+        else:
+            # For standard continuous designs
+            key = f"{outcome_type}_{method}"
+            return METHOD_REFERENCES.get(key, default_ref)
+    
+    elif outcome_type == "binary" and test_type:
+        # Normalize the test type string
+        test_type_normalized = test_type.lower().replace(" ", "_")
+        
+        key = f"{outcome_type}_{test_type_normalized}"
+        return METHOD_REFERENCES.get(key, default_ref)
+    
+    elif outcome_type == "survival":
+        # For survival outcomes, default to exponential model
+        return METHOD_REFERENCES.get("survival_exponential", default_ref)
+    
+    # Default to general analytical method
+    return default_ref
+
+def generate_sample_size_report(results, params, design_type, outcome_type):
+    """
+    Generate a human-readable report for sample size calculations.
+    
+    Parameters
+    ----------
+    results : dict
+        Results from the calculation function
+    params : dict
+        Input parameters used for the calculation
+    design_type : str
+        Study design type (e.g., 'Parallel RCT', 'Single Arm Trial')
+    outcome_type : str
+        Type of outcome ('Continuous Outcome', 'Binary Outcome', 'Survival Outcome')
+        
+    Returns
+    -------
+    str
+        Formatted text report
+    """
+    # Extract key values
+    n1 = results.get('n1', 0)
+    n2 = results.get('n2', 0)
+    power = params.get('power', 0.8)
+    alpha = params.get('alpha', 0.05)
+    hypothesis_type = params.get('hypothesis_type', 'Superiority')
+    method = params.get('method', 'analytical')
+    
+    # Extract outcome-specific parameters
+    if 'Continuous' in outcome_type:
+        # For continuous outcomes
+        effect_size = results.get('effect_size', 0)
+        mean1 = params.get('mean1', 0)
+        mean2 = params.get('mean2', 0)
+        std_dev = params.get('std_dev', 1)
+        unequal_var = params.get('unequal_var', False)
+        std_dev2 = params.get('std_dev2', std_dev) if unequal_var else std_dev
+        
+        # Check if this is a repeated measures design
+        repeated_measures = params.get('repeated_measures', False)
+        correlation = params.get('correlation', 0) if repeated_measures else 0
+        
+        # Get appropriate reference based on design
+        design_param = "repeated_measures" if repeated_measures else None
+        reference = get_method_reference('continuous', method=method, design=design_param)
+        
+        if design_type == 'Parallel RCT':
+            if hypothesis_type == 'Superiority':
+                # Create the variance assumption text based on whether unequal variance was used
+                if unequal_var:
+                    variance_text = f"assuming unequal variances with standard deviations of {std_dev:.2f} in group 1 and {std_dev2:.2f} in group 2"
+                else:
+                    variance_text = f"assuming equal variances with a standard deviation of {std_dev:.2f}"
+                
+                # Check if repeated measures design is being used
+                repeated_measures = params.get("repeated_measures", False)
+                
+                # Check if simulation method was used
+                if method == "simulation":
+                    nsim = params.get("nsim", 1000)
+                    seed = params.get("seed", 42)
+                    if repeated_measures:
+                        method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}) with a paired t-test"
+                    else:
+                        method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}) with a two-sided two-sample t-test"
+                else:
+                    if repeated_measures:
+                        method_text = "using a paired t-test"
+                    else:
+                        method_text = "using a two-sided two-sample t-test"
+                
+                # Create special text for repeated measures if applicable
+                if repeated_measures:
+                    correlation = params.get("correlation", 0)
+                    repeated_text = f"This is a repeated measures design with a correlation of {correlation:.2f} between measurements."
+                else:
+                    repeated_text = ""
+                
+                report_text = textwrap.dedent(f"""
+                Sample Size Calculation Report:
+                
+                A sample size of {n1} participants in group 1 and {n2} participants in group 2 
+                (total N = {n1 + n2}) will provide {power * 100:.0f}% power to detect a difference 
+                in means of {abs(mean2 - mean1):.2f} (effect size d = {effect_size:.2f}) between 
+                groups, {variance_text}, {method_text} with a Type I error rate of {alpha * 100:.0f}%.
+                {repeated_text if repeated_text else ''}
+                
+                Reference: {reference['citation']}
+                DOI: {reference['doi']}
+                """)
+            else:  # Non-inferiority
+                nim = params.get('nim', 0)
+                direction = params.get('direction', 'Higher is better')
+                report_text = textwrap.dedent(f"""
+                Non-Inferiority Sample Size Calculation Report:
+                
+                A sample size of {n1} participants in group 1 and {n2} participants in group 2 
+                (total N = {n1 + n2}) will provide {power * 100:.0f}% power to establish 
+                non-inferiority with a margin of {nim:.2f}, assuming a standard deviation 
+                of {std_dev:.2f}{"" if not unequal_var else f" in group 1 and {std_dev2:.2f} in group 2"}, 
+                using a one-sided t-test with a Type I error rate of {alpha * 100:.0f}%.
+                
+                Reference: {reference['citation']}
+                DOI: {reference['doi']}
+                """)
+                
+    elif 'Binary' in outcome_type:
+        # For binary outcomes
+        p1 = params.get('p1', 0)
+        p2 = params.get('p2', 0)
+        odds_ratio = results.get('odds_ratio', 0)
+        test_type = params.get('test_type', 'Normal Approximation')
+        correction = params.get('correction', False)
+        
+        # Get appropriate reference
+        reference = get_method_reference('binary', test_type, method)
+        
+        if design_type == 'Parallel RCT':
+            if hypothesis_type == 'Superiority':
+                # Check if simulation method was used and create appropriate method text
+                if method == "simulation":
+                    nsim = params.get("nsim", 1000)
+                    seed = params.get("seed", 42)
+                    method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}) with a {test_type}{' with continuity correction' if correction else ''}"
+                else:
+                    method_text = f"using a {test_type}{' with continuity correction' if correction else ''}"
+                
+                report_text = textwrap.dedent(f"""
+                Sample Size Calculation Report:
+                
+                A sample size of {n1} participants in group 1 and {n2} participants in group 2 
+                (total N = {n1 + n2}) will provide {power * 100:.0f}% power to detect a difference 
+                in proportions from {p1:.2f} in group 1 to {p2:.2f} in group 2 (odds ratio = {odds_ratio:.2f}), 
+                {method_text}, with a Type I error rate of {alpha * 100:.0f}%.
+                
+                Reference: {reference['citation']}
+                DOI: {reference['doi']}
+                """)
+            else:  # Non-inferiority
+                nim = params.get('nim', 0)
+                report_text = textwrap.dedent(f"""
+                Non-Inferiority Sample Size Calculation Report:
+                
+                A sample size of {n1} participants in group 1 and {n2} participants in group 2 
+                (total N = {n1 + n2}) will provide {power * 100:.0f}% power to establish 
+                non-inferiority with a margin of {nim:.2f}, assuming a proportion of {p1:.2f} in 
+                the reference group, using a {test_type}{' with continuity correction' if correction else ''}, 
+                with a Type I error rate of {alpha * 100:.0f}%.
+                
+                Reference: {reference['citation']}
+                DOI: {reference['doi']}
+                """)
+                
+    elif 'Survival' in outcome_type:
+        # For survival outcomes
+        hr = params.get('hr', 0)
+        median_survival1 = params.get('median_survival1', 0)
+        
+        # Get appropriate reference
+        reference = get_method_reference('survival', method=method)
+        
+        if design_type == 'Parallel RCT':
+            if hypothesis_type == 'Superiority':
+                # Extract accrual and follow-up times
+                accrual_time = params.get('accrual_time', 1.0)
+                follow_up_time = params.get('follow_up_time', 1.0)
+                dropout_rate1 = params.get('dropout_rate1', 0.1)
+                
+                report_text = textwrap.dedent(f"""
+                Sample Size Calculation Report:
+                
+                A sample size of {n1} participants in group 1 and {n2} participants in group 2 
+                (total N = {n1 + n2}) will provide {power * 100:.0f}% power to detect a hazard ratio 
+                of {hr:.2f}, assuming a median survival time of {median_survival1:.1f} months in the 
+                reference group. The calculation assumes exponential survival distributions with an 
+                accrual period of {accrual_time:.1f} months, follow-up period of {follow_up_time:.1f} months, 
+                and anticipated dropout rate of {dropout_rate1*100:.1f}%. Analysis will use a log-rank test 
+                with a Type I error rate of {alpha * 100:.0f}%.
+                
+                Reference: {reference['citation']}
+                DOI: {reference['doi']}
+                """)
+            else:  # Non-inferiority
+                nim = params.get('nim', 0)
+                report_text = textwrap.dedent(f"""
+                Non-Inferiority Sample Size Calculation Report:
+                
+                A sample size of {n1} participants in group 1 and {n2} participants in group 2 
+                (total N = {n1 + n2}) will provide {power * 100:.0f}% power to establish 
+                non-inferiority with a hazard ratio margin of {nim:.2f}, assuming a median 
+                survival time of {median_survival1:.1f} months in the reference group, 
+                using a one-sided log-rank test with a Type I error rate of {alpha * 100:.0f}%.
+                
+                Reference: {reference['citation']}
+                DOI: {reference['doi']}
+                """)
+    else:
+        # Default report for other types
+        report_text = textwrap.dedent(f"""
+        Sample Size Calculation Report:
+        
+        A total sample size of {n1 + n2} participants will provide {power * 100:.0f}% power 
+        for the specified design with a Type I error rate of {alpha * 100:.0f}%.
+        """)
+    
+    return report_text.strip()
+
+def generate_power_report(results, params, design_type, outcome_type):
+    """
+    Generate a human-readable report for power calculations.
+    
+    Parameters
+    ----------
+    results : dict
+        Results from the calculation function
+    params : dict
+        Input parameters used for the calculation
+    design_type : str
+        Study design type (e.g., 'Parallel RCT', 'Single Arm Trial')
+    outcome_type : str
+        Type of outcome ('Continuous Outcome', 'Binary Outcome', 'Survival Outcome')
+        
+    Returns
+    -------
+    str
+        Formatted text report
+    """
+    # Extract key values
+    n1 = params.get('n1', 0)
+    n2 = params.get('n2', 0)
+    power = results.get('power', 0)
+    alpha = params.get('alpha', 0.05)
+    hypothesis_type = params.get('hypothesis_type', 'Superiority')
+    method = params.get('method', 'analytical')
+    
+    # Extract outcome-specific parameters
+    if 'Continuous' in outcome_type:
+        # For continuous outcomes
+        effect_size = results.get('effect_size', 0)
+        mean1 = params.get('mean1', 0)
+        mean2 = params.get('mean2', 0)
+        std_dev = params.get('std_dev', 1)
+        unequal_var = params.get('unequal_var', False)
+        std_dev2 = params.get('std_dev2', std_dev) if unequal_var else std_dev
+        
+        # Check if this is a repeated measures design
+        repeated_measures = params.get('repeated_measures', False)
+        correlation = params.get('correlation', 0) if repeated_measures else 0
+        
+        # Get appropriate reference based on design
+        design_param = "repeated_measures" if repeated_measures else None
+        reference = get_method_reference('continuous', method=method, design=design_param)
+        
+        if design_type == 'Parallel RCT':
+            if hypothesis_type == 'Superiority':
+                # Create the variance assumption text based on whether unequal variance was used
+                if unequal_var:
+                    variance_text = f"assuming unequal variances with standard deviations of {std_dev:.2f} in group 1 and {std_dev2:.2f} in group 2"
+                else:
+                    variance_text = f"assuming equal variances with a standard deviation of {std_dev:.2f}"
+                
+                # Check if repeated measures design is being used
+                repeated_measures = params.get("repeated_measures", False)
+                
+                # Check if simulation method was used
+                if method == "simulation":
+                    nsim = params.get("nsim", 1000)
+                    seed = params.get("seed", 42)
+                    if repeated_measures:
+                        method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}) with a paired t-test"
+                    else:
+                        method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}) with a two-sided two-sample t-test"
+                else:
+                    if repeated_measures:
+                        method_text = "using a paired t-test"
+                    else:
+                        method_text = "using a two-sided two-sample t-test"
+                
+                # Create special text for repeated measures if applicable
+                if repeated_measures:
+                    correlation = params.get("correlation", 0)
+                    repeated_text = f"This is a repeated measures design with a correlation of {correlation:.2f} between measurements."
+                else:
+                    repeated_text = ""
+                
+                report_text = textwrap.dedent(f"""
+                Power Calculation Report:
+                
+                With {n1} participants in group 1 and {n2} participants in group 2 
+                (total N = {n1 + n2}), the study will have {power * 100:.1f}% power to detect 
+                a difference in means of {abs(mean2 - mean1):.2f} (effect size d = {effect_size:.2f}) 
+                between groups, {variance_text}, {method_text} 
+                with a Type I error rate of {alpha * 100:.0f}%.
+                {repeated_text if repeated_text else ''}
+                
+                Reference: {reference['citation']}
+                DOI: {reference['doi']}
+                """)
+            else:  # Non-inferiority
+                nim = params.get('nim', 0)
+                report_text = textwrap.dedent(f"""
+                Non-Inferiority Power Calculation Report:
+                
+                With {n1} participants in group 1 and {n2} participants in group 2 
+                (total N = {n1 + n2}), the study will have {power * 100:.1f}% power to establish 
+                non-inferiority with a margin of {nim:.2f}, assuming a standard deviation 
+                of {std_dev:.2f}{"" if not unequal_var else f" in group 1 and {std_dev2:.2f} in group 2"}, 
+                using a one-sided t-test with a Type I error rate of {alpha * 100:.0f}%.
+                
+                Reference: {reference['citation']}
+                DOI: {reference['doi']}
+                """)
+                
+    elif 'Binary' in outcome_type:
+        # For binary outcomes
+        p1 = params.get('p1', 0)
+        p2 = params.get('p2', 0)
+        odds_ratio = results.get('odds_ratio', 0)
+        test_type = params.get('test_type', 'Normal Approximation')
+        correction = params.get('correction', False)
+        
+        # Get appropriate reference
+        reference = get_method_reference('binary', test_type, method)
+        
+        if design_type == 'Parallel RCT':
+            if hypothesis_type == 'Superiority':
+                # Check if simulation method was used and create appropriate method text
+                if method == "simulation":
+                    nsim = params.get("nsim", 1000)
+                    seed = params.get("seed", 42)
+                    method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}) with a {test_type}{' with continuity correction' if correction else ''}"
+                else:
+                    method_text = f"using a {test_type}{' with continuity correction' if correction else ''}"
+                
+                report_text = textwrap.dedent(f"""
+                Power Calculation Report:
+                
+                With {n1} participants in group 1 and {n2} participants in group 2 
+                (total N = {n1 + n2}), the study will have {power * 100:.1f}% power to detect 
+                a difference in proportions from {p1:.2f} in group 1 to {p2:.2f} in group 2 
+                (odds ratio = {odds_ratio:.2f}), {method_text}, with a Type I error rate of {alpha * 100:.0f}%.
+                
+                Reference: {reference['citation']}
+                DOI: {reference['doi']}
+                """)
+            else:  # Non-inferiority
+                nim = params.get('nim', 0)
+                report_text = textwrap.dedent(f"""
+                Non-Inferiority Power Calculation Report:
+                
+                With {n1} participants in group 1 and {n2} participants in group 2 
+                (total N = {n1 + n2}), the study will have {power * 100:.1f}% power to establish 
+                non-inferiority with a margin of {nim:.2f}, assuming a proportion of {p1:.2f} in 
+                the reference group, using a {test_type}{' with continuity correction' if correction else ''}, 
+                with a Type I error rate of {alpha * 100:.0f}%.
+                
+                Reference: {reference['citation']}
+                DOI: {reference['doi']}
+                """)
+                
+    elif 'Survival' in outcome_type:
+        # For survival outcomes
+        hr = params.get('hr', 0)
+        median_survival1 = params.get('median_survival1', 0)
+        
+        # Get appropriate reference
+        reference = get_method_reference('survival', method=method)
+        
+        if design_type == 'Parallel RCT':
+            if hypothesis_type == 'Superiority':
+                # Extract accrual and follow-up times
+                accrual_time = params.get('accrual_time', 1.0)
+                follow_up_time = params.get('follow_up_time', 1.0)
+                dropout_rate1 = params.get('dropout_rate1', 0.1)
+                
+                report_text = textwrap.dedent(f"""
+                Power Calculation Report:
+                
+                With {n1} participants in group 1 and {n2} participants in group 2 
+                (total N = {n1 + n2}), the study will have {power * 100:.1f}% power to detect 
+                a hazard ratio of {hr:.2f}, assuming a median survival time of {median_survival1:.1f} 
+                months in the reference group. The calculation assumes exponential survival distributions with an 
+                accrual period of {accrual_time:.1f} months, follow-up period of {follow_up_time:.1f} months, 
+                and anticipated dropout rate of {dropout_rate1*100:.1f}%. Analysis will use a log-rank test 
+                with a Type I error rate of {alpha * 100:.0f}%.
+                
+                Reference: {reference['citation']}
+                DOI: {reference['doi']}
+                """)
+            else:  # Non-inferiority
+                nim = params.get('nim', 0)
+                # Extract accrual and follow-up times
+                accrual_time = params.get('accrual_time', 1.0)
+                follow_up_time = params.get('follow_up_time', 1.0)
+                dropout_rate1 = params.get('dropout_rate1', 0.1)
+                
+                report_text = textwrap.dedent(f"""
+                Non-Inferiority Power Calculation Report:
+                
+                With {n1} participants in group 1 and {n2} participants in group 2 
+                (total N = {n1 + n2}), the study will have {power * 100:.1f}% power to establish 
+                non-inferiority with a hazard ratio margin of {nim:.2f}, assuming a median 
+                survival time of {median_survival1:.1f} months in the reference group. 
+                The calculation assumes exponential survival distributions with an 
+                accrual period of {accrual_time:.1f} months, follow-up period of {follow_up_time:.1f} months, 
+                and anticipated dropout rate of {dropout_rate1*100:.1f}%. Analysis will use a one-sided log-rank test 
+                with a Type I error rate of {alpha * 100:.0f}%.
+                
+                Reference: {reference['citation']}
+                DOI: {reference['doi']}
+                """)
+    else:
+        # Default report for other types
+        report_text = textwrap.dedent(f"""
+        Power Calculation Report:
+        
+        With a total sample size of {n1 + n2} participants, the study will have {power * 100:.1f}% power 
+        for the specified design with a Type I error rate of {alpha * 100:.0f}%.
+        """)
+    
+    return report_text.strip()
+
+def generate_mde_report(results, params, design_type, outcome_type):
+    """
+    Generate a human-readable report for minimum detectable effect calculations.
+    
+    Parameters
+    ----------
+    results : dict
+        Results from the calculation function
+    params : dict
+        Input parameters used for the calculation
+    design_type : str
+        Study design type (e.g., 'Parallel RCT', 'Single Arm Trial')
+    outcome_type : str
+        Type of outcome ('Continuous Outcome', 'Binary Outcome', 'Survival Outcome')
+        
+    Returns
+    -------
+    str
+        Formatted text report
+    """
+    # Extract key values
+    n1 = params.get('n1', 0)
+    n2 = params.get('n2', 0)
+    power = params.get('power', 0.8)
+    alpha = params.get('alpha', 0.05)
+    hypothesis_type = params.get('hypothesis_type', 'Superiority')
+    method = params.get('method', 'analytical')
+    
+    # Extract outcome-specific parameters
+    if 'Continuous' in outcome_type:
+        # For continuous outcomes
+        mde = results.get('mde', 0)
+        effect_size = results.get('effect_size', 0)
+        std_dev = params.get('std_dev', 1)
+        unequal_var = params.get('unequal_var', False)
+        std_dev2 = params.get('std_dev2', std_dev) if unequal_var else std_dev
+        
+        # Check if this is a repeated measures design
+        repeated_measures = params.get('repeated_measures', False)
+        correlation = params.get('correlation', 0) if repeated_measures else 0
+        
+        # Get appropriate reference based on design
+        design_param = "repeated_measures" if repeated_measures else None
+        reference = get_method_reference('continuous', method=method, design=design_param)
+        
+        if design_type == 'Parallel RCT':
+            # Create the variance assumption text based on whether unequal variance was used
+            if unequal_var:
+                variance_text = f"assuming unequal variances with standard deviations of {std_dev:.2f} in group 1 and {std_dev2:.2f} in group 2"
+            else:
+                variance_text = f"assuming equal variances with a standard deviation of {std_dev:.2f}"
+            
+            # Check if repeated measures design is being used
+            repeated_measures = params.get("repeated_measures", False)
+            
+            # Check if simulation method was used
+            if method == "simulation":
+                nsim = params.get("nsim", 1000)
+                seed = params.get("seed", 42)
+                precision = params.get("precision", 0.01)
+                if repeated_measures:
+                    method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}, precision {precision}) with a paired t-test"
+                else:
+                    method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}, precision {precision}) with a two-sided two-sample t-test"
+            else:
+                if repeated_measures:
+                    method_text = "using a paired t-test"
+                else:
+                    method_text = "using a two-sided two-sample t-test"
+            
+            # Create special text for repeated measures if applicable
+            if repeated_measures:
+                correlation = params.get("correlation", 0)
+                repeated_text = f"This is a repeated measures design with a correlation of {correlation:.2f} between measurements."
+            else:
+                repeated_text = ""
+            
+            report_text = textwrap.dedent(f"""
+            Minimum Detectable Effect Report:
+            
+            With {n1} participants in group 1 and {n2} participants in group 2 
+            (total N = {n1 + n2}) and {power * 100:.0f}% power, the minimum detectable difference 
+            in means is {mde:.2f} (effect size d = {effect_size:.2f}), {variance_text}, 
+            {method_text} with a Type I error rate of {alpha * 100:.0f}%.
+            {repeated_text if repeated_text else ''}
+            
+            Reference: {reference['citation']}
+            DOI: {reference['doi']}
+            """)
+                
+    elif 'Binary' in outcome_type:
+        # For binary outcomes
+        p1 = params.get('p1', 0)
+        p2 = results.get('p2', 0)
+        odds_ratio = results.get('odds_ratio', 0)
+        test_type = params.get('test_type', 'Normal Approximation')
+        correction = params.get('correction', False)
+        
+        # Get appropriate reference
+        reference = get_method_reference('binary', test_type, method)
+        
+        if design_type == 'Parallel RCT':
+            # Check if simulation method was used and create appropriate method text
+            if method == "simulation":
+                nsim = params.get("nsim", 1000)
+                seed = params.get("seed", 42)
+                precision = params.get("precision", 0.01)
+                method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}, precision {precision}) with a {test_type}{' with continuity correction' if correction else ''}"
+            else:
+                method_text = f"using a {test_type}{' with continuity correction' if correction else ''}"
+            
+            report_text = textwrap.dedent(f"""
+            Minimum Detectable Effect Report:
+            
+            With {n1} participants in group 1 and {n2} participants in group 2 
+            (total N = {n1 + n2}) and {power * 100:.0f}% power, the minimum detectable 
+            proportion in group 2 is {p2:.2f} (compared to {p1:.2f} in group 1), 
+            corresponding to an odds ratio of {odds_ratio:.2f}, {method_text}, 
+            with a Type I error rate of {alpha * 100:.0f}%.
+            
+            Reference: {reference['citation']}
+            DOI: {reference['doi']}
+            """)
+                
+    elif 'Survival' in outcome_type:
+        # For survival outcomes
+        hr = results.get('hr', 0)
+        median_survival1 = params.get('median_survival1', 0)
+        
+        # Get appropriate reference
+        reference = get_method_reference('survival', method=method)
+        
+        if design_type == 'Parallel RCT':
+            # Extract accrual and follow-up times
+            accrual_time = params.get('accrual_time', 1.0)
+            follow_up_time = params.get('follow_up_time', 1.0)
+            dropout_rate1 = params.get('dropout_rate1', 0.1)
+            
+            report_text = textwrap.dedent(f"""
+            Minimum Detectable Effect Report:
+            
+            With {n1} participants in group 1 and {n2} participants in group 2 
+            (total N = {n1 + n2}) and {power * 100:.0f}% power, the minimum detectable 
+            hazard ratio is {hr:.2f}, assuming a median survival time of {median_survival1:.1f} 
+            months in the reference group. The calculation assumes exponential survival distributions with an 
+            accrual period of {accrual_time:.1f} months, follow-up period of {follow_up_time:.1f} months, 
+            and anticipated dropout rate of {dropout_rate1*100:.1f}%. Analysis will use a log-rank test 
+            with a Type I error rate of {alpha * 100:.0f}%.
+            
+            Reference: {reference['citation']}
+            DOI: {reference['doi']}
+            """)
+    else:
+        # Default report for other types
+        report_text = textwrap.dedent(f"""
+        Minimum Detectable Effect Report:
+        
+        With a total sample size of {n1 + n2} participants and {power * 100:.0f}% power, 
+        the study can detect the specified minimum effect with a Type I error rate of {alpha * 100:.0f}%.
+        """)
+    
+    return report_text.strip()
+
+def generate_report(results, params, design_type, outcome_type):
+    """
+    Generate appropriate report based on calculation type.
+    
+    Parameters
+    ----------
+    results : dict
+        Results from the calculation function
+    params : dict
+        Input parameters used for the calculation
+    design_type : str
+        Study design type (e.g., 'Parallel RCT', 'Single Arm Trial')
+    outcome_type : str
+        Type of outcome ('Continuous Outcome', 'Binary Outcome', 'Survival Outcome')
+        
+    Returns
+    -------
+    str
+        Formatted text report
+    """
+    calculation_type = params.get('calculation_type', 'Sample Size')
+    
+    if calculation_type == 'Sample Size':
+        return generate_sample_size_report(results, params, design_type, outcome_type)
+    elif calculation_type == 'Power':
+        return generate_power_report(results, params, design_type, outcome_type)
+    elif calculation_type == 'Minimum Detectable Effect':
+        return generate_mde_report(results, params, design_type, outcome_type)
+    else:
+        return "Report not available for this calculation type."

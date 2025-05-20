@@ -19,6 +19,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
     
 # Import component modules
+from core.utils.report_generator import generate_report
 from app.components.parallel_rct import (
     render_parallel_continuous, calculate_parallel_continuous,
     render_parallel_binary, calculate_parallel_binary,
@@ -136,6 +137,35 @@ if component_key in COMPONENTS:
         st.markdown("### Results")
         for k, v in st.session_state.results.items():
             st.write(f"**{k}:** {v}")
+            
+        # Generate and display report text
+        st.markdown("### Report Text")
+        report_text = generate_report(
+            st.session_state.results, 
+            params, 
+            st.session_state.design_type, 
+            st.session_state.outcome_type
+        )
+        
+        # Display the report in an expandable section
+        with st.expander("Copyable Report for Publication", expanded=True):
+            st.markdown(report_text)
+            
+            # Add a copy button
+            if st.button("Copy to Clipboard"):
+                try:
+                    st.write("Report copied to clipboard!")
+                    # Use JavaScript to copy text to clipboard
+                    st.markdown(
+                        f"""
+                        <script>
+                            navigator.clipboard.writeText(`{report_text}`);
+                        </script>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                except Exception as e:
+                    st.error(f"Could not copy to clipboard: {e}")
         
         # Simple visualization of results based on calculation type
         calc_type = st.session_state.calculation_type

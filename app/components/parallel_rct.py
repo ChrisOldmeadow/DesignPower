@@ -8,6 +8,7 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import math
 
 # Import specific analytical and simulation modules
 from core.designs.parallel import analytical_continuous
@@ -533,7 +534,7 @@ def calculate_parallel_continuous(params):
                     sample_size = analytical_continuous.sample_size_repeated_measures(
                         mean1=mean1,
                         mean2=mean2,
-                        sd=std_dev,
+                        sd1=std_dev,  # Changed parameter name from 'sd' to 'sd1' to match function signature
                         correlation=correlation,
                         power=power,
                         alpha=alpha,
@@ -1093,6 +1094,11 @@ def calculate_parallel_survival(params, method="analytical"):
     lambda1 = math.log(2) / median_survival1
     lambda2 = lambda1 * hr
     
+    # Calculate median_survival2 from hazard ratio and median_survival1
+    # Since lambda = log(2)/median and lambda2 = lambda1 * hr, 
+    # we can derive: median_survival2 = median_survival1 / hr
+    median_survival2 = median_survival1 / hr
+    
     # Prepare result dictionary
     result = {}
     
@@ -1102,13 +1108,13 @@ def calculate_parallel_survival(params, method="analytical"):
     if calculation_type == "Sample Size":
         # Calculate sample size
         if method == "analytical":
+            # Convert lambdas back to median survival times for the function call
             sample_size = analytical_survival.sample_size_survival(
-                lambda1=lambda1,
-                lambda2=lambda2,
-                accrual_time=accrual_time,
-                follow_up_time=follow_up_time,
-                dropout_rate1=dropout_rate1,
-                dropout_rate2=dropout_rate2,
+                median1=median_survival1,
+                median2=median_survival2,
+                enrollment_period=accrual_time,
+                follow_up_period=follow_up_time,
+                dropout_rate=dropout_rate1,  # Using dropout_rate1 as the main dropout rate
                 power=power,
                 alpha=alpha,
                 allocation_ratio=allocation_ratio
@@ -1139,15 +1145,15 @@ def calculate_parallel_survival(params, method="analytical"):
         
         # Calculate power
         if method == "analytical":
+            # Use median survival times rather than lambda rates
             power_result = analytical_survival.power_survival(
                 n1=n1,
                 n2=n2,
-                lambda1=lambda1,
-                lambda2=lambda2,
-                accrual_time=accrual_time,
-                follow_up_time=follow_up_time,
-                dropout_rate1=dropout_rate1,
-                dropout_rate2=dropout_rate2,
+                median1=median_survival1,
+                median2=median_survival2,
+                enrollment_period=accrual_time,
+                follow_up_period=follow_up_time,
+                dropout_rate=dropout_rate1,  # Using dropout_rate1 as the main dropout rate
                 alpha=alpha
             )
         
@@ -1170,14 +1176,14 @@ def calculate_parallel_survival(params, method="analytical"):
         
         # Calculate MDE
         if method == "analytical":
-            mde_result = analytical_survival.mde_survival(
+            # Correct function name and parameters
+            mde_result = analytical_survival.min_detectable_effect_survival(
                 n1=n1,
                 n2=n2,
-                lambda1=lambda1,
-                accrual_time=accrual_time,
-                follow_up_time=follow_up_time,
-                dropout_rate1=dropout_rate1,
-                dropout_rate2=dropout_rate2,
+                median1=median_survival1,
+                enrollment_period=accrual_time,
+                follow_up_period=follow_up_time,
+                dropout_rate=dropout_rate1,  # Using dropout_rate1 as the main dropout rate
                 power=power,
                 alpha=alpha
             )
