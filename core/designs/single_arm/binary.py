@@ -208,3 +208,152 @@ def simulate_one_sample_binary_trial(n, p0, p1, nsim=1000, alpha=0.05, sides=2, 
         "p1": p1,
         "sides": sides
     }
+
+
+def ahern_sample_size(p0, p1, alpha=0.05, beta=0.2):
+    """
+    Calculate the sample size and rejection threshold for A'Hern's design.
+    
+    A'Hern's design is based on exact binomial probabilities rather than
+    normal approximations, making it more suitable for small sample sizes
+    typical in phase II trials.
+    
+    Reference: A'Hern, R. P. (2001). Sample size tables for exact single-stage phase II designs.
+    Statistics in Medicine, 20(6), 859-866.
+    
+    Parameters
+    ----------
+    p0 : float
+        Probability of response under the null hypothesis (unacceptable response rate)
+    p1 : float
+        Probability of response under the alternative hypothesis (desirable response rate)
+    alpha : float, optional
+        Type I error rate (probability of falsely rejecting H0), by default 0.05
+    beta : float, optional
+        Type II error rate (probability of falsely accepting H0), by default 0.2
+        Note: power = 1 - beta
+    
+    Returns
+    -------
+    dict
+        A dictionary containing:
+        - n: required sample size
+        - r: minimum number of responses to reject the null hypothesis
+        - p0: null hypothesis response rate
+        - p1: alternative hypothesis response rate
+        - alpha: type I error rate
+        - beta: type II error rate
+        - power: power of the test (1 - beta)
+        - actual_alpha: actual type I error rate (may differ from requested alpha)
+        - actual_beta: actual type II error rate (may differ from requested beta)
+    """
+    # Validate inputs
+    if not (0 < p0 < 1):
+        raise ValueError("p0 must be between 0 and 1")
+    if not (0 < p1 < 1):
+        raise ValueError("p1 must be between 0 and 1")
+    if p0 >= p1:
+        raise ValueError("p1 must be greater than p0 for this design")
+    if not (0 < alpha < 1):
+        raise ValueError("alpha must be between 0 and 1")
+    if not (0 < beta < 1):
+        raise ValueError("beta must be between 0 and 1")
+    
+    # Initial search parameters
+    power = 1 - beta
+    max_n = 200  # Maximum sample size to consider
+    
+    best_n = None
+    best_r = None
+    best_alpha_diff = float('inf')
+    best_actual_alpha = None
+    best_actual_beta = None
+    
+    # Search for the smallest sample size that satisfies both alpha and beta constraints
+    for n in range(5, max_n + 1):
+        for r in range(0, n + 1):
+            # Calculate actual type I error rate - probability of r or more successes under H0
+            actual_alpha = 1 - stats.binom.cdf(r - 1, n, p0)
+            
+            # Calculate actual type II error rate - probability of fewer than r successes under H1
+            actual_beta = stats.binom.cdf(r - 1, n, p1)
+            
+            # Check if this combination satisfies our constraints
+            if actual_alpha <= alpha and actual_beta <= beta:
+                alpha_diff = abs(actual_alpha - alpha)
+                
+                # Update best result if this is better than what we've found so far
+                if best_n is None or n < best_n or (n == best_n and alpha_diff < best_alpha_diff):
+                    best_n = n
+                    best_r = r
+                    best_alpha_diff = alpha_diff
+                    best_actual_alpha = actual_alpha
+                    best_actual_beta = actual_beta
+                    
+                # Break inner loop once we've found a valid r for this n
+                break
+    
+    if best_n is None:
+        raise ValueError(f"No solution found within sample size limit of {max_n}. Try relaxing alpha or beta.")
+    
+    return {
+        "n": best_n,
+        "r": best_r,
+        "p0": p0,
+        "p1": p1,
+        "alpha": alpha,
+        "beta": beta,
+        "power": power,
+        "actual_alpha": best_actual_alpha,
+        "actual_beta": best_actual_beta,
+        "actual_power": 1 - best_actual_beta
+    }
+
+
+def ahern_power(n, r, p0, p1):
+    """
+    Calculate power for A'Hern's design with given parameters.
+    
+    Parameters
+    ----------
+    n : int
+        Sample size
+    r : int
+        Minimum number of responses required to reject null hypothesis
+    p0 : float
+        Probability of response under the null hypothesis
+    p1 : float
+        Probability of response under the alternative hypothesis
+    
+    Returns
+    -------
+    dict
+        A dictionary containing:
+        - power: power of the test
+        - actual_alpha: actual type I error rate
+        - actual_beta: actual type II error rate
+    """
+    # Validate inputs
+    if n <= 0 or not isinstance(n, int):
+        raise ValueError("n must be a positive integer")
+    if r < 0 or r > n or not isinstance(r, int):
+        raise ValueError("r must be a non-negative integer less than or equal to n")
+    if not (0 < p0 < 1):
+        raise ValueError("p0 must be between 0 and 1")
+    if not (0 < p1 < 1):
+        raise ValueError("p1 must be between 0 and 1")
+    
+    # Calculate actual type I error rate - probability of r or more successes under H0
+    actual_alpha = 1 - stats.binom.cdf(r - 1, n, p0)
+    
+    # Calculate actual type II error rate - probability of fewer than r successes under H1
+    actual_beta = stats.binom.cdf(r - 1, n, p1)
+    
+    # Calculate power
+    actual_power = 1 - actual_beta
+    
+    return {
+        "power": actual_power,
+        "actual_alpha": actual_alpha,
+        "actual_beta": actual_beta
+    }

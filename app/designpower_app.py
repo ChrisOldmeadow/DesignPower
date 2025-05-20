@@ -135,8 +135,45 @@ if component_key in COMPONENTS:
     # Display results if available
     if st.session_state.results:
         st.markdown("### Results")
-        for k, v in st.session_state.results.items():
-            st.write(f"**{k}:** {v}")
+        
+        # Check if there's an error in the results
+        if "error" in st.session_state.results:
+            st.error(f"Error: {st.session_state.results['error']}")
+        else:
+            # Format results in a more organized way
+            results = st.session_state.results
+            
+            # Check if this is an A'Hern design result
+            if results.get("design_method") == "A'Hern":
+                # Create two columns for results display
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.subheader("Sample Size Calculation")
+                    st.write(f"**Required Sample Size (n):** {results.get('n')}")
+                    st.write(f"**Rejection Threshold (r):** {results.get('r')}")
+                    st.write(f"**Interpretation:** Reject H₀ if {results.get('r')} or more responses are observed")
+                
+                with col2:
+                    st.subheader("Error Rates")
+                    st.write(f"**Target Type I Error (α):** {params.get('alpha')}")
+                    st.write(f"**Actual Type I Error:** {results.get('actual_alpha')}")
+                    st.write(f"**Target Power:** {params.get('power', 1-params.get('beta', 0.2))}")
+                    st.write(f"**Actual Power:** {results.get('actual_power')}")
+                
+                # Display effect size information
+                st.subheader("Effect Size")
+                st.write(f"**Null Response Rate (p₀):** {params.get('p0')}")
+                st.write(f"**Alternative Response Rate (p₁):** {params.get('p')}")
+                st.write(f"**Absolute Risk Difference:** {results.get('absolute_risk_difference')}")
+                st.write(f"**Relative Risk:** {results.get('relative_risk')}")
+            
+            else:
+                # Standard display for other results
+                for k, v in results.items():
+                    # Skip design_method from display
+                    if k != "design_method":
+                        st.write(f"**{k}:** {v}")
             
         # Generate and display report text
         st.markdown("### Report Text")

@@ -6,6 +6,7 @@ publication-ready text descriptions with appropriate references.
 """
 
 import textwrap
+from core.utils.ahern_report import generate_ahern_report
 
 # Dictionary of references for different analysis methods
 METHOD_REFERENCES = {
@@ -32,9 +33,13 @@ METHOD_REFERENCES = {
         "citation": "Fleiss JL, Levin B, Paik MC. (2003). Statistical Methods for Rates and Proportions. New York: John Wiley & Sons",
         "doi": "https://doi.org/10.1002/0471445428"
     },
-    "binary_fishers_exact": {
-        "citation": "Chow S, Shao J, Wang H. (2008). Sample Size Calculations in Clinical Research. New York: Marcel Dekker",
-        "doi": "https://doi.org/10.1201/9781584889830"
+    "binary_exact": {
+        "citation": "Clopper CJ, Pearson ES. (1934). The use of confidence or fiducial limits illustrated in the case of the binomial. Biometrika, 26(4), 404-413",
+        "doi": "https://doi.org/10.1093/biomet/26.4.404"
+    },
+    "binary_ahern": {
+        "citation": "A'Hern RP. (2001). Sample size tables for exact single-stage phase II designs. Statistics in Medicine, 20(6), 859-866",
+        "doi": "https://doi.org/10.1002/sim.721"
     },
     "binary_likelihood_ratio": {
         "citation": "Self SG, Mauritsen RH. (1988). Power/Sample Size Calculations for Generalized Linear Models. Biometrics, 44(1), 79-86",
@@ -86,12 +91,18 @@ def get_method_reference(outcome_type, test_type=None, method="analytical", desi
             key = f"{outcome_type}_{method}"
             return METHOD_REFERENCES.get(key, default_ref)
     
-    elif outcome_type == "binary" and test_type:
-        # Normalize the test type string
-        test_type_normalized = test_type.lower().replace(" ", "_")
+    elif outcome_type == "binary":
+        # Handle A'Hern design specifically
+        if test_type == "A'Hern":
+            return METHOD_REFERENCES.get("binary_ahern", default_ref)
         
-        key = f"{outcome_type}_{test_type_normalized}"
-        return METHOD_REFERENCES.get(key, default_ref)
+        # For other binary outcome tests
+        elif test_type:
+            # Normalize the test type string
+            test_type_normalized = test_type.lower().replace(" ", "_")
+            
+            key = f"{outcome_type}_{test_type_normalized}"
+            return METHOD_REFERENCES.get(key, default_ref)
     
     elif outcome_type == "survival":
         # For survival outcomes, default to exponential model
@@ -705,13 +716,20 @@ def generate_report(results, params, design_type, outcome_type):
     str
         Formatted text report
     """
-    calculation_type = params.get('calculation_type', 'Sample Size')
+    # Check if this is an A'Hern design for Single Arm Trial with Binary Outcome
+    if (design_type == 'Single Arm Trial' and 'Binary' in outcome_type and 
+            params.get('design_method', 'Standard') == "A'Hern"):
+        return generate_ahern_report(results, params)
     
-    if calculation_type == 'Sample Size':
+    # Determine the calculation type for standard reports
+    calculation_type = params.get("calculation_type", "Sample Size")
+    
+    # Generate appropriate report based on calculation type
+    if calculation_type == "Sample Size":
         return generate_sample_size_report(results, params, design_type, outcome_type)
-    elif calculation_type == 'Power':
+    elif calculation_type == "Power":
         return generate_power_report(results, params, design_type, outcome_type)
-    elif calculation_type == 'Minimum Detectable Effect':
+    elif calculation_type == "Minimum Detectable Effect":
         return generate_mde_report(results, params, design_type, outcome_type)
     else:
-        return "Report not available for this calculation type."
+        return "No report available for this calculation type."
