@@ -17,6 +17,8 @@ from core.designs.single_arm.binary import one_sample_proportion_test_sample_siz
 from core.designs.single_arm.binary import one_sample_proportion_test_power
 from core.designs.single_arm.binary import ahern_sample_size
 from core.designs.single_arm.binary import ahern_power
+from core.designs.single_arm.binary import simons_two_stage_design
+from core.designs.single_arm.binary import simons_power
 from core.designs.single_arm.survival import one_sample_survival_test_sample_size
 from core.designs.single_arm.survival import one_sample_survival_test_power
 
@@ -162,10 +164,10 @@ def render_single_arm_binary(calc_type, hypothesis_type):
         # Design method
         params["design_method"] = st.selectbox(
             "Design Method",
-            ["Standard", "A'Hern"],
+            ["Standard", "A'Hern", "Simon's Two-Stage"],
             index=0,
             key="design_method_select_single_binary",
-            help="'Standard' uses normal approximation. 'A\'Hern' uses exact binomial probabilities, recommended for phase II trials."
+            help="'Standard' uses normal approximation. 'A\'Hern' uses exact binomial probabilities for single-stage trials. 'Simon\'s Two-Stage' allows early stopping for futility, both recommended for phase II trials."
         )
         
         # Handle different design methods
@@ -185,7 +187,8 @@ def render_single_arm_binary(calc_type, hypothesis_type):
                 index=0,
                 key="alternative_select_single_binary"
             )
-        else:  # A'Hern design
+        
+        elif params["design_method"] == "A'Hern":
             # Adjust the UI for A'Hern design
             st.info("⚠️ A'Hern's design requires that p > p0. Please ensure your sample proportion (p) "
                    "is greater than your null hypothesis proportion (p0).")
@@ -207,6 +210,39 @@ def render_single_arm_binary(calc_type, hypothesis_type):
             # For A'Hern, display the information about acceptance/rejection boundaries
             st.info("A'Hern's design will calculate the minimum number of responses (r) needed to "
                    "reject the null hypothesis that the response rate is less than or equal to p0.")
+        
+        else:  # Simon's Two-Stage design
+            # Adjust the UI for Simon's Two-Stage design
+            st.info("⚠️ Simon's Two-Stage design requires that p > p0. Please ensure your sample proportion (p) "
+                   "is greater than your null hypothesis proportion (p0).")
+            
+            # Simon's design always uses one-sided "greater" alternative hypothesis
+            params["alternative"] = "greater"
+            params["correction"] = "Exact"
+            
+            # Make sure p > p0 for Simon's design
+            if params["p"] <= params["p0"]:
+                # Swap the values if they're in the wrong order
+                temp_p = params["p"]
+                params["p"] = max(min(params["p0"] + 0.2, 0.95), params["p0"] + 0.05)  # p0 + (0.05 to 0.2)
+                params["p0"] = min(temp_p, params["p0"])
+                
+                st.warning(f"Values adjusted to satisfy Simon's design requirements (p > p0). "
+                          f"New values: p = {params['p']:.2f}, p0 = {params['p0']:.2f}")
+            
+            # Design type selection (optimal vs. minimax)
+            params["simon_design_type"] = st.radio(
+                "Design Type",
+                ["Optimal", "Minimax"],
+                index=0,
+                key="simon_design_type_select",
+                help="'Optimal' minimizes the expected sample size under H0. 'Minimax' minimizes the maximum sample size."
+            )
+            
+            # Show explanation of Simon's two-stage design
+            st.info("Simon's Two-Stage design allows for early stopping for futility after the first stage. "
+                   "If the number of responses in the first stage is ≤ r1, the trial stops. Otherwise, "
+                   "additional patients are enrolled to reach the total sample size n.")
     
     return params
 
@@ -476,6 +512,45 @@ def calculate_single_arm_binary(params):
             except Exception as e:
                 result["error"] = str(e)
                 result["n"] = None
+        
+        elif design_method == "Simon's Two-Stage":
+            try:
+                # Use Simon's two-stage design for phase II trials
+                # Ensure p0 < p for proper calculation
+                if p <= p0:
+                    result["error"] = "For Simon's two-stage design, p must be greater than p0"
+                    result["n"] = None
+                    return result
+                
+                # Get design type (optimal or minimax)
+                simon_design_type = params.get("simon_design_type", "Optimal").lower()
+                
+                # Calculate Simon's two-stage design
+                simons_result = simons_two_stage_design(
+                    p0=p0,
+                    p1=p,
+                    alpha=alpha,
+                    beta=beta,
+                    design_type=simon_design_type
+                )
+                
+                # Format results
+                result["n1"] = simons_result["n1"]  # First stage sample size
+                result["r1"] = simons_result["r1"]  # First stage rejection threshold
+                result["n"] = simons_result["n"]   # Total sample size
+                result["r"] = simons_result["r"]   # Final rejection threshold
+                result["EN0"] = round(simons_result["EN0"], 2)  # Expected sample size under H0
+                result["PET0"] = round(simons_result["PET0"], 4)  # Probability of early termination under H0
+                result["actual_alpha"] = round(simons_result["actual_alpha"], 4)
+                result["actual_power"] = round(simons_result["actual_power"], 4)
+                result["absolute_risk_difference"] = round(p - p0, 3)
+                result["relative_risk"] = round(p / p0, 3) if p0 > 0 else "Infinity"
+                result["design_method"] = "Simon's Two-Stage"
+                result["design_type"] = simon_design_type.capitalize()
+                
+            except Exception as e:
+                result["error"] = str(e)
+                result["n"] = None
                 
         else:  # Standard method
             try:
@@ -517,43 +592,69 @@ def calculate_single_arm_binary(params):
                         result["error"] = "For A'Hern design, p must be greater than p0"
                         result["power"] = None
                         return result
-                    
-                    # Try to estimate r using the sample size function with the given n
-                    # This is a heuristic approach to find a suitable r for the given n
-                    min_diff = float('inf')
-                    best_r = None
-                    
-                    # Try different values of r from 1 to n
-                    for r_test in range(1, n+1):
-                        # Calculate actual type I error rate
-                        actual_alpha = 1 - stats.binom.cdf(r_test - 1, n, p0)
                         
-                        # Only consider values where actual_alpha <= target_alpha
-                        if actual_alpha <= alpha:
-                            diff = abs(n - r_test/p)  # Heuristic to find plausible r
-                            if diff < min_diff:
-                                min_diff = diff
-                                best_r = r_test
-                    
-                    r = best_r if best_r is not None else round(n * p)  # Fallback estimate
+                    # Get r from ahern_sample_size function with the user-provided n
+                    temp_result = ahern_sample_size(p0=p0, p1=p, alpha=alpha, beta=beta, fixed_n=n)
+                    r = temp_result["r"]
                 
-                # Now calculate power for the given n and r
-                # Calculate actual type I error rate - probability of r or more successes under H0
-                actual_alpha = 1 - stats.binom.cdf(r - 1, n, p0)
-                
-                # Calculate actual type II error rate - probability of fewer than r successes under H1
-                actual_beta = stats.binom.cdf(r - 1, n, p)
-                
-                # Calculate power
-                actual_power = 1 - actual_beta
+                # Calculate power for A'Hern design with the given parameters
+                power_result = ahern_power(n=n, r=r, p0=p0, p1=p)
                 
                 # Format results
-                result["power"] = round(actual_power, 3)
-                result["actual_alpha"] = round(actual_alpha, 4)
+                result["power"] = round(power_result["power"], 3)
+                result["actual_alpha"] = round(power_result["actual_alpha"], 4)
                 result["r"] = r
                 result["absolute_risk_difference"] = round(p - p0, 3)
                 result["relative_risk"] = round(p / p0, 3) if p0 > 0 else "Infinity"
                 result["design_method"] = "A'Hern"
+                
+            except Exception as e:
+                result["error"] = str(e)
+                result["power"] = None
+        
+        elif design_method == "Simon's Two-Stage":
+            try:
+                # For Simon's two-stage design, we need several parameters
+                n1 = params.get("n1", None)  # First stage sample size
+                r1 = params.get("r1", None)  # First stage rejection threshold
+                r = params.get("r", None)    # Final rejection threshold
+                
+                if n1 is None or r1 is None or r is None:
+                    # If parameters aren't provided, we can't calculate power
+                    result["error"] = "For Simon's design power calculation, please provide n1, r1, and r"
+                    result["power"] = None
+                    return result
+                
+                # Ensure p > p0
+                if p <= p0:
+                    result["error"] = "For Simon's two-stage design, p must be greater than p0"
+                    result["power"] = None
+                    return result
+                    
+                # Calculate power for Simon's two-stage design
+                power = simons_power(n1=n1, r1=r1, n=n, r=r, p=p)
+                
+                # Calculate type I error (alpha) by calculating power at p0
+                alpha_actual = simons_power(n1=n1, r1=r1, n=n, r=r, p=p0)
+                
+                # Calculate expected sample size under H0
+                # Probability of early termination under H0
+                from scipy.stats import binom
+                PET0 = binom.cdf(r1, n1, p0)
+                EN0 = n1 + (n - n1) * (1 - PET0)
+                
+                # Format results
+                result["power"] = round(power, 3)
+                result["actual_alpha"] = round(alpha_actual, 4)
+                result["n1"] = n1
+                result["r1"] = r1
+                result["n"] = n
+                result["r"] = r
+                result["EN0"] = round(EN0, 2)  # Expected sample size under H0
+                result["PET0"] = round(PET0, 4)  # Probability of early termination under H0
+                result["absolute_risk_difference"] = round(p - p0, 3)
+                result["relative_risk"] = round(p / p0, 3) if p0 > 0 else "Infinity"
+                result["design_method"] = "Simon's Two-Stage"
                 
             except Exception as e:
                 result["error"] = str(e)

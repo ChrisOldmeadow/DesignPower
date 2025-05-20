@@ -143,9 +143,11 @@ if component_key in COMPONENTS:
             # Format results in a more organized way
             results = st.session_state.results
             
-            # Check if this is an A'Hern design result
-            if results.get("design_method") == "A'Hern":
-                # Create two columns for results display
+            # Special handling for A'Hern design and Simon's two-stage design
+            design_method = results.get("design_method")
+            
+            if design_method == "A'Hern":
+                # Create a two-column layout for A'Hern results
                 col1, col2 = st.columns(2)
                 
                 with col1:
@@ -162,6 +164,44 @@ if component_key in COMPONENTS:
                     st.write(f"**Actual Power:** {results.get('actual_power')}")
                 
                 # Display effect size information
+                st.subheader("Effect Size")
+                st.write(f"**Null Response Rate (p₀):** {params.get('p0')}")
+                st.write(f"**Alternative Response Rate (p₁):** {params.get('p')}")
+                st.write(f"**Absolute Risk Difference:** {results.get('absolute_risk_difference')}")
+                st.write(f"**Relative Risk:** {results.get('relative_risk')}")
+            
+            elif design_method == "Simon's Two-Stage":
+                # Create a specific layout for Simon's two-stage design results
+                st.subheader("Simon's Two-Stage Design Results")
+                st.write(f"**Design Type:** {results.get('design_type', 'Optimal')}")
+                
+                # Create a three-column layout for Simon's results
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.subheader("Stage 1")
+                    st.write(f"**First Stage Sample Size (n₁):** {results.get('n1')}")
+                    st.write(f"**First Stage Threshold (r₁):** {results.get('r1')}")
+                    st.write(f"**Probability of Early Termination (PET₀):** {results.get('PET0')}")
+                
+                with col2:
+                    st.subheader("Overall Design")
+                    st.write(f"**Total Sample Size (n):** {results.get('n')}")
+                    st.write(f"**Final Threshold (r):** {results.get('r')}")
+                    st.write(f"**Expected Sample Size (EN₀):** {results.get('EN0')}")
+                
+                with col3:
+                    st.subheader("Error Rates")
+                    st.write(f"**Target Type I Error (α):** {params.get('alpha')}")
+                    st.write(f"**Actual Type I Error:** {results.get('actual_alpha')}")
+                    st.write(f"**Target Power:** {params.get('power', 1-params.get('beta', 0.2))}")
+                    st.write(f"**Actual Power:** {results.get('actual_power')}")
+                
+                # Display decision rules and effect size information
+                st.subheader("Decision Rules")
+                st.markdown(f"**Stage 1:** If responses ≤ {results.get('r1')}, stop the trial for futility.")
+                st.markdown(f"**Stage 2:** If total responses > {results.get('r')}, reject H₀.")
+                
                 st.subheader("Effect Size")
                 st.write(f"**Null Response Rate (p₀):** {params.get('p0')}")
                 st.write(f"**Alternative Response Rate (p₁):** {params.get('p')}")

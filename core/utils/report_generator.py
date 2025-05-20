@@ -7,6 +7,7 @@ publication-ready text descriptions with appropriate references.
 
 import textwrap
 from core.utils.ahern_report import generate_ahern_report
+from core.utils.simons_report import generate_simons_report
 
 # Dictionary of references for different analysis methods
 METHOD_REFERENCES = {
@@ -720,6 +721,11 @@ def generate_report(results, params, design_type, outcome_type):
     if (design_type == 'Single Arm Trial' and 'Binary' in outcome_type and 
             params.get('design_method', 'Standard') == "A'Hern"):
         return generate_ahern_report(results, params)
+        
+    # Check if this is a Simon's two-stage design for Single Arm Trial with Binary Outcome
+    if (design_type == 'Single Arm Trial' and 'Binary' in outcome_type and 
+            params.get('design_method', 'Standard') == "Simon's Two-Stage"):
+        return generate_simons_report(results, params)
     
     # Determine the calculation type for standard reports
     calculation_type = params.get("calculation_type", "Sample Size")
