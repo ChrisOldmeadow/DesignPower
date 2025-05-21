@@ -31,6 +31,10 @@ from app.components.single_arm import (
     render_single_arm_binary, calculate_single_arm_binary,
     render_single_arm_survival, calculate_single_arm_survival
 )
+from app.components.cluster_rct import (
+    render_cluster_continuous, calculate_cluster_continuous,
+    render_cluster_binary, calculate_cluster_binary
+)
 
 # Dictionary of available designs and their parameters
 DESIGN_CONFIGS = {
@@ -41,6 +45,10 @@ DESIGN_CONFIGS = {
     "single_arm": {
         "name": "Single Arm Trial",
         "outcomes": ["Continuous Outcome", "Binary Outcome", "Survival Outcome"] 
+    },
+    "cluster_rct": {
+        "name": "Cluster RCT",
+        "outcomes": ["Continuous Outcome", "Binary Outcome"]
     }
 }
 
@@ -69,6 +77,14 @@ COMPONENTS = {
     ("Single Arm Trial", "Survival Outcome"): {
         "render": render_single_arm_survival,
         "calculate": calculate_single_arm_survival
+    },
+    ("Cluster RCT", "Continuous Outcome"): {
+        "render": render_cluster_continuous,
+        "calculate": calculate_cluster_continuous
+    },
+    ("Cluster RCT", "Binary Outcome"): {
+        "render": render_cluster_binary,
+        "calculate": calculate_cluster_binary
     }
 }
 
