@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import stats
+import graphviz
 
 # Import design-specific modules
 from core.designs.single_arm.continuous import one_sample_t_test_sample_size
@@ -212,37 +213,86 @@ def render_single_arm_binary(calc_type, hypothesis_type):
                    "reject the null hypothesis that the response rate is less than or equal to p0.")
         
         else:  # Simon's Two-Stage design
-            # Adjust the UI for Simon's Two-Stage design
-            st.info("⚠️ Simon's Two-Stage design requires that p > p0. Please ensure your sample proportion (p) "
-                   "is greater than your null hypothesis proportion (p0).")
-            
-            # Simon's design always uses one-sided "greater" alternative hypothesis
-            params["alternative"] = "greater"
-            params["correction"] = "Exact"
-            
-            # Make sure p > p0 for Simon's design
-            if params["p"] <= params["p0"]:
-                # Swap the values if they're in the wrong order
-                temp_p = params["p"]
-                params["p"] = max(min(params["p0"] + 0.2, 0.95), params["p0"] + 0.05)  # p0 + (0.05 to 0.2)
-                params["p0"] = min(temp_p, params["p0"])
+            # Create a container with a highlighted background for the Simon's design section
+            simons_container = st.container()
+            with simons_container:
+                # Add a more visually distinct header
+                st.markdown("#### 📊 Simon's Two-Stage Design Settings")
                 
-                st.warning(f"Values adjusted to satisfy Simon's design requirements (p > p0). "
-                          f"New values: p = {params['p']:.2f}, p0 = {params['p0']:.2f}")
-            
-            # Design type selection (optimal vs. minimax)
-            params["simon_design_type"] = st.radio(
-                "Design Type",
-                ["Optimal", "Minimax"],
-                index=0,
-                key="simon_design_type_select",
-                help="'Optimal' minimizes the expected sample size under H0. 'Minimax' minimizes the maximum sample size."
-            )
-            
-            # Show explanation of Simon's two-stage design
-            st.info("Simon's Two-Stage design allows for early stopping for futility after the first stage. "
-                   "If the number of responses in the first stage is ≤ r1, the trial stops. Otherwise, "
-                   "additional patients are enrolled to reach the total sample size n.")
+                # Parameter validation notice with improved formatting
+                st.warning("⚠️ Simon's Two-Stage design requires that p > p0. Please ensure your sample proportion (p) "
+                         "is greater than your null hypothesis proportion (p0).")
+                
+                # Simon's design always uses one-sided "greater" alternative hypothesis
+                params["alternative"] = "greater"
+                params["correction"] = "Exact"
+                
+                # Make sure p > p0 for Simon's design
+                if params["p"] <= params["p0"]:
+                    # Swap the values if they're in the wrong order
+                    temp_p = params["p"]
+                    params["p"] = max(min(params["p0"] + 0.2, 0.95), params["p0"] + 0.05)  # p0 + (0.05 to 0.2)
+                    params["p0"] = min(temp_p, params["p0"])
+                    
+                    st.error(f"Values automatically adjusted to satisfy Simon's design requirements (p > p0). "
+                              f"New values: p = {params['p']:.2f}, p0 = {params['p0']:.2f}")
+                
+                # Create a two-column layout for parameters
+                col1, col2 = st.columns(2)
+                
+                # Design type selection with enhanced UI (optimal vs. minimax)
+                with col1:
+                    params["simon_design_type"] = st.radio(
+                        "Design Type",
+                        ["Optimal", "Minimax"],
+                        index=0,
+                        key="simon_design_type_select",
+                        help="'Optimal' minimizes the expected sample size under H0. 'Minimax' minimizes the maximum sample size."
+                    )
+                
+                # Add a visual diagram to help understand the two-stage design using graphviz
+                with col2:
+                    st.markdown("##### Design Visualization")
+                    
+                    # Create a graphviz object for the flowchart
+                    simon_graph = graphviz.Digraph()
+                    simon_graph.attr('node', shape='box', style='filled', color='lightblue', fontname='Arial', 
+                                   fontsize='11', margin='0.2,0.1')
+                    simon_graph.attr('edge', fontname='Arial', fontsize='10')
+                    
+                    # Define the nodes - simplified to focus on key decision points
+                    simon_graph.node('stage1', 'Stage 1:\nEnroll n₁ patients')
+                    simon_graph.node('decision1', 'Responses > r₁?', shape='diamond', color='lightgreen')
+                    simon_graph.node('stop', 'Stop trial\nfor futility', color='#ffcccc')
+                    simon_graph.node('stage2', 'Stage 2:\nEnroll n-n₁\nmore patients')
+                    simon_graph.node('decision2', 'Total responses > r?', shape='diamond', color='lightgreen')
+                    simon_graph.node('ineffective', 'Treatment ineffective\n(Accept H₀)', color='#ffcccc')
+                    simon_graph.node('effective', 'Treatment effective\n(Reject H₀)', color='#ccffcc')
+                    
+                    # Add edges to connect the nodes in the simplified flowchart
+                    simon_graph.edge('stage1', 'decision1')
+                    simon_graph.edge('decision1', 'stop', label='NO')
+                    simon_graph.edge('decision1', 'stage2', label='YES')
+                    simon_graph.edge('stage2', 'decision2')
+                    simon_graph.edge('decision2', 'ineffective', label='NO')
+                    simon_graph.edge('decision2', 'effective', label='YES')
+                    
+                    # Display the graphviz chart in Streamlit
+                    st.graphviz_chart(simon_graph)
+                
+                # Show explanation of Simon's two-stage design with enhanced formatting
+                st.info("""
+                **How Simon's Two-Stage Design Works:**
+                
+                1. **First Stage**: Enroll n₁ patients
+                   - If responses ≤ r₁: Stop for futility
+                   - If responses > r₁: Continue to stage 2
+                
+                2. **Second Stage**: Enroll additional patients to reach total n
+                   - Final decision: If total responses > r, reject H₀ (treatment works)
+                
+                This design reduces expected sample size by allowing early stopping when treatment is ineffective.
+                """)
     
     return params
 

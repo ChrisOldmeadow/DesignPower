@@ -12,6 +12,7 @@ import numpy as np
 from scipy import stats
 import pandas as pd
 import matplotlib.pyplot as plt
+import graphviz
 
 # Make sure the project root is in the path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -171,42 +172,172 @@ if component_key in COMPONENTS:
                 st.write(f"**Relative Risk:** {results.get('relative_risk')}")
             
             elif design_method == "Simon's Two-Stage":
-                # Create a specific layout for Simon's two-stage design results
-                st.subheader("Simon's Two-Stage Design Results")
-                st.write(f"**Design Type:** {results.get('design_type', 'Optimal')}")
+                # Create a specific layout for Simon's two-stage design results with enhanced styling
+                st.markdown("### 📊 Simon's Two-Stage Design Results")
                 
-                # Create a three-column layout for Simon's results
-                col1, col2, col3 = st.columns(3)
+                # Create a horizontal line for better separation
+                st.markdown("---")
                 
-                with col1:
-                    st.subheader("Stage 1")
-                    st.write(f"**First Stage Sample Size (n₁):** {results.get('n1')}")
-                    st.write(f"**First Stage Threshold (r₁):** {results.get('r1')}")
-                    st.write(f"**Probability of Early Termination (PET₀):** {results.get('PET0')}")
+                # Show design type with better highlighting
+                design_type = results.get('design_type', 'Optimal')
+                st.markdown(f"<div style='background-color:#f0f2f6;padding:10px;border-radius:5px;margin-bottom:10px;'><h4>Design Type: {design_type}</h4></div>", unsafe_allow_html=True)
                 
-                with col2:
-                    st.subheader("Overall Design")
-                    st.write(f"**Total Sample Size (n):** {results.get('n')}")
-                    st.write(f"**Final Threshold (r):** {results.get('r')}")
-                    st.write(f"**Expected Sample Size (EN₀):** {results.get('EN0')}")
+                # Display flowchart of the design for visual understanding
+                with st.expander("📋 View Design Flowchart", expanded=True):
+                    n1 = results.get('n1')
+                    r1 = results.get('r1')
+                    n = results.get('n')
+                    r = results.get('r')
+                    
+                    # Create a customized flowchart based on actual parameters using graphviz
+                    st.markdown("##### Design Flowchart with Calculated Parameters")
+                    
+                    # Create a graphviz object for the flowchart
+                    results_graph = graphviz.Digraph()
+                    results_graph.attr('node', shape='box', style='filled', color='lightblue', fontname='Arial', 
+                                    fontsize='12', margin='0.2,0.1')
+                    results_graph.attr('edge', fontname='Arial', fontsize='11')
+                    
+                    # Define the nodes with actual parameter values - simplified to focus on key decision points
+                    results_graph.node('stage1', f'Stage 1:\nEnroll {n1} patients')
+                    results_graph.node('decision1', f'Responses > {r1}?', shape='diamond', color='lightgreen')
+                    results_graph.node('stop', 'Stop trial\nfor futility', color='#ffcccc')
+                    results_graph.node('stage2', f'Stage 2:\nEnroll {n-n1}\nmore patients')
+                    results_graph.node('decision2', f'Total responses > {r}?', shape='diamond', color='lightgreen')
+                    results_graph.node('ineffective', 'Treatment ineffective\n(Accept H₀)', color='#ffcccc')
+                    results_graph.node('effective', 'Treatment effective\n(Reject H₀)', color='#ccffcc')
+                    
+                    # Add edges to connect the nodes in the simplified flowchart
+                    results_graph.edge('stage1', 'decision1')
+                    results_graph.edge('decision1', 'stop', label='NO')
+                    results_graph.edge('decision1', 'stage2', label='YES')
+                    results_graph.edge('stage2', 'decision2')
+                    results_graph.edge('decision2', 'ineffective', label='NO')
+                    results_graph.edge('decision2', 'effective', label='YES')
+                    
+                    # Display the graphviz chart in Streamlit
+                    st.graphviz_chart(results_graph)
                 
-                with col3:
-                    st.subheader("Error Rates")
-                    st.write(f"**Target Type I Error (α):** {params.get('alpha')}")
-                    st.write(f"**Actual Type I Error:** {results.get('actual_alpha')}")
-                    st.write(f"**Target Power:** {params.get('power', 1-params.get('beta', 0.2))}")
-                    st.write(f"**Actual Power:** {results.get('actual_power')}")
+                # Create tabs for different aspects of the results
+                tab1, tab2, tab3, tab4 = st.tabs(["📈 Key Parameters", "⚠️ Error Rates", "📏 Effect Size", "📋 Decision Rules"])
                 
-                # Display decision rules and effect size information
-                st.subheader("Decision Rules")
-                st.markdown(f"**Stage 1:** If responses ≤ {results.get('r1')}, stop the trial for futility.")
-                st.markdown(f"**Stage 2:** If total responses > {results.get('r')}, reject H₀.")
+                with tab1:
+                    # Create a more visually appealing layout for key parameters
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("##### Stage 1 Parameters")
+                        st.markdown(f"<div style='background-color:#e6f3ff;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>First Stage Sample Size (n₁):</b> {results.get('n1')}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#e6f3ff;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>First Stage Threshold (r₁):</b> {results.get('r1')}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#e6f3ff;padding:10px;border-radius:5px;'>"
+                                  f"<b>Probability of Early Termination (PET₀):</b> {results.get('PET0')}"
+                                  f"</div>", unsafe_allow_html=True)
+                    
+                    with col2:
+                        st.markdown("##### Overall Design Parameters")
+                        st.markdown(f"<div style='background-color:#eff8e6;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Total Sample Size (n):</b> {results.get('n')}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#eff8e6;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Final Threshold (r):</b> {results.get('r')}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#eff8e6;padding:10px;border-radius:5px;'>"
+                                  f"<b>Expected Sample Size (EN₀):</b> {results.get('EN0')}"
+                                  f"</div>", unsafe_allow_html=True)
                 
-                st.subheader("Effect Size")
-                st.write(f"**Null Response Rate (p₀):** {params.get('p0')}")
-                st.write(f"**Alternative Response Rate (p₁):** {params.get('p')}")
-                st.write(f"**Absolute Risk Difference:** {results.get('absolute_risk_difference')}")
-                st.write(f"**Relative Risk:** {results.get('relative_risk')}")
+                with tab2:
+                    # Create a more visually appealing layout for error rates
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("##### Type I Error (False Positive)")
+                        target_alpha = params.get('alpha')
+                        actual_alpha = results.get('actual_alpha')
+                        
+                        st.markdown(f"<div style='background-color:#fff0e6;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Target Type I Error (α):</b> {target_alpha}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#fff0e6;padding:10px;border-radius:5px;'>"
+                                  f"<b>Actual Type I Error:</b> {actual_alpha}"
+                                  f"</div>", unsafe_allow_html=True)
+                    
+                    with col2:
+                        st.markdown("##### Power (1 - Type II Error)")
+                        target_power = params.get('power', 1-params.get('beta', 0.2))
+                        actual_power = results.get('actual_power')
+                        
+                        st.markdown(f"<div style='background-color:#e6e6ff;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Target Power:</b> {target_power}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#e6e6ff;padding:10px;border-radius:5px;'>"
+                                  f"<b>Actual Power:</b> {actual_power}"
+                                  f"</div>", unsafe_allow_html=True)
+                
+                with tab3:
+                    # Create a more visually appealing layout for effect size information
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("##### Response Rates")
+                        p0 = params.get('p0')
+                        p1 = params.get('p')
+                        
+                        st.markdown(f"<div style='background-color:#f0e6ff;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Null Response Rate (p₀):</b> {p0}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#f0e6ff;padding:10px;border-radius:5px;'>"
+                                  f"<b>Alternative Response Rate (p₁):</b> {p1}"
+                                  f"</div>", unsafe_allow_html=True)
+                    
+                    with col2:
+                        st.markdown("##### Effect Measures")
+                        risk_diff = results.get('absolute_risk_difference')
+                        rel_risk = results.get('relative_risk')
+                        
+                        st.markdown(f"<div style='background-color:#ffe6e6;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Absolute Risk Difference:</b> {risk_diff}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#ffe6e6;padding:10px;border-radius:5px;'>"
+                                  f"<b>Relative Risk:</b> {rel_risk}"
+                                  f"</div>", unsafe_allow_html=True)
+                
+                with tab4:
+                    # Create a more visually appealing layout for decision rules
+                    st.markdown("##### Trial Conduct Decision Rules")
+                    
+                    # Stage 1 decision rule
+                    st.markdown(f"<div style='background-color:#e6fff0;padding:15px;border-radius:5px;margin-bottom:10px;'>"
+                              f"<h5>Stage 1 Decision Rule:</h5>"
+                              f"<ul>"
+                              f"<li>Enroll {results.get('n1')} patients in the first stage</li>"
+                              f"<li>Count the number of responses (r)</li>"
+                              f"<li>If r ≤ {results.get('r1')}, <b>stop the trial</b> for futility</li>"
+                              f"<li>If r > {results.get('r1')}, <b>continue</b> to the second stage</li>"
+                              f"</ul>"
+                              f"</div>", unsafe_allow_html=True)
+                    
+                    # Stage 2 decision rule
+                    st.markdown(f"<div style='background-color:#e6fff0;padding:15px;border-radius:5px;'>"
+                              f"<h5>Stage 2 Decision Rule:</h5>"
+                              f"<ul>"
+                              f"<li>Enroll additional {results.get('n') - results.get('n1')} patients</li>"
+                              f"<li>Count the total number of responses (r) across both stages</li>"
+                              f"<li>If total r > {results.get('r')}, <b>reject H₀</b> (treatment is effective)</li>"
+                              f"<li>If total r ≤ {results.get('r')}, <b>accept H₀</b> (treatment is not effective)</li>"
+                              f"</ul>"
+                              f"</div>", unsafe_allow_html=True)
             
             else:
                 # Standard display for other results
@@ -244,40 +375,4 @@ if component_key in COMPONENTS:
                 except Exception as e:
                     st.error(f"Could not copy to clipboard: {e}")
         
-        # Simple visualization of results based on calculation type
-        calc_type = st.session_state.calculation_type
-        fig, ax = plt.subplots(figsize=(8, 4))
-        
-        # Check if it's a two-arm study by looking for n1 and n2 keys
-        is_two_arm = "n1" in st.session_state.results and "n2" in st.session_state.results
-        
-        if calc_type == "Sample Size":
-            # Display a bar chart of sample sizes
-            if is_two_arm:
-                sizes = [st.session_state.results["n1"], st.session_state.results["n2"]]
-                groups = ["Group 1", "Group 2"]
-            else:
-                sizes = [st.session_state.results.get("n", 0)]
-                groups = ["Sample Size"]
-                
-            ax.bar(groups, sizes, color='skyblue')
-            ax.set_ylabel('Sample Size')
-            ax.set_title('Required Sample Size by Group')
-            
-        elif calc_type == "Power":
-            # Display the power as a horizontal line
-            power = st.session_state.results.get("power", 0)
-            ax.axhline(y=power, color='r', linestyle='-')
-            ax.set_ylim(0, 1)
-            ax.set_ylabel('Power')
-            ax.set_title(f'Achieved Power: {power:.2f}')
-            ax.set_xticks([])
-            
-        elif calc_type == "Minimum Detectable Effect":
-            # Display the MDE
-            mde = st.session_state.results.get("mde", 0)
-            ax.bar(["MDE"], [mde], color='salmon')
-            ax.set_ylabel('Effect Size')
-            ax.set_title(f'Minimum Detectable Effect: {mde:.3f}')
-        
-        st.pyplot(fig)
+        # No visualization plots needed for Simon's two-stage design results
