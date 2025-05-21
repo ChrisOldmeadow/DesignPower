@@ -36,7 +36,11 @@ DesignPower/
 │   │   │   ├── simulation_binary.py      # Simulation methods for binary outcomes
 │   │   │   ├── simulation_continuous.py  # Simulation methods for continuous outcomes
 │   │   │   └── simulation_survival.py    # Simulation methods for survival outcomes
-│   │   └── cluster/               # (Future) Cluster randomized designs
+│   │   ├── cluster_rct/           # Cluster randomized controlled trial designs
+│   │   │   ├── analytical_binary.py      # Analytical methods for binary outcomes
+│   │   │   ├── analytical_continuous.py  # Analytical methods for continuous outcomes
+│   │   │   ├── simulation_binary.py      # Simulation methods for binary outcomes
+│   │   │   └── simulation_continuous.py  # Simulation methods for continuous outcomes
 │   └── utils/                     # Utility functions
 │       ├── formatting.py          # Output formatting utilities
 │       ├── statistics.py          # General statistical functions
@@ -192,6 +196,13 @@ The refactoring has been successfully completed for the following outcome types 
 | Binary      | ✅ Complete       | 🔄 In Progress    | 🔄 In Progress           |
 | Continuous  | 🔄 In Progress    | 🔄 In Progress    | 🔄 In Progress           |
 | Survival    | 🔄 In Progress    | 🔄 In Progress    | 🔄 In Progress           |
+
+### Cluster RCT Designs
+
+| Outcome Type | Analytical Methods | Simulation Methods | Non-inferiority Support |
+|-------------|-------------------|-------------------|---------------------------|
+| Binary      | ✅ Complete       | ✅ Complete       | 🔄 In Progress           |
+| Continuous  | ✅ Complete       | ✅ Complete       | 🔄 In Progress           |
 
 ### UI Integration
 

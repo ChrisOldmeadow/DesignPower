@@ -8,6 +8,9 @@ This document provides practical examples of how to use the DesignPower library 
   - [Binary Outcomes](#binary-outcomes)
   - [Continuous Outcomes](#continuous-outcomes)
   - [Survival Outcomes](#survival-outcomes)
+- [Cluster RCT Designs](#cluster-rct-designs)
+  - [Binary Outcomes](#cluster-binary-outcomes)
+  - [Continuous Outcomes](#cluster-continuous-outcomes)
 - [Non-inferiority Designs](#non-inferiority-designs)
 - [Advanced Simulation Usage](#advanced-simulation-usage)
 
@@ -375,6 +378,201 @@ mde_result = min_detectable_binary_non_inferiority_margin_sim(
     direction="lower"         # Direction of non-inferiority ("lower" or "upper")
 )
 print(f"Minimum detectable non-inferiority margin: {mde_result['minimum_detectable_margin']:.3f}")
+```
+
+## Cluster RCT Designs
+
+### Binary Outcomes {#cluster-binary-outcomes}
+
+#### Analytical Methods
+
+```python
+from core.designs.cluster_rct import (
+    sample_size_binary_analytical,
+    power_binary_analytical,
+    min_detectable_effect_binary_analytical
+)
+
+# Calculate required sample size for a cluster RCT with binary outcomes
+sample_size_result = sample_size_binary_analytical(
+    p1=0.3,        # Proportion in control group
+    p2=0.4,        # Proportion in treatment group
+    icc=0.05,      # Intracluster correlation coefficient
+    cluster_size=20, # Average number of participants per cluster
+    power=0.8,     # Desired power
+    alpha=0.05,    # Significance level
+    allocation_ratio=1.0  # Equal allocation
+)
+print(f"Required number of clusters: {sample_size_result['total_clusters']}")
+print(f"Group 1: {sample_size_result['n_clusters_1']} clusters, Group 2: {sample_size_result['n_clusters_2']} clusters")
+print(f"Total participants: {sample_size_result['total_sample_size']}")
+
+# Calculate power for a given cluster RCT design
+power_result = power_binary_analytical(
+    n_clusters_1=20,  # Number of clusters in group 1
+    n_clusters_2=20,  # Number of clusters in group 2
+    cluster_size=25,  # Average number of participants per cluster
+    p1=0.3,        # Proportion in control group
+    p2=0.4,        # Proportion in treatment group
+    icc=0.05,      # Intracluster correlation coefficient
+    alpha=0.05     # Significance level
+)
+print(f"Statistical power: {power_result['power']:.3f}")
+print(f"Design effect: {power_result['design_effect']:.2f}")
+
+# Calculate minimum detectable effect for a cluster RCT
+mde_result = min_detectable_effect_binary_analytical(
+    n_clusters_1=20,  # Number of clusters in group 1
+    n_clusters_2=20,  # Number of clusters in group 2
+    cluster_size=25,  # Average number of participants per cluster
+    p1=0.3,        # Proportion in control group
+    icc=0.05,      # Intracluster correlation coefficient
+    power=0.8,     # Desired power
+    alpha=0.05     # Significance level
+)
+print(f"Minimum detectable proportion in group 2: {mde_result['p2']:.3f}")
+print(f"Risk difference: {mde_result['risk_difference']:.3f}")
+print(f"Risk ratio: {mde_result['risk_ratio']:.3f}")
+```
+
+#### Simulation Methods
+
+```python
+from core.designs.cluster_rct import (
+    sample_size_binary_simulation,
+    power_binary_simulation,
+    min_detectable_effect_binary_simulation
+)
+
+# Calculate required sample size using simulation
+sim_sample_size_result = sample_size_binary_simulation(
+    p1=0.3,        # Proportion in control group
+    p2=0.4,        # Proportion in treatment group
+    icc=0.05,      # Intracluster correlation coefficient
+    cluster_size=20, # Average number of participants per cluster
+    power=0.8,     # Desired power
+    alpha=0.05,    # Significance level
+    nsim=1000,     # Number of simulations
+    allocation_ratio=1.0,  # Equal allocation
+    test_type="normal_approximation"  # Test method
+)
+print(f"Required number of clusters (simulation): {sim_sample_size_result['total_clusters']}")
+print(f"Achieved power: {sim_sample_size_result['achieved_power']:.3f}")
+
+# Calculate power using simulation
+sim_power_result = power_binary_simulation(
+    n_clusters_1=20,  # Number of clusters in group 1
+    n_clusters_2=20,  # Number of clusters in group 2
+    cluster_size=25,  # Average number of participants per cluster
+    p1=0.3,        # Proportion in control group
+    p2=0.4,        # Proportion in treatment group
+    icc=0.05,      # Intracluster correlation coefficient
+    alpha=0.05,    # Significance level
+    nsim=1000,     # Number of simulations
+    test_type="normal_approximation"  # Test method
+)
+print(f"Statistical power (simulation): {sim_power_result['power']:.3f}")
+print(f"95% CI for power: ({sim_power_result['power_ci_lower']:.3f}, {sim_power_result['power_ci_upper']:.3f})")
+```
+
+### Continuous Outcomes {#cluster-continuous-outcomes}
+
+#### Analytical Methods
+
+```python
+from core.designs.cluster_rct import (
+    sample_size_continuous_analytical,
+    power_continuous_analytical,
+    min_detectable_effect_continuous_analytical
+)
+
+# Calculate required sample size for a cluster RCT with continuous outcomes
+sample_size_result = sample_size_continuous_analytical(
+    mean1=10.0,      # Mean in control group
+    mean2=12.0,      # Mean in treatment group
+    sd1=5.0,         # Standard deviation in control group
+    sd2=5.0,         # Standard deviation in treatment group
+    icc=0.05,        # Intracluster correlation coefficient
+    cluster_size=20, # Average number of participants per cluster
+    power=0.8,       # Desired power
+    alpha=0.05,      # Significance level
+    allocation_ratio=1.0  # Equal allocation
+)
+print(f"Required number of clusters: {sample_size_result['total_clusters']}")
+print(f"Group 1: {sample_size_result['n_clusters_1']} clusters, Group 2: {sample_size_result['n_clusters_2']} clusters")
+print(f"Total participants: {sample_size_result['total_sample_size']}")
+
+# Calculate power for a given cluster RCT design with continuous outcomes
+power_result = power_continuous_analytical(
+    n_clusters_1=15,  # Number of clusters in group 1
+    n_clusters_2=15,  # Number of clusters in group 2
+    cluster_size=20,  # Average number of participants per cluster
+    mean1=10.0,     # Mean in control group
+    mean2=12.0,     # Mean in treatment group
+    sd1=5.0,        # Standard deviation in control group
+    sd2=5.0,        # Standard deviation in treatment group
+    icc=0.05,       # Intracluster correlation coefficient
+    alpha=0.05      # Significance level
+)
+print(f"Statistical power: {power_result['power']:.3f}")
+print(f"Design effect: {power_result['design_effect']:.2f}")
+
+# Calculate minimum detectable effect for a cluster RCT with continuous outcomes
+mde_result = min_detectable_effect_continuous_analytical(
+    n_clusters_1=15,  # Number of clusters in group 1
+    n_clusters_2=15,  # Number of clusters in group 2
+    cluster_size=20,  # Average number of participants per cluster
+    mean1=10.0,     # Mean in control group
+    sd1=5.0,        # Standard deviation in control group
+    sd2=5.0,        # Standard deviation in treatment group
+    icc=0.05,       # Intracluster correlation coefficient
+    power=0.8,      # Desired power
+    alpha=0.05      # Significance level
+)
+print(f"Minimum detectable mean in group 2: {mde_result['mean2']:.2f}")
+print(f"Effect size (Cohen's d): {mde_result['effect_size']:.3f}")
+```
+
+#### Simulation Methods
+
+```python
+from core.designs.cluster_rct import (
+    sample_size_continuous_simulation,
+    power_continuous_simulation,
+    min_detectable_effect_continuous_simulation
+)
+
+# Calculate required sample size using simulation for continuous outcomes
+sim_sample_size_result = sample_size_continuous_simulation(
+    mean1=10.0,      # Mean in control group
+    mean2=12.0,      # Mean in treatment group
+    sd1=5.0,         # Standard deviation in control group
+    sd2=5.0,         # Standard deviation in treatment group
+    icc=0.05,        # Intracluster correlation coefficient
+    cluster_size=20, # Average number of participants per cluster
+    power=0.8,       # Desired power
+    alpha=0.05,      # Significance level
+    nsim=1000,       # Number of simulations
+    allocation_ratio=1.0  # Equal allocation
+)
+print(f"Required number of clusters (simulation): {sim_sample_size_result['total_clusters']}")
+print(f"Achieved power: {sim_sample_size_result['achieved_power']:.3f}")
+
+# Calculate power using simulation for continuous outcomes
+sim_power_result = power_continuous_simulation(
+    n_clusters_1=15,  # Number of clusters in group 1
+    n_clusters_2=15,  # Number of clusters in group 2
+    cluster_size=20,  # Average number of participants per cluster
+    mean1=10.0,     # Mean in control group
+    mean2=12.0,     # Mean in treatment group
+    sd1=5.0,        # Standard deviation in control group
+    sd2=5.0,        # Standard deviation in treatment group
+    icc=0.05,       # Intracluster correlation coefficient
+    alpha=0.05,     # Significance level
+    nsim=1000      # Number of simulations
+)
+print(f"Statistical power (simulation): {sim_power_result['power']:.3f}")
+print(f"95% CI for power: ({sim_power_result['power_ci_lower']:.3f}, {sim_power_result['power_ci_upper']:.3f})")
 ```
 
 ## Advanced Simulation Usage

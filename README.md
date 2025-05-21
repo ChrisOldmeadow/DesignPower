@@ -21,6 +21,9 @@ A comprehensive application for statistical power analysis and sample size calcu
     - A'Hern's design
     - Simon's two-stage design
   - Survival outcomes
+- **Cluster RCTs** with multiple outcome types:
+  - Continuous outcomes (accounting for intracluster correlation)
+  - Binary outcomes (accounting for intracluster correlation)
 
 ### Hypothesis Types
 - **Superiority**: Testing if a new treatment is better than a control
