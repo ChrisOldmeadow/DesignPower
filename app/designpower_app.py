@@ -518,6 +518,13 @@ if component_key in COMPONENTS:
             
         # Generate and display report text
         st.markdown("### Report Text")
+        
+        # Debug print statements to console
+        print(f"DEBUG - Before report generation:")
+        print(f"DEBUG - design_type: '{st.session_state.design_type}'")
+        print(f"DEBUG - outcome_type: '{st.session_state.outcome_type}'")
+        print(f"DEBUG - calculation_type: '{params.get('calculation_type')}', calc_type: '{params.get('calc_type')}'") 
+        
         report_text = generate_report(
             st.session_state.results, 
             params, 

@@ -125,7 +125,7 @@ def render_cluster_continuous(calc_type, hypothesis_type):
     params = {}
     params["calc_type"] = calc_type
     params["hypothesis_type"] = hypothesis_type
-    params["outcome_type"] = "continuous"
+    params["outcome_type"] = "Continuous Outcome"
     
     st.markdown("### Study Parameters")
     
@@ -217,8 +217,7 @@ def render_cluster_continuous(calc_type, hypothesis_type):
         params["alpha"] = st.select_slider(
             "Significance Level (α)", 
             options=[0.001, 0.01, 0.05, 0.1], 
-            value=0.05, 
-            format="%0.3f"
+            value=0.05
         )
     
     # Advanced options in an expander
@@ -243,7 +242,7 @@ def render_cluster_binary(calc_type, hypothesis_type):
     params = {}
     params["calc_type"] = calc_type
     params["hypothesis_type"] = hypothesis_type
-    params["outcome_type"] = "binary"
+    params["outcome_type"] = "Binary Outcome"
     
     st.markdown("### Study Parameters")
     
@@ -337,8 +336,7 @@ def render_cluster_binary(calc_type, hypothesis_type):
         params["alpha"] = st.select_slider(
             "Significance Level (α)", 
             options=[0.001, 0.01, 0.05, 0.1], 
-            value=0.05, 
-            format="%0.3f"
+            value=0.05
         )
     
     # Advanced options in an expander
