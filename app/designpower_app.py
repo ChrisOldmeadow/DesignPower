@@ -148,28 +148,82 @@ if component_key in COMPONENTS:
             design_method = results.get("design_method")
             
             if design_method == "A'Hern":
-                # Create a two-column layout for A'Hern results
-                col1, col2 = st.columns(2)
+                # Create an enhanced layout for A'Hern results with consistent styling
+                st.markdown("### A'Hern Design Results")
+                st.markdown("---")
                 
-                with col1:
-                    st.subheader("Sample Size Calculation")
-                    st.write(f"**Required Sample Size (n):** {results.get('n')}")
-                    st.write(f"**Rejection Threshold (r):** {results.get('r')}")
-                    st.write(f"**Interpretation:** Reject H₀ if {results.get('r')} or more responses are observed")
+                # Create tabs for different aspects of the results
+                tab1, tab2 = st.tabs(["📊 Key Parameters", "📏 Effect Size"])
                 
-                with col2:
-                    st.subheader("Error Rates")
-                    st.write(f"**Target Type I Error (α):** {params.get('alpha')}")
-                    st.write(f"**Actual Type I Error:** {results.get('actual_alpha')}")
-                    st.write(f"**Target Power:** {params.get('power', 1-params.get('beta', 0.2))}")
-                    st.write(f"**Actual Power:** {results.get('actual_power')}")
+                with tab1:
+                    # Create a more visually appealing layout for key parameters
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("##### Sample Size Calculation")
+                        st.markdown(f"<div style='background-color:#e6f3ff;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Required Sample Size (n):</b> {results.get('n')}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#e6f3ff;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Rejection Threshold (r):</b> {results.get('r')}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#e6fff0;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Interpretation:</b> Reject H₀ if {results.get('r')} or more responses are observed"
+                                  f"</div>", unsafe_allow_html=True)
+                    
+                    with col2:
+                        st.markdown("##### Error Rates")
+                        st.markdown(f"<div style='background-color:#fff0e6;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Target Type I Error (α):</b> {params.get('alpha')}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#fff0e6;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Actual Type I Error:</b> {results.get('actual_alpha')}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#e6e6ff;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Target Power:</b> {params.get('power', 1-params.get('beta', 0.2))}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#e6e6ff;padding:10px;border-radius:5px;'>"
+                                  f"<b>Actual Power:</b> {results.get('actual_power')}"
+                                  f"</div>", unsafe_allow_html=True)
                 
-                # Display effect size information
-                st.subheader("Effect Size")
-                st.write(f"**Null Response Rate (p₀):** {params.get('p0')}")
-                st.write(f"**Alternative Response Rate (p₁):** {params.get('p')}")
-                st.write(f"**Absolute Risk Difference:** {results.get('absolute_risk_difference')}")
-                st.write(f"**Relative Risk:** {results.get('relative_risk')}")
+                with tab2:
+                    # Create a more visually appealing layout for effect size information
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("##### Response Rates")
+                        st.markdown(f"<div style='background-color:#f0e6ff;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Null Response Rate (p₀):</b> {params.get('p0')}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#f0e6ff;padding:10px;border-radius:5px;'>"
+                                  f"<b>Alternative Response Rate (p₁):</b> {params.get('p')}"
+                                  f"</div>", unsafe_allow_html=True)
+                    
+                    with col2:
+                        st.markdown("##### Effect Measures")
+                        st.markdown(f"<div style='background-color:#ffe6e6;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                  f"<b>Absolute Risk Difference:</b> {results.get('absolute_risk_difference')}"
+                                  f"</div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<div style='background-color:#ffe6e6;padding:10px;border-radius:5px;'>"
+                                  f"<b>Relative Risk:</b> {results.get('relative_risk')}"
+                                  f"</div>", unsafe_allow_html=True)
+                
+                # Add an information card explaining A'Hern design
+                with st.expander("💡 About A'Hern Design", expanded=False):
+                    st.markdown("""
+                    **A'Hern Design** is a single-stage design for phase II trials using exact binomial probabilities instead of normal approximations.
+                    This approach is more appropriate for smaller sample sizes and provides more precise results.
+                    
+                    The design calculates the minimum number of responses (r) needed to reject the null hypothesis that the 
+                    response rate is less than or equal to p₀, with a specific significance level (α) and desired power.
+                    """)
             
             elif design_method == "Simon's Two-Stage":
                 # Create a specific layout for Simon's two-stage design results with enhanced styling
@@ -340,11 +394,111 @@ if component_key in COMPONENTS:
                               f"</div>", unsafe_allow_html=True)
             
             else:
-                # Standard display for other results
-                for k, v in results.items():
-                    # Skip design_method from display
-                    if k != "design_method":
-                        st.write(f"**{k}:** {v}")
+                # Enhanced display for standard results with consistent styling
+                st.markdown("### Results Summary")
+                st.markdown("---")
+                
+                # Group results into logical categories
+                sample_size_keys = ["n", "n1", "n2", "total_n"]
+                power_keys = ["power", "actual_power"]
+                effect_size_keys = ["mde", "delta", "difference", "risk_difference", "hazard_ratio", "hr"]
+                
+                # Use an expander for detailed results
+                with st.expander("📊 Detailed Results", expanded=True):
+                    # Create a multi-column layout
+                    if calc_type == "Sample Size":
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("##### Sample Size")
+                            for k in sample_size_keys:
+                                if k in results:
+                                    # Format sample size with thousands separator
+                                    value = results[k]
+                                    if isinstance(value, (int, float)):
+                                        formatted_value = f"{value:,}" if isinstance(value, int) else f"{value:.2f}"
+                                    else:
+                                        formatted_value = value
+                                    
+                                    st.markdown(f"<div style='background-color:#e6f3ff;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                             f"<b>{k.replace('_', ' ').title()}:</b> {formatted_value}"
+                                             f"</div>", unsafe_allow_html=True)
+                        
+                        with col2:
+                            st.markdown("##### Error Rates & Parameters")
+                            for k, v in results.items():
+                                if k not in sample_size_keys and k not in ["design_method"]:
+                                    formatted_value = v
+                                    if isinstance(v, float):
+                                        formatted_value = f"{v:.4f}"
+                                    
+                                    st.markdown(f"<div style='background-color:#eff8e6;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                             f"<b>{k.replace('_', ' ').title()}:</b> {formatted_value}"
+                                             f"</div>", unsafe_allow_html=True)
+                    
+                    elif calc_type == "Power":
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("##### Power Analysis")
+                            for k in power_keys:
+                                if k in results:
+                                    value = results[k]
+                                    formatted_value = f"{value:.4f}" if isinstance(value, float) else value
+                                    
+                                    st.markdown(f"<div style='background-color:#e6e6ff;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                             f"<b>{k.replace('_', ' ').title()}:</b> {formatted_value}"
+                                             f"</div>", unsafe_allow_html=True)
+                        
+                        with col2:
+                            st.markdown("##### Study Parameters")
+                            for k, v in results.items():
+                                if k not in power_keys and k not in ["design_method"]:
+                                    formatted_value = v
+                                    if isinstance(v, float):
+                                        formatted_value = f"{v:.4f}"
+                                    
+                                    st.markdown(f"<div style='background-color:#fff0e6;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                             f"<b>{k.replace('_', ' ').title()}:</b> {formatted_value}"
+                                             f"</div>", unsafe_allow_html=True)
+                    
+                    elif calc_type == "Minimum Detectable Effect":
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("##### Effect Size")
+                            for k in effect_size_keys:
+                                if k in results:
+                                    value = results[k]
+                                    formatted_value = f"{value:.4f}" if isinstance(value, float) else value
+                                    
+                                    st.markdown(f"<div style='background-color:#f0e6ff;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                             f"<b>{k.replace('_', ' ').title()}:</b> {formatted_value}"
+                                             f"</div>", unsafe_allow_html=True)
+                        
+                        with col2:
+                            st.markdown("##### Study Parameters")
+                            for k, v in results.items():
+                                if k not in effect_size_keys and k not in ["design_method"]:
+                                    formatted_value = v
+                                    if isinstance(v, float):
+                                        formatted_value = f"{v:.4f}"
+                                    
+                                    st.markdown(f"<div style='background-color:#ffe6e6;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                             f"<b>{k.replace('_', ' ').title()}:</b> {formatted_value}"
+                                             f"</div>", unsafe_allow_html=True)
+                    
+                    else:
+                        # Fallback for any other calculation type
+                        for k, v in results.items():
+                            if k != "design_method":
+                                formatted_value = v
+                                if isinstance(v, float):
+                                    formatted_value = f"{v:.4f}"
+                                
+                                st.markdown(f"<div style='background-color:#f0f2f6;padding:10px;border-radius:5px;margin-bottom:5px;'>"
+                                         f"<b>{k.replace('_', ' ').title()}:</b> {formatted_value}"
+                                         f"</div>", unsafe_allow_html=True)
             
         # Generate and display report text
         st.markdown("### Report Text")
