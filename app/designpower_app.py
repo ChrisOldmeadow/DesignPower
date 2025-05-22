@@ -88,6 +88,9 @@ COMPONENTS = {
     }
 }
 
+# Basic app setup - must be first Streamlit command
+st.set_page_config(page_title="DesignPower", page_icon=":chart_with_upwards_trend:")
+
 # Add app title
 st.title("DesignPower: Power and Sample Size Calculator")
 st.write("""
@@ -101,6 +104,21 @@ if "design_type" not in st.session_state:
     st.session_state.outcome_type = "Continuous Outcome"
     st.session_state.calculation_type = "Sample Size"
     st.session_state.results = None
+
+# Add expandable About section at the top of the sidebar
+with st.sidebar.expander("ℹ️ About DesignPower", expanded=False):
+    st.write("DesignPower is an open-source tool for statistical design of clinical studies, providing accurate sample size and power calculations for various trial designs.")
+    
+    st.write("**Key Features:**")
+    features = [
+        "Publication-Ready Reports",
+        "Analytical & Simulation Methods",
+        "Reproducible & Validated Results"
+    ]
+    
+    # Display each feature on its own line with a bullet
+    for feature in features:
+        st.write(f"• {feature}")
 
 # Sidebar for design selection
 st.sidebar.header("Study Design")
@@ -131,6 +149,29 @@ st.sidebar.header("Calculation Type")
 calculation_types = ["Sample Size", "Power", "Minimum Detectable Effect"]
 selected_calculation = st.sidebar.radio("Calculate", calculation_types)
 st.session_state.calculation_type = selected_calculation
+
+# No redundant key features section - removed
+
+# Documentation and examples
+st.sidebar.markdown("---")
+st.sidebar.markdown("### Documentation & Examples")
+st.sidebar.markdown(
+    """<div style='font-size: 0.9em;'>
+    <a href='https://github.com/ChrisOldmeadow/DesignPower/blob/main/README.md' target='_blank'>📚 User Guide</a><br>
+    <a href='https://github.com/ChrisOldmeadow/DesignPower/blob/main/docs/EXAMPLES.md' target='_blank'>📝 Example Calculations</a>
+    </div>""", 
+    unsafe_allow_html=True
+)
+
+# GitHub repository information
+st.sidebar.markdown("---")
+st.sidebar.markdown(
+    "<div style='text-align: center;'>"
+    "<a href='https://github.com/ChrisOldmeadow/DesignPower' target='_blank'>"
+    "<img src='https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png' width='25'/> GitHub Repository</a>"
+    "</div>", 
+    unsafe_allow_html=True
+)
 
 # Render the appropriate component based on selection
 component_key = (st.session_state.design_type, st.session_state.outcome_type)
