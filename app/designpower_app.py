@@ -158,7 +158,8 @@ st.sidebar.markdown("### Documentation & Examples")
 st.sidebar.markdown(
     """<div style='font-size: 0.9em;'>
     <a href='https://github.com/ChrisOldmeadow/DesignPower/blob/main/README.md' target='_blank'>📚 User Guide</a><br>
-    <a href='https://github.com/ChrisOldmeadow/DesignPower/blob/main/docs/EXAMPLES.md' target='_blank'>📝 Example Calculations</a>
+    <a href='https://github.com/ChrisOldmeadow/DesignPower/blob/main/docs/EXAMPLES.md' target='_blank'>📝 Example Calculations</a><br>
+    <a href='https://github.com/ChrisOldmeadow/DesignPower/tree/main/docs/methods' target='_blank'>📊 Statistical Methods</a>
     </div>""", 
     unsafe_allow_html=True
 )
