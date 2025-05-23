@@ -32,8 +32,15 @@ from app.components.single_arm import (
     render_single_arm_survival, calculate_single_arm_survival
 )
 from app.components.cluster_rct import (
-    render_cluster_continuous, calculate_cluster_continuous,
-    render_cluster_binary, calculate_cluster_binary
+    render_cluster_continuous,
+    render_cluster_binary,
+    calculate_cluster_continuous,
+    calculate_cluster_binary
+)
+from app.components.cluster_display_utils import (
+    display_sensitivity_analysis,
+    display_cluster_variation_info,
+    display_icc_conversion_info
 )
 
 # Dictionary of available designs and their parameters
@@ -98,12 +105,17 @@ st.write("""
     Select a design type and outcome type from the sidebar.
 """)
 
-# Initialize session state if needed
+# Initialize session state variables if not already set
 if "design_type" not in st.session_state:
     st.session_state.design_type = "Parallel RCT"
+if "outcome_type" not in st.session_state:
     st.session_state.outcome_type = "Continuous Outcome"
-    st.session_state.calculation_type = "Sample Size"
+if "results" not in st.session_state:
     st.session_state.results = None
+if "calculation_type" not in st.session_state:
+    st.session_state.calculation_type = "Sample Size"
+if "hypothesis_type" not in st.session_state:
+    st.session_state.hypothesis_type = "Superiority"
 
 # Add expandable About section at the top of the sidebar
 with st.sidebar.expander("ℹ️ About DesignPower", expanded=False):
@@ -125,15 +137,39 @@ st.sidebar.header("Study Design")
 
 # Design type selection
 design_keys = list(DESIGN_CONFIGS.keys())
+
+# Track previous design selection to detect changes
+if 'previous_design' not in st.session_state:
+    st.session_state.previous_design = None
+
 selected_design_key = st.sidebar.radio("Design Type", design_keys, 
                                    format_func=lambda x: DESIGN_CONFIGS[x]["name"])
 
 design_name = DESIGN_CONFIGS[selected_design_key]["name"]
+
+# Check if design type changed and reset results if it did
+if st.session_state.previous_design != design_name:
+    if 'results' in st.session_state:
+        del st.session_state.results
+    st.session_state.previous_design = design_name
+
 st.session_state.design_type = design_name
 
 # Outcome type selection
 outcomes = DESIGN_CONFIGS[selected_design_key]["outcomes"]
+
+# Track previous outcome selection to detect changes
+if 'previous_outcome' not in st.session_state:
+    st.session_state.previous_outcome = None
+
 selected_outcome = st.sidebar.radio("Outcome Type", outcomes)
+
+# Check if outcome type changed and reset results if it did
+if st.session_state.previous_outcome != selected_outcome:
+    if 'results' in st.session_state:
+        del st.session_state.results
+    st.session_state.previous_outcome = selected_outcome
+
 st.session_state.outcome_type = selected_outcome
 
 # Hypothesis type selection
@@ -192,11 +228,11 @@ if component_key in COMPONENTS:
         st.session_state.results = COMPONENTS[component_key]["calculate"](params)
         
     # Display results if available
-    if st.session_state.results:
+    if "results" in st.session_state and st.session_state.results is not None:
         st.markdown("### Results")
         
         # Check if there's an error in the results
-        if "error" in st.session_state.results:
+        if isinstance(st.session_state.results, dict) and "error" in st.session_state.results:
             st.error(f"Error: {st.session_state.results['error']}")
         else:
             # Format results in a more organized way
@@ -557,9 +593,20 @@ if component_key in COMPONENTS:
                                 st.markdown(f"<div style='background-color:#f0f2f6;padding:10px;border-radius:5px;margin-bottom:5px;'>"
                                          f"<b>{k.replace('_', ' ').title()}:</b> {formatted_value}"
                                          f"</div>", unsafe_allow_html=True)
-            
-        # Generate and display report text
-        st.markdown("### Report Text")
+                # Display cluster RCT specific information if applicable
+                if "design_method" in results and results["design_method"] == "Cluster RCT":
+                    # Display ICC conversion information if applicable
+                    display_icc_conversion_info(results)
+                    
+                    # Display cluster size variation information if applicable
+                    display_cluster_variation_info(results)
+                    
+                    # Display sensitivity analysis if available
+                    if "sensitivity_analysis" in results:
+                        display_sensitivity_analysis(results, calc_type)
+                
+                # Generate and display report text
+                st.markdown("### Report Text")
         
         # Debug print statements to console
         print(f"DEBUG - Before report generation:")

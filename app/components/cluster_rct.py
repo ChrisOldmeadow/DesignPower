@@ -36,6 +36,46 @@ def render_binary_advanced_options():
     # Convert to lowercase for function calls
     advanced_params["method"] = advanced_params["method"].lower()
     
+    # Cluster Size Variation tab
+    st.markdown("#### Cluster Size Variation")
+    advanced_params["cv_cluster_size"] = st.slider(
+        "Coefficient of Variation for Cluster Sizes",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.0,
+        step=0.05,
+        format="%0.2f",
+        help="Coefficient of variation for cluster sizes. 0 = equal cluster sizes, larger values indicate more variation."
+    )
+    
+    # ICC Scale Conversion tab
+    st.markdown("#### ICC Scale Conversion")
+    icc_scales = ["Linear", "Logit"]
+    advanced_params["icc_scale"] = st.radio(
+        "ICC Scale",
+        icc_scales,
+        index=0,
+        key="icc_scale_radio",
+        horizontal=True,
+        help="ICC can be specified on linear or logit scale. ICC values on different scales may not be directly comparable."
+    )
+    
+    # Only show conversion when logit scale is selected
+    if advanced_params["icc_scale"] == "Logit":
+        st.info("The ICC value will be converted from logit to linear scale for calculations. Conversion depends on the control group proportion.")
+    
+    # Effect Measure Options
+    st.markdown("#### Effect Measure")
+    effect_measures = ["Risk Difference", "Risk Ratio", "Odds Ratio"]
+    advanced_params["effect_measure"] = st.radio(
+        "Effect Measure",
+        effect_measures,
+        index=0,
+        key="effect_measure_radio",
+        horizontal=True,
+        help="Specify which effect measure to use for the calculation."
+    ).lower().replace(" ", "_")
+    
     # Simulation-specific options
     if advanced_params["method"] == "simulation":
         st.markdown("#### Simulation Parameters")
@@ -59,6 +99,42 @@ def render_binary_advanced_options():
                 max_value=99999,
                 key="cluster_binary_seed"
             )
+    
+    # ICC Sensitivity Analysis section without using an expander
+    st.markdown("#### ICC Sensitivity Analysis")
+    st.markdown("Explore how results vary across a range of ICC values")
+    advanced_params["run_sensitivity"] = st.checkbox(
+        "Run ICC Sensitivity Analysis",
+        value=False,
+        help="Calculate results across a range of ICC values to see how sensitive the results are to ICC assumptions."
+    )
+    
+    if advanced_params["run_sensitivity"]:
+        col1, col2 = st.columns(2)
+        with col1:
+            advanced_params["icc_min"] = st.number_input(
+                "Minimum ICC",
+                value=0.01,
+                min_value=0.0,
+                max_value=0.99,
+                format="%0.2f"
+            )
+        with col2:
+            advanced_params["icc_max"] = st.number_input(
+                "Maximum ICC",
+                value=0.10,
+                min_value=0.01,
+                max_value=0.99,
+                format="%0.2f"
+            )
+        
+        advanced_params["icc_steps"] = st.slider(
+            "Number of ICC Values",
+            min_value=3,
+            max_value=10,
+            value=5,
+            help="Number of equally spaced ICC values to evaluate between the minimum and maximum."
+        )
     
     return advanced_params
 
@@ -468,6 +544,9 @@ def calculate_cluster_binary(params):
     # Extract parameters
     calc_type = params.get("calc_type")
     method = params.get("method", "analytical")
+    icc_scale = params.get("icc_scale", "Linear")
+    cv_cluster_size = params.get("cv_cluster_size", 0.0)
+    effect_measure = params.get("effect_measure", "risk_difference")
     
     try:
         # Check for required parameters based on calculation type
@@ -483,76 +562,218 @@ def calculate_cluster_binary(params):
             if params.get(param) is None:
                 return {"error": f"Missing required parameter: {param}"}
         
+        # Process ICC based on scale
+        icc = params["icc"]
+        if icc_scale == "Logit":
+            # Import the conversion function from cluster_utils
+            from core.designs.cluster_rct.cluster_utils import convert_icc_logit_to_linear
+            icc = convert_icc_logit_to_linear(icc, params["p1"])
+            
+        # Check if we need to run sensitivity analysis
+        run_sensitivity = params.get("run_sensitivity", False)
+        sensitivity_results = []
+        
+        if run_sensitivity:
+            icc_min = params.get("icc_min", 0.01)
+            icc_max = params.get("icc_max", 0.10)
+            icc_steps = params.get("icc_steps", 5)
+            
+            # Create a range of ICC values
+            icc_values = np.linspace(icc_min, icc_max, icc_steps)
+            
+            # Store the original ICC for the main calculation
+            original_icc = icc
+        
         # Call appropriate function based on calculation type and method
         if calc_type == "Sample Size":
             if method == "analytical":
                 results = analytical_binary.sample_size_binary(
                     p1=params["p1"],
                     p2=params["p2"],
-                    icc=params["icc"],
+                    icc=icc,
                     cluster_size=params["cluster_size"],
                     power=params["power"],
-                    alpha=params["alpha"]
+                    alpha=params["alpha"],
+                    cv_cluster_size=cv_cluster_size,
+                    effect_measure=None  # Not needed here since p2 is provided
                 )
             else:  # simulation
                 results = simulation_binary.sample_size_binary_sim(
                     p1=params["p1"],
                     p2=params["p2"],
-                    icc=params["icc"],
+                    icc=icc,
                     cluster_size=params["cluster_size"],
                     power=params["power"],
                     alpha=params["alpha"],
                     nsim=params.get("nsim", 1000),
-                    seed=params.get("seed", 42)
+                    seed=params.get("seed", 42),
+                    cv_cluster_size=cv_cluster_size
                 )
+            
+            # Run sensitivity analysis if requested
+            if run_sensitivity:
+                for test_icc in icc_values:
+                    if method == "analytical":
+                        sens_result = analytical_binary.sample_size_binary(
+                            p1=params["p1"],
+                            p2=params["p2"],
+                            icc=test_icc,
+                            cluster_size=params["cluster_size"],
+                            power=params["power"],
+                            alpha=params["alpha"],
+                            cv_cluster_size=cv_cluster_size
+                        )
+                    else:  # simulation
+                        sens_result = simulation_binary.sample_size_binary_sim(
+                            p1=params["p1"],
+                            p2=params["p2"],
+                            icc=test_icc,
+                            cluster_size=params["cluster_size"],
+                            power=params["power"],
+                            alpha=params["alpha"],
+                            nsim=params.get("nsim", 1000),
+                            seed=params.get("seed", 42),
+                            cv_cluster_size=cv_cluster_size
+                        )
+                    sensitivity_results.append({
+                        "icc": test_icc,
+                        "n_clusters": sens_result["n_clusters"],
+                        "total_n": sens_result["total_n"],
+                        "design_effect": sens_result["design_effect"]
+                    })
         
         elif calc_type == "Power":
             if method == "analytical":
                 results = analytical_binary.power_binary(
                     n_clusters=params["n_clusters"],
                     cluster_size=params["cluster_size"],
-                    icc=params["icc"],
+                    icc=icc,
                     p1=params["p1"],
                     p2=params["p2"],
-                    alpha=params["alpha"]
+                    alpha=params["alpha"],
+                    cv_cluster_size=cv_cluster_size
                 )
             else:  # simulation
                 results = simulation_binary.power_binary_sim(
                     n_clusters=params["n_clusters"],
                     cluster_size=params["cluster_size"],
-                    icc=params["icc"],
+                    icc=icc,
                     p1=params["p1"],
                     p2=params["p2"],
                     alpha=params["alpha"],
                     nsim=params.get("nsim", 1000),
-                    seed=params.get("seed", 42)
+                    seed=params.get("seed", 42),
+                    cv_cluster_size=cv_cluster_size
                 )
+            
+            # Run sensitivity analysis if requested
+            if run_sensitivity:
+                for test_icc in icc_values:
+                    if method == "analytical":
+                        sens_result = analytical_binary.power_binary(
+                            n_clusters=params["n_clusters"],
+                            cluster_size=params["cluster_size"],
+                            icc=test_icc,
+                            p1=params["p1"],
+                            p2=params["p2"],
+                            alpha=params["alpha"],
+                            cv_cluster_size=cv_cluster_size
+                        )
+                    else:  # simulation
+                        sens_result = simulation_binary.power_binary_sim(
+                            n_clusters=params["n_clusters"],
+                            cluster_size=params["cluster_size"],
+                            icc=test_icc,
+                            p1=params["p1"],
+                            p2=params["p2"],
+                            alpha=params["alpha"],
+                            nsim=params.get("nsim", 1000),
+                            seed=params.get("seed", 42),
+                            cv_cluster_size=cv_cluster_size
+                        )
+                    sensitivity_results.append({
+                        "icc": test_icc,
+                        "power": sens_result["power"],
+                        "design_effect": sens_result["design_effect"]
+                    })
         
         elif calc_type == "Minimum Detectable Effect":
             if method == "analytical":
                 results = analytical_binary.min_detectable_effect_binary(
                     n_clusters=params["n_clusters"],
                     cluster_size=params["cluster_size"],
-                    icc=params["icc"],
+                    icc=icc,
                     p1=params["p1"],
                     power=params["power"],
-                    alpha=params["alpha"]
+                    alpha=params["alpha"],
+                    cv_cluster_size=cv_cluster_size,
+                    effect_measure=effect_measure
                 )
             else:  # simulation
                 results = simulation_binary.min_detectable_effect_binary_sim(
                     n_clusters=params["n_clusters"],
                     cluster_size=params["cluster_size"],
-                    icc=params["icc"],
+                    icc=icc,
                     p1=params["p1"],
                     power=params["power"],
                     alpha=params["alpha"],
                     nsim=params.get("nsim", 1000),
-                    seed=params.get("seed", 42)
+                    seed=params.get("seed", 42),
+                    cv_cluster_size=cv_cluster_size,
+                    effect_measure=effect_measure
                 )
+            
+            # Run sensitivity analysis if requested
+            if run_sensitivity:
+                for test_icc in icc_values:
+                    if method == "analytical":
+                        sens_result = analytical_binary.min_detectable_effect_binary(
+                            n_clusters=params["n_clusters"],
+                            cluster_size=params["cluster_size"],
+                            icc=test_icc,
+                            p1=params["p1"],
+                            power=params["power"],
+                            alpha=params["alpha"],
+                            cv_cluster_size=cv_cluster_size,
+                            effect_measure=effect_measure
+                        )
+                    else:  # simulation
+                        sens_result = simulation_binary.min_detectable_effect_binary_sim(
+                            n_clusters=params["n_clusters"],
+                            cluster_size=params["cluster_size"],
+                            icc=test_icc,
+                            p1=params["p1"],
+                            power=params["power"],
+                            alpha=params["alpha"],
+                            nsim=params.get("nsim", 1000),
+                            seed=params.get("seed", 42),
+                            cv_cluster_size=cv_cluster_size,
+                            effect_measure=effect_measure
+                        )
+                    sensitivity_results.append({
+                        "icc": test_icc,
+                        "mde": sens_result["mde"],
+                        "design_effect": sens_result["design_effect"]
+                    })
         
         # Add calculation method and design method to results
         results["design_method"] = "Cluster RCT"
+        results["calculation_method"] = method
         
+        # Add ICC scale information
+        results["icc_original"] = params["icc"]
+        results["icc_scale_original"] = icc_scale
+        if icc_scale == "Logit":
+            results["icc_converted"] = icc
+            results["icc_conversion_note"] = f"ICC converted from logit scale ({params['icc']}) to linear scale ({icc:.4f})"
+            
+        # Add sensitivity analysis results if available
+        if run_sensitivity:
+            results["sensitivity_analysis"] = {
+                "icc_range": [float(icc) for icc in icc_values],
+                "results": sensitivity_results
+            }
+            
         return results
     
     except Exception as e:

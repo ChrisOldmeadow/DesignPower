@@ -45,6 +45,23 @@ A comprehensive application for statistical power analysis and sample size calcu
 #### Continuity Correction
 - Optional continuity correction for improved accuracy in discrete data
 
+### Cluster RCT Advanced Features
+
+#### Unequal Cluster Sizes
+- Support for unequal cluster sizes through design effect adjustments
+- Coefficient of variation (CV) control for modeling cluster size variability
+- Automatic design effect adjustment based on CV
+
+#### ICC Features
+- Support for both linear and logit ICC scales with automatic conversion
+- ICC sensitivity analysis to explore result variations across different ICC values
+- Graphical visualization of ICC impact on power, sample size, and design effect
+
+#### Binary Outcome Enhancements
+- Multiple effect measure options (risk difference, risk ratio, odds ratio)
+- Small cluster validation with appropriate warnings
+- Comprehensive results with all effect measures calculated
+
 ### Single Arm Binary Outcome Designs
 
 #### A'Hern's Design

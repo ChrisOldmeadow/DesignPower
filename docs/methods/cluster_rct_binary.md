@@ -149,8 +149,63 @@ DesignPower allows users to specify the effect size using any of these measures 
 
 When the number of clusters is small, standard asymptotic methods may not be valid. DesignPower provides:
 - Warnings when the calculated number of clusters falls below recommended thresholds
-- Adjusted methods for small numbers of clusters
-- Recommendations for alternative analysis approaches
+
+## Implementation Notes
+
+### Unequal Cluster Size Support
+
+The DesignPower application implements support for unequal cluster sizes through the following mechanisms:
+
+1. **Design Effect Adjustment**: The theoretical design effect adjustment $DE = 1 + [(1 + CV^2) \times m - 1] \times \rho$ is implemented in the `design_effect_unequal` function in `cluster_utils.py`.
+
+2. **User Interface**: A coefficient of variation (CV) slider is provided in the advanced options section of the user interface, allowing users to specify the degree of cluster size variation.
+
+3. **Results**: The adjusted design effect is included in all calculation results, clearly showing how cluster size variation impacts the required sample size or power.
+
+### ICC Scale Conversion
+
+The implementation supports ICC values specified on different scales:
+
+1. **Linear to Logit Conversion**: Implemented in the `convert_icc_linear_to_logit` function, which converts ICC from the linear scale to the logit scale using the formula $\rho_{logit} = \rho_{linear} \times \frac{\pi(1-\pi)}{\sigma^2_{logit}}$, where $\sigma^2_{logit} = \pi^2/3$.
+
+2. **Logit to Linear Conversion**: Implemented in the `convert_icc_logit_to_linear` function, which performs the reverse conversion.
+
+3. **UI Integration**: Users can select between linear and logit scales in the advanced options, and the application handles the appropriate conversion for calculations.
+
+### Effect Measure Specification
+
+Multiple effect measures are supported in the implementation:
+
+1. **Risk Difference**: The absolute difference between proportions ($p_2 - p_1$).
+
+2. **Risk Ratio**: The ratio of proportions ($p_2 / p_1$).
+
+3. **Odds Ratio**: The ratio of odds ($\frac{p_2/(1-p_2)}{p1/(1-p1)}$).
+
+4. **Conversion Functions**: The `convert_effect_measures` function in `cluster_utils.py` handles conversion between these different effect measures.
+
+### Small Number of Clusters Validation
+
+The implementation includes validation for small numbers of clusters:
+
+1. **Validation Function**: The `validate_cluster_parameters` function in `cluster_utils.py` checks if the total number of clusters meets recommended thresholds.
+
+2. **Warning Messages**: Different warning levels are provided based on how far below the recommended threshold the specified number of clusters falls:
+   - Below 40 clusters: General warning about potential issues with statistical inference
+   - Below 30 clusters: Recommendation to use permutation tests or small-sample corrections
+   - Below 20 clusters: Strong caution about substantial risk of Type I error inflation
+
+3. **UI Integration**: Warnings are displayed prominently in the results section when applicable.
+
+### Sensitivity Analysis
+
+The implementation includes tools for ICC sensitivity analysis:
+
+1. **Range Specification**: Users can specify a range of ICC values to explore in the advanced options.
+
+2. **Visualization**: Results across the ICC range are displayed graphically, showing how power, sample size, or minimum detectable effect varies with different ICC values.
+
+3. **Interactive Results**: Tables and charts allow users to explore the sensitivity of results to ICC assumptions, supporting more robust study planning.
 
 ## References
 
