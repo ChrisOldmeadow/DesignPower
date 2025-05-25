@@ -172,7 +172,8 @@ def render_continuous_advanced_options():
                 min_value=100, 
                 max_value=10000,
                 step=100,
-                key="cluster_continuous_nsim"
+                key="cluster_continuous_nsim",
+                help="Total number of Monte-Carlo replicates to run. Larger values give more stable estimates at the cost of speed."
             )
         
         with col2:
@@ -181,8 +182,81 @@ def render_continuous_advanced_options():
                 value=42, 
                 min_value=1, 
                 max_value=99999,
-                key="cluster_continuous_seed"
+                key="cluster_continuous_seed",
+                help="Set a seed for reproducibility."
             )
+        
+        st.markdown("#### Analysis Model")
+        model_display = st.selectbox(
+            "Statistical Model Used to Analyse Each Simulated Trial",
+            [
+                "T-test (cluster-level)",
+                "Linear Mixed Model (REML)",
+                "GEE (Exchangeable)",
+                "Bayesian (Stan)"
+            ],
+            index=0,
+            key="cluster_continuous_model_select",
+            help="Choose the analysis model applied to each simulated dataset. The simple two-sample t-test analyses individual-level data ignoring clustering but with design-effect adjustment. Mixed models explicitly model random cluster intercepts and can provide more power when cluster counts are moderate to large. GEE provides marginal (population-averaged) inference and is robust to some model misspecification, but small-sample bias can be an issue."
+        )
+        model_map = {
+            "T-test (cluster-level)": "ttest",
+            "Linear Mixed Model (REML)": "mixedlm",
+            "GEE (Exchangeable)": "gee",
+            "Bayesian (Stan)": "bayes",
+        }
+        advanced_params["analysis_model"] = model_map[model_display]
+        
+        # Model-specific options
+        if advanced_params["analysis_model"] == "mixedlm":
+            advanced_params["use_satterthwaite"] = st.checkbox(
+                "Use Satterthwaite approximation for degrees of freedom",
+                value=False,
+                key="cluster_continuous_satt",
+                help="Applies Satterthwaite adjustment which can improve type-I error control with a moderate number of clusters (< ~40)."
+            )
+            # Optimizer selection
+            optim = st.selectbox(
+                "LMM Optimizer",
+                ["auto", "lbfgs", "powell", "cg", "bfgs", "newton", "nm"],
+                index=0,
+                key="cluster_continuous_lmm_opt",
+                help="Choose the optimizer for the mixed-model fit. 'auto' tries several in order until one converges."
+            )
+            advanced_params["lmm_method"] = optim
+            advanced_params["lmm_reml"] = st.checkbox(
+                "Use REML (vs ML)",
+                value=True,
+                key="cluster_continuous_lmm_reml",
+                help="Restricted maximum likelihood is typically preferred for variance component estimation."
+            )
+        elif advanced_params["analysis_model"] == "gee":
+            advanced_params["use_bias_correction"] = st.checkbox(
+                "Use small-sample bias correction (Mancl & DeRouen)",
+                value=False,
+                key="cluster_continuous_bias_corr",
+                help="Bias-reduced sandwich covariance estimator to mitigate downward bias when the number of clusters is small (< ~50)."
+            )
+        elif advanced_params["analysis_model"] == "bayes":
+            colb1, colb2 = st.columns(2)
+            with colb1:
+                advanced_params["bayes_draws"] = st.number_input(
+                    "Posterior draws",
+                    min_value=100,
+                    max_value=5000,
+                    value=500,
+                    step=100,
+                    key="cluster_continuous_bayes_draws",
+                )
+            with colb2:
+                advanced_params["bayes_warmup"] = st.number_input(
+                    "Warm-up iterations",
+                    min_value=100,
+                    max_value=5000,
+                    value=500,
+                    step=100,
+                    key="cluster_continuous_bayes_warmup",
+                )
     
     return advanced_params
 
@@ -473,7 +547,14 @@ def calculate_cluster_continuous(params):
                     power=params["power"],
                     alpha=params["alpha"],
                     nsim=params.get("nsim", 1000),
-                    seed=params.get("seed", 42)
+                    seed=params.get("seed", 42),
+                    analysis_model=params.get("analysis_model", "ttest"),
+                    use_satterthwaite=params.get("use_satterthwaite", False),
+                    use_bias_correction=params.get("use_bias_correction", False),
+                    bayes_draws=params.get("bayes_draws", 500),
+                    bayes_warmup=params.get("bayes_warmup", 500),
+                    lmm_method=params.get("lmm_method", "auto"),
+                    lmm_reml=params.get("lmm_reml", True),
                 )
         
         elif calc_type == "Power":
@@ -488,6 +569,11 @@ def calculate_cluster_continuous(params):
                     alpha=params["alpha"]
                 )
             else:  # simulation
+                progress_bar = st.progress(0.0)
+                
+                def _update_progress(i, total):
+                    progress_bar.progress(i / total)
+                
                 results = simulation_continuous.power_continuous_sim(
                     n_clusters=params["n_clusters"],
                     cluster_size=params["cluster_size"],
@@ -497,8 +583,17 @@ def calculate_cluster_continuous(params):
                     std_dev=params["std_dev"],
                     alpha=params["alpha"],
                     nsim=params.get("nsim", 1000),
-                    seed=params.get("seed", 42)
+                    seed=params.get("seed", 42),
+                    analysis_model=params.get("analysis_model", "ttest"),
+                    use_satterthwaite=params.get("use_satterthwaite", False),
+                    use_bias_correction=params.get("use_bias_correction", False),
+                    bayes_draws=params.get("bayes_draws", 500),
+                    bayes_warmup=params.get("bayes_warmup", 500),
+                    lmm_method=params.get("lmm_method", "auto"),
+                    lmm_reml=params.get("lmm_reml", True),
+                    progress_callback=_update_progress,
                 )
+                progress_bar.empty()
         
         elif calc_type == "Minimum Detectable Effect":
             if method == "analytical":
@@ -519,7 +614,14 @@ def calculate_cluster_continuous(params):
                     power=params["power"],
                     alpha=params["alpha"],
                     nsim=params.get("nsim", 1000),
-                    seed=params.get("seed", 42)
+                    seed=params.get("seed", 42),
+                    analysis_model=params.get("analysis_model", "ttest"),
+                    use_satterthwaite=params.get("use_satterthwaite", False),
+                    use_bias_correction=params.get("use_bias_correction", False),
+                    bayes_draws=params.get("bayes_draws", 500),
+                    bayes_warmup=params.get("bayes_warmup", 500),
+                    lmm_method=params.get("lmm_method", "auto"),
+                    lmm_reml=params.get("lmm_reml", True),
                 )
         
         # Add calculation method and design method to results
