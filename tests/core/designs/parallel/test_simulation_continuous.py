@@ -90,5 +90,173 @@ class TestSimulationContinuous(unittest.TestCase):
         # Results should be within a reasonable margin
         self.assertLess(abs(analytical_result["power"] - sim_result["power"]), 0.1)
 
+    def test_power_continuous_non_inferiority_sim(self):
+        """Test simulation-based power for non-inferiority continuous outcomes."""
+        result = simulation_continuous.power_continuous_non_inferiority_sim(
+            n1=50, 
+            n2=50, 
+            mean1_control=10, 
+            non_inferiority_margin=2, 
+            sd1=3, 
+            sd2=3, 
+            alpha=0.05, 
+            assumed_difference=0.5, # true_mean2 = 10.5
+            direction="lower", 
+            nsim=2000, # Increased for stability
+            seed=42
+        )
+        # Analytical power for these parameters is ~0.994
+        # Expect simulation power to be close, e.g., within [0.97, 1.0]
+        # Allow a slightly wider margin due to simulation variance
+        self.assertTrue(0.96 <= result["power"] <= 1.0, 
+                        msg=f"Simulated power {result['power']} out of expected range [0.96, 1.0]")
+
+    def test_sample_size_continuous_non_inferiority_sim(self):
+        """Test simulation-based sample size for non-inferiority continuous outcomes."""
+        # Analytical sample size for similar params (margin=2, sd=3, power=0.8, alpha=0.05, diff=0.5) is ~18.
+        # The simulation function iterates to find sample size.
+        result = simulation_continuous.sample_size_continuous_non_inferiority_sim(
+            non_inferiority_margin=2,
+            std_dev=3,
+            power=0.8,
+            alpha=0.05,
+            assumed_difference=0.5,
+            direction="lower",
+            nsim=500, # Number of sims per sample size step in the search
+            min_n=10,
+            max_n=40, # Search range for n1
+            step=2      # Step for n1 search
+            # allocation_ratio defaults to 1.0
+            # repeated_measures defaults to False
+        )
+
+        # Expect sample_size_1 to be around 18. Allow a reasonable range due to simulation.
+        # The function returns the first n that meets or exceeds power.
+        self.assertTrue(14 <= result["sample_size_1"] <= 26, 
+                        msg=f"Simulated sample_size_1 {result['sample_size_1']} out of expected range [14, 26]")
+        self.assertEqual(result["sample_size_1"], result["sample_size_2"], 
+                         msg="Sample sizes for group 1 and 2 should be equal with default allocation_ratio.")
+
+    def test_simulate_continuous_non_inferiority(self):
+        """Test the simulate_continuous_non_inferiority helper function."""
+        params = {
+            "n1": 50, 
+            "n2": 50, 
+            "mean1_control": 10, 
+            "non_inferiority_margin": 2, 
+            "sd1": 3, 
+            "sd2": 3, 
+            "alpha": 0.05, 
+            "assumed_difference": 0.5, # true_mean2 = 10.5
+            "direction": "lower", 
+            "nsim": 100, # Keep nsim low for test speed
+            "seed": 123
+        }
+
+        # Call the function that returns a list of rejections
+        sim_results = simulation_continuous.simulate_continuous_non_inferiority(**params)
+
+        self.assertIn("rejections", sim_results)
+        self.assertIn("power", sim_results)
+        self.assertEqual(len(sim_results["rejections"]), params["nsim"])
+        
+        # Verify power calculation from rejections list
+        calculated_power = sum(sim_results["rejections"]) / params["nsim"]
+        self.assertAlmostEqual(sim_results["power"], calculated_power, places=5)
+
+        # Compare with power from power_continuous_non_inferiority_sim
+        # Use a slightly larger nsim for the direct power calculation for stability
+        power_params = params.copy()
+        power_params["nsim"] = 500 # Use more sims for the power function for stability
+        power_direct_result = simulation_continuous.power_continuous_non_inferiority_sim(**power_params)
+        
+        # Power from the list of rejections (with fewer sims) should be in the ballpark
+        # of the more stable direct power calculation.
+        # Allow a reasonable tolerance due to different nsim and inherent variability.
+        self.assertLess(abs(sim_results["power"] - power_direct_result["power"]), 0.15,
+                        msg=f"Power from rejections {sim_results['power']:.4f} vs direct power {power_direct_result['power']:.4f}")
+
+    def test_power_continuous_non_inferiority_sim_repeated_measures_change_score(self):
+        """Test power for non-inferiority with repeated measures (change score)."""
+        # Higher correlation should lead to higher power due to reduced effective SD
+        params_high_corr = {
+            "n1": 50, "n2": 50, "mean1_control": 10, "non_inferiority_margin": 1,
+            "sd1": 3, "alpha": 0.05, "assumed_difference": 0.2, "direction": "lower",
+            "nsim": 1000, "seed": 420,
+            "repeated_measures": True, "correlation": 0.8, "analysis_method": "change_score"
+        }
+        result_high_corr = simulation_continuous.power_continuous_non_inferiority_sim(**params_high_corr)
+        self.assertTrue(0.1 < result_high_corr["power"] <= 1.0)
+        self.assertTrue(result_high_corr["repeated_measures"])
+        self.assertEqual(result_high_corr["correlation"], 0.8)
+        self.assertEqual(result_high_corr["analysis_method"], "change_score")
+        self.assertIn("sim_sd1_effective", result_high_corr)
+        self.assertIn("sim_sd2_effective", result_high_corr)
+        # Effective SD for change score: sd * sqrt(2*(1-corr)) = 3 * sqrt(2*(1-0.8)) = 3 * sqrt(0.4) approx 1.897
+        self.assertAlmostEqual(result_high_corr["sim_sd1_effective"], 3 * np.sqrt(2 * (1 - 0.8)), places=3)
+
+        params_low_corr = {**params_high_corr, "correlation": 0.2, "seed": 421}
+        result_low_corr = simulation_continuous.power_continuous_non_inferiority_sim(**params_low_corr)
+        self.assertTrue(0.0 < result_low_corr["power"] <= 1.0)
+        self.assertLess(result_low_corr["power"], result_high_corr["power"] + 0.1) # Allow some noise
+
+    def test_power_continuous_non_inferiority_sim_repeated_measures_ancova(self):
+        """Test power for non-inferiority with repeated measures (ANCOVA)."""
+        params_high_corr = {
+            "n1": 50, "n2": 50, "mean1_control": 10, "non_inferiority_margin": 1,
+            "sd1": 3, "alpha": 0.05, "assumed_difference": 0.2, "direction": "lower",
+            "nsim": 1000, "seed": 422,
+            "repeated_measures": True, "correlation": 0.8, "analysis_method": "ancova"
+        }
+        result_high_corr = simulation_continuous.power_continuous_non_inferiority_sim(**params_high_corr)
+        self.assertTrue(0.1 < result_high_corr["power"] <= 1.0)
+        self.assertTrue(result_high_corr["repeated_measures"])
+        self.assertEqual(result_high_corr["analysis_method"], "ancova")
+        # Effective SD for ANCOVA: sd * sqrt(1-corr^2) = 3 * sqrt(1-0.8^2) = 3 * sqrt(1-0.64) = 3 * sqrt(0.36) = 3 * 0.6 = 1.8
+        self.assertAlmostEqual(result_high_corr["sim_sd1_effective"], 3 * np.sqrt(1 - 0.8**2), places=3)
+
+        params_low_corr = {**params_high_corr, "correlation": 0.2, "seed": 423}
+        result_low_corr = simulation_continuous.power_continuous_non_inferiority_sim(**params_low_corr)
+        self.assertTrue(0.0 < result_low_corr["power"] <= 1.0)
+        self.assertLess(result_low_corr["power"], result_high_corr["power"] + 0.1)
+
+    def test_sample_size_continuous_non_inferiority_sim_repeated_measures_change_score(self):
+        """Test sample size for non-inferiority with repeated measures (change score)."""
+        # Higher correlation should lead to smaller sample size
+        params_high_corr = {
+            "non_inferiority_margin": 1, "std_dev": 3, "power": 0.8, "alpha": 0.05,
+            "assumed_difference": 0.1, "direction": "lower", "nsim": 200, # Lower nsim for speed
+            "min_n": 10, "max_n": 150, "step": 5,
+            "repeated_measures": True, "correlation": 0.7, "method": "change_score"
+        }
+        result_high_corr = simulation_continuous.sample_size_continuous_non_inferiority_sim(**params_high_corr)
+        self.assertTrue(10 <= result_high_corr["sample_size_1"] <= 150)
+        self.assertTrue(result_high_corr["repeated_measures"])
+        self.assertEqual(result_high_corr["correlation"], 0.7)
+        self.assertEqual(result_high_corr["analysis_method"], "change_score")
+
+        params_low_corr = {**params_high_corr, "correlation": 0.1}
+        result_low_corr = simulation_continuous.sample_size_continuous_non_inferiority_sim(**params_low_corr)
+        self.assertTrue(10 <= result_low_corr["sample_size_1"] <= 150)
+        self.assertGreater(result_low_corr["sample_size_1"], result_high_corr["sample_size_1"] - params_high_corr["step"] * 2) # Allow some noise/step effects
+
+    def test_sample_size_continuous_non_inferiority_sim_repeated_measures_ancova(self):
+        """Test sample size for non-inferiority with repeated measures (ANCOVA)."""
+        params_high_corr = {
+            "non_inferiority_margin": 1, "std_dev": 3, "power": 0.8, "alpha": 0.05,
+            "assumed_difference": 0.1, "direction": "lower", "nsim": 200, # Lower nsim for speed
+            "min_n": 10, "max_n": 150, "step": 5,
+            "repeated_measures": True, "correlation": 0.7, "method": "ancova"
+        }
+        result_high_corr = simulation_continuous.sample_size_continuous_non_inferiority_sim(**params_high_corr)
+        self.assertTrue(10 <= result_high_corr["sample_size_1"] <= 150)
+        self.assertTrue(result_high_corr["repeated_measures"])
+        self.assertEqual(result_high_corr["analysis_method"], "ancova")
+
+        params_low_corr = {**params_high_corr, "correlation": 0.1}
+        result_low_corr = simulation_continuous.sample_size_continuous_non_inferiority_sim(**params_low_corr)
+        self.assertTrue(10 <= result_low_corr["sample_size_1"] <= 150)
+        self.assertGreater(result_low_corr["sample_size_1"], result_high_corr["sample_size_1"] - params_high_corr["step"] * 2)
+
 if __name__ == '__main__':
     unittest.main()

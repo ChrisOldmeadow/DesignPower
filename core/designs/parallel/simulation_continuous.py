@@ -266,6 +266,144 @@ def simulate_continuous_non_inferiority(n1, n2, non_inferiority_margin, std_dev,
         "analysis_method": method if repeated_measures else None
     }
 
+def simulate_continuous_non_inferiority(
+    n1, n2, mean1_control, non_inferiority_margin, 
+    sd1, sd2=None, alpha=0.05, 
+    assumed_difference=0.0, direction="lower", 
+    nsim=1000, seed=None,
+    repeated_measures=False, correlation=0.5,
+    analysis_method="change_score"
+):
+    """
+    Simulate multiple non-inferiority trials for continuous outcomes.
+
+    This function repeatedly calls _simulate_single_continuous_non_inferiority_trial
+    to generate a list of outcomes (whether non-inferiority was established)
+    for each simulated trial.
+
+    Parameters
+    ----------
+    n1 : int
+        Sample size in group 1 (control/standard group).
+    n2 : int
+        Sample size in group 2 (treatment group).
+    mean1_control : float
+        Mean of the control/standard group.
+    non_inferiority_margin : float
+        Non-inferiority margin.
+    sd1 : float
+        Standard deviation of group 1. If `repeated_measures` is True,
+        this is treated as the standard deviation of the raw outcome for group 1.
+    sd2 : float, optional
+        Standard deviation of group 2. If `repeated_measures` is True,
+        this is treated as the standard deviation of the raw outcome for group 2.
+        If None, assumes equal to sd1.
+    alpha : float, optional
+        Significance level (one-sided), by default 0.05.
+    assumed_difference : float, optional
+        Assumed true difference (mean2 - mean1_control), by default 0.0.
+        This defines the mean of group 2 as mean1_control + assumed_difference.
+    direction : str, optional
+        Direction of non-inferiority: "lower" or "upper", by default "lower".
+    nsim : int, optional
+        Number of simulations, by default 1000.
+    seed : int, optional
+        Random seed for reproducibility, by default None.
+    repeated_measures : bool, optional
+        Whether to simulate a repeated measures design, by default False.
+        If True, `sd1` and `sd2` are treated as outcome SDs, and `correlation`
+        and `analysis_method` are used to calculate effective SDs for the simulation.
+    correlation : float, optional
+        Correlation between baseline and follow-up for repeated measures, by default 0.5.
+        Only used if `repeated_measures` is True.
+    analysis_method : str, optional
+        Analysis method for repeated measures ('change_score' or 'ancova'), by default "change_score".
+        Only used if `repeated_measures` is True.
+
+    Returns
+    -------
+    dict
+        Dictionary containing:
+        - 'rejections': A list of booleans (True if non-inferiority established).
+        - 'power': The proportion of trials where non-inferiority was established.
+        - Plus all input parameters, including effective SDs if repeated_measures is True.
+    """
+    # Validate inputs
+    if not isinstance(n1, int) or n1 <= 0:
+        raise ValueError("n1 must be a positive integer.")
+    if not isinstance(n2, int) or n2 <= 0:
+        raise ValueError("n2 must be a positive integer.")
+    # sd1 and sd2 positivity is checked later, after potential effective_sd calculation
+    if not (isinstance(non_inferiority_margin, (int, float)) and non_inferiority_margin > 0):
+        raise ValueError("Non-inferiority margin must be positive.")
+    if not (isinstance(alpha, float) and 0 < alpha < 1):
+        raise ValueError("Alpha must be between 0 and 1.")
+    if not isinstance(nsim, int) or nsim <= 0:
+        raise ValueError("Number of simulations (nsim) must be a positive integer.")
+    if direction not in ["lower", "upper"]:
+        raise ValueError("Direction must be 'lower' or 'upper'.")
+
+    # Determine standard deviations for simulation
+    sim_sd1 = sd1
+    sim_sd2 = sd2 if sd2 is not None else sd1
+
+    if repeated_measures:
+        if not (isinstance(correlation, float) and 0 <= correlation <= 1):
+            raise ValueError("Correlation must be between 0 and 1 for repeated measures.")
+        if analysis_method not in ["change_score", "ancova"]:
+            raise ValueError("Invalid analysis_method for repeated measures. Choose 'change_score' or 'ancova'.")
+        
+        # sd1 and sd2 are treated as sd_outcome1 and sd_outcome2
+        sd_outcome1 = sd1
+        sd_outcome2 = sd2 if sd2 is not None else sd1
+
+        sim_sd1 = _calculate_effective_sd(sd_outcome1, correlation, analysis_method)
+        sim_sd2 = _calculate_effective_sd(sd_outcome2, correlation, analysis_method)
+    else:
+        # Ensure sd1 and sd2 are positive if not repeated measures (already validated for repeated measures inside _calculate_effective_sd)
+        if not (isinstance(sim_sd1, (int, float)) and sim_sd1 > 0):
+             raise ValueError("sd1 must be positive.")
+        if not (isinstance(sim_sd2, (int, float)) and sim_sd2 > 0):
+             raise ValueError("sd2 must be positive if provided, or sd1 must be positive if sd2 is None.")
+
+    true_mean1 = mean1_control
+    true_mean2 = mean1_control + assumed_difference
+
+    rng = np.random.default_rng(seed)
+    rejections = []
+    for _ in range(nsim):
+        rejections.append(
+            _simulate_single_continuous_non_inferiority_trial(
+                n1, n2, true_mean1, true_mean2, 
+                sim_sd1, sim_sd2, non_inferiority_margin, 
+                alpha, direction, rng
+            )
+        )
+            
+    power = sum(rejections) / nsim
+
+    return {
+        'rejections': rejections,
+        'power': power,
+        'n1': n1,
+        'n2': n2,
+        'mean1_control': mean1_control,
+        'assumed_difference': assumed_difference,
+        'true_mean2': true_mean2,
+        'sd1': sd1, # Original sd1 input (outcome sd1 if repeated_measures)
+        'sd2': sd2, # Original sd2 input (outcome sd2 if repeated_measures)
+        'sim_sd1_effective': sim_sd1 if repeated_measures else sd1,
+        'sim_sd2_effective': sim_sd2 if repeated_measures else (sd2 if sd2 is not None else sd1),
+        'non_inferiority_margin': non_inferiority_margin,
+        'alpha': alpha,
+        'direction': direction,
+        'nsim': nsim,
+        'seed': seed,
+        'repeated_measures': repeated_measures,
+        'correlation': correlation if repeated_measures else None,
+        'analysis_method': analysis_method if repeated_measures else None
+    }
+
 
 # ===== Power and Sample Size Functions =====
 
@@ -646,7 +784,9 @@ def sample_size_continuous_non_inferiority_sim(non_inferiority_margin, std_dev, 
     non_inferiority_margin : float
         Non-inferiority margin (must be positive)
     std_dev : float
-        Standard deviation of the outcome
+        Standard deviation of the outcome. If `repeated_measures` is True,
+        this is treated as the standard deviation of the raw outcome for both groups
+        before calculating the effective standard deviation based on `correlation` and `method`.
     power : float, optional
         Desired power, by default 0.8
     alpha : float, optional
@@ -675,7 +815,9 @@ def sample_size_continuous_non_inferiority_sim(non_inferiority_margin, std_dev, 
     Returns
     -------
     dict
-        Dictionary containing the required sample sizes
+        Dictionary containing the required sample sizes (`sample_size_1`, `sample_size_2`, `n_total`),
+        the `achieved_power` for these sample sizes, and echoes input parameters including
+        `repeated_measures`, `correlation`, and `analysis_method` (if `repeated_measures` is True).
     """
     # Validate inputs
     if std_dev <= 0:
@@ -697,24 +839,26 @@ def sample_size_continuous_non_inferiority_sim(non_inferiority_margin, std_dev, 
         iterations += 1
         # Calculate n2 based on allocation ratio
         n2 = math.ceil(n1 * allocation_ratio)
-        
+
         # Simulate trials with current sample sizes
+        # The 'std_dev' parameter for sample_size_... is the sd_outcome for repeated measures
         sim_result = simulate_continuous_non_inferiority(
             n1=n1,
             n2=n2,
+            mean1_control=0, # Reference mean for control, effect captured by assumed_difference
             non_inferiority_margin=non_inferiority_margin,
-            std_dev=std_dev,
-            nsim=nsim,
+            sd1=std_dev,     # This is sd_outcome1 for repeated measures
+            sd2=std_dev,     # This is sd_outcome2 for repeated measures
             alpha=alpha,
             assumed_difference=assumed_difference,
             direction=direction,
+            nsim=nsim,
+            seed=None, # The sample size function doesn't currently manage a seed to pass here
             repeated_measures=repeated_measures,
             correlation=correlation,
-            method=method
+            analysis_method=method
         )
-        
-        # Extract achieved power
-        achieved_power = sim_result["empirical_power"]
+        achieved_power = sim_result["power"]
         
         # If power is sufficient, break the loop
         if achieved_power >= power:
@@ -735,17 +879,20 @@ def sample_size_continuous_non_inferiority_sim(non_inferiority_margin, std_dev, 
         sim_result = simulate_continuous_non_inferiority(
             n1=n1,
             n2=n2,
+            mean1_control=0, # Reference mean for control, effect captured by assumed_difference
             non_inferiority_margin=non_inferiority_margin,
-            std_dev=std_dev,
-            nsim=nsim,
+            sd1=std_dev,     # This is sd_outcome1 for repeated measures
+            sd2=std_dev,     # This is sd_outcome2 for repeated measures
             alpha=alpha,
             assumed_difference=assumed_difference,
             direction=direction,
+            nsim=nsim,
+            seed=None, # The sample size function doesn't currently manage a seed to pass here
             repeated_measures=repeated_measures,
             correlation=correlation,
-            method=method
+            analysis_method=method
         )
-        achieved_power = sim_result["empirical_power"]
+        achieved_power = sim_result["power"]
     
     # Return result dictionary
     return {
@@ -766,3 +913,251 @@ def sample_size_continuous_non_inferiority_sim(non_inferiority_margin, std_dev, 
         "correlation": correlation if repeated_measures else None,
         "analysis_method": method if repeated_measures else None
     }
+
+
+def power_continuous_non_inferiority_sim(n1, n2, mean1_control, non_inferiority_margin, 
+                                         sd1, sd2=None, alpha=0.05, 
+                                         assumed_difference=0.0, direction="lower", 
+                                         nsim=1000, seed=None,
+                                         repeated_measures=False, correlation=0.5,
+                                         analysis_method="change_score"):
+    """
+    Calculate power for non-inferiority test with continuous outcome using simulation.
+
+    Parameters
+    ----------
+    n1 : int
+        Sample size in group 1 (control/standard group).
+    n2 : int
+        Sample size in group 2 (treatment group).
+    mean1_control : float
+        Mean of the control/standard group.
+    non_inferiority_margin : float
+        Non-inferiority margin (must be positive).
+    sd1 : float
+        Standard deviation of group 1. If `repeated_measures` is True,
+        this is treated as the standard deviation of the raw outcome for group 1.
+    sd2 : float, optional
+        Standard deviation of group 2. If `repeated_measures` is True,
+        this is treated as the standard deviation of the raw outcome for group 2.
+        If None, assumes equal to sd1.
+    alpha : float, optional
+        Significance level (one-sided for non-inferiority), by default 0.05.
+    assumed_difference : float, optional
+        Assumed true difference (mean2 - mean1_control), by default 0.0.
+    direction : str, optional
+        Direction of non-inferiority test ("lower" or "upper"), by default "lower".
+        "lower": H1 is mean2 - mean1 > -margin (treatment is not worse).
+        "upper": H1 is mean2 - mean1 <  margin (treatment is not better).
+    nsim : int, optional
+        Number of simulations, by default 1000.
+    seed : int, optional
+        Random seed for reproducibility, by default None.
+    repeated_measures : bool, optional
+        Whether to simulate a repeated measures design, by default False.
+        If True, `sd1` and `sd2` are treated as outcome SDs, and `correlation`
+        and `analysis_method` are used to calculate effective SDs for the simulation.
+    correlation : float, optional
+        Correlation between baseline and follow-up for repeated measures, by default 0.5.
+        Only used if `repeated_measures` is True.
+    analysis_method : str, optional
+        Analysis method for repeated measures ('change_score' or 'ancova'), by default "change_score".
+        Only used if `repeated_measures` is True.
+
+    Returns
+    -------
+    dict
+        Dictionary containing the estimated power and simulation details.
+        If `repeated_measures` is True, also includes `effective_sd1` and `effective_sd2`.
+    """
+    # Validate inputs
+    if not isinstance(n1, int) or n1 <= 0:
+        raise ValueError("n1 must be a positive integer.")
+    if not isinstance(n2, int) or n2 <= 0:
+        raise ValueError("n2 must be a positive integer.")
+    if not (isinstance(sd1, (int, float)) and sd1 > 0):
+        raise ValueError("sd1 must be positive.")
+    if sd2 is not None and not (isinstance(sd2, (int, float)) and sd2 > 0):
+        raise ValueError("sd2 must be positive if provided.")
+    if not (isinstance(non_inferiority_margin, (int, float)) and non_inferiority_margin > 0):
+        raise ValueError("Non-inferiority margin must be positive.")
+    if not (isinstance(alpha, float) and 0 < alpha < 1):
+        raise ValueError("Alpha must be between 0 and 1.")
+    if not isinstance(nsim, int) or nsim <= 0:
+        raise ValueError("Number of simulations (nsim) must be a positive integer.")
+    if direction not in ["lower", "upper"]:
+        raise ValueError("Direction must be 'lower' or 'upper'.")
+
+    # Determine standard deviations for simulation
+    sim_sd1 = sd1
+    sim_sd2 = sd2 if sd2 is not None else sd1
+
+    if repeated_measures:
+        if not (isinstance(correlation, float) and 0 <= correlation <= 1):
+            raise ValueError("Correlation must be between 0 and 1 for repeated measures.")
+        if analysis_method not in ["change_score", "ancova"]:
+            raise ValueError("Invalid analysis_method for repeated measures. Choose 'change_score' or 'ancova'.")
+        
+        # sd1 and sd2 are treated as sd_outcome1 and sd_outcome2
+        sd_outcome1 = sd1
+        sd_outcome2 = sd2 if sd2 is not None else sd1
+
+        sim_sd1 = _calculate_effective_sd(sd_outcome1, correlation, analysis_method)
+        sim_sd2 = _calculate_effective_sd(sd_outcome2, correlation, analysis_method)
+    else:
+        # Ensure sd1 and sd2 are positive if not repeated measures (already validated for repeated measures inside _calculate_effective_sd)
+        if not (isinstance(sim_sd1, (int, float)) and sim_sd1 > 0):
+             raise ValueError("sd1 must be positive.")
+        if not (isinstance(sim_sd2, (int, float)) and sim_sd2 > 0):
+             raise ValueError("sd2 must be positive.")
+
+    true_mean1 = mean1_control
+    true_mean2 = mean1_control + assumed_difference
+    rng = np.random.default_rng(seed)
+    
+    non_inferior_count = 0
+    for _ in range(nsim):
+        if _simulate_single_continuous_non_inferiority_trial(
+            n1, n2, true_mean1, true_mean2, 
+            sim_sd1, sim_sd2, non_inferiority_margin, 
+            alpha, direction, rng):
+            non_inferior_count += 1
+            
+    empirical_power = non_inferior_count / nsim
+
+    return {
+        "power": empirical_power,
+        "n1": n1,
+        "n2": n2,
+        "mean1_control": mean1_control,
+        "assumed_difference": assumed_difference,
+        "true_mean2": true_mean2,
+        "sd1": sd1, # Original sd1 input (outcome sd1 if repeated_measures)
+        "sd2": sd2, # Original sd2 input (outcome sd2 if repeated_measures)
+        "sim_sd1_effective": sim_sd1 if repeated_measures else sd1, # Effective SD used in simulation for group 1
+        "sim_sd2_effective": sim_sd2 if repeated_measures else (sd2 if sd2 is not None else sd1), # Effective SD used in simulation for group 2
+        "non_inferiority_margin": non_inferiority_margin,
+        "alpha": alpha,
+        "direction": direction,
+        "simulations": nsim,
+        "seed": seed,
+        "repeated_measures": repeated_measures,
+        "correlation": correlation if repeated_measures else None,
+        "analysis_method": analysis_method if repeated_measures else None
+    }
+
+
+# ===== Helper for Repeated Measures Standard Deviation =====
+
+def _calculate_effective_sd(sd_outcome, correlation, analysis_method):
+    """
+    Calculate the effective standard deviation for repeated measures designs.
+
+    Parameters
+    ----------
+    sd_outcome : float
+        Standard deviation of the raw outcome measure.
+    correlation : float
+        Correlation between baseline and follow-up measurements.
+    analysis_method : str
+        The analysis method ('change_score' or 'ancova').
+
+    Returns
+    -------
+    float
+        The effective standard deviation.
+
+    Raises
+    ------
+    ValueError
+        If an invalid analysis_method is provided.
+    """
+    if not (0 <= correlation <= 1):
+        raise ValueError("Correlation must be between 0 and 1.")
+    if sd_outcome <= 0:
+        raise ValueError("sd_outcome must be positive.")
+
+    if analysis_method == "change_score":
+        # For change score, SD_change = SD_outcome * sqrt(2 * (1 - correlation))
+        # Assumes SD is same at baseline and follow-up for this calculation.
+        effective_sd = sd_outcome * math.sqrt(2 * (1 - correlation))
+    elif analysis_method == "ancova":
+        # For ANCOVA, SD_adjusted = SD_outcome * sqrt(1 - correlation^2)
+        effective_sd = sd_outcome * math.sqrt(1 - correlation**2)
+    else:
+        raise ValueError("Invalid analysis_method. Choose 'change_score' or 'ancova'.")
+    
+    # Effective SD cannot be zero unless sd_outcome is zero (handled) or correlation is 1 (for change_score)
+    # or correlation is 1 (for ancova, if sd_outcome > 0 then effective_sd > 0 unless correlation is exactly 1)
+    # A very small positive value is better than zero if correlation is exactly 1 for ANCOVA to avoid division by zero issues later.
+    # However, the formulas naturally handle this. If effective_sd is 0, it implies perfect correlation and no variability in change/adjusted scores.
+    return max(effective_sd, 1e-9) # Ensure effective_sd is not exactly zero to avoid potential division by zero if used as a divisor.
+
+
+# ===== Helper for Welch-Satterthwaite Degrees of Freedom =====
+def _calculate_welch_satterthwaite_df(v1, n1, v2, n2):
+    """Calculate Welch-Satterthwaite degrees of freedom."""
+    if n1 < 2 or n2 < 2: # Variances are undefined or df calculation breaks
+        return max(1, n1 + n2 - 2) # Fallback, though NI typically has n >= 2
+    
+    numerator = (v1 / n1 + v2 / n2)**2
+    denominator = ((v1 / n1)**2 / (n1 - 1)) + ((v2 / n2)**2 / (n2 - 1))
+    if denominator == 0:
+        return n1 + n2 - 2 # Avoid division by zero, fallback to pooled df
+    return numerator / denominator
+
+# ===== Simulation Core for Non-Inferiority Power =====
+def _simulate_single_continuous_non_inferiority_trial(n1, n2, true_mean1, true_mean2, 
+                                                      sd1, sd2, non_inferiority_margin, 
+                                                      alpha_one_sided, direction, rng):
+    """Simulates a single non-inferiority trial for continuous outcomes."""
+    sample1 = rng.normal(loc=true_mean1, scale=sd1, size=n1)
+    sample2 = rng.normal(loc=true_mean2, scale=sd2, size=n2)
+
+    if n1 < 2 or n2 < 2: # Need at least 2 observations for variance
+        return False
+
+    obs_mean1 = np.mean(sample1)
+    obs_var1 = np.var(sample1, ddof=1)
+    obs_mean2 = np.mean(sample2)
+    obs_var2 = np.var(sample2, ddof=1)
+
+    obs_diff = obs_mean2 - obs_mean1
+    
+    # Handle cases where variance might be zero (e.g., all sample values are identical)
+    if obs_var1 < 1e-9: obs_var1 = 0 # Treat extremely small variance as zero
+    if obs_var2 < 1e-9: obs_var2 = 0
+    
+    # If both variances are zero
+    if obs_var1 == 0 and obs_var2 == 0:
+        # If means are identical, se_diff is 0. If different, se_diff is 0 but diff is not.
+        # This scenario implies no variability, outcome is deterministic.
+        if direction == "lower":
+            return obs_diff > -non_inferiority_margin
+        else: # upper
+            return obs_diff < non_inferiority_margin
+
+    se_diff = np.sqrt(obs_var1 / n1 + obs_var2 / n2)
+    if se_diff == 0: # Should be caught by var checks, but as a safeguard
+         if direction == "lower":
+            return obs_diff > -non_inferiority_margin
+         else: # upper
+            return obs_diff < non_inferiority_margin
+
+    df = _calculate_welch_satterthwaite_df(obs_var1, n1, obs_var2, n2)
+
+    p_value = -1 # Initialize
+    if direction == "lower": # H1: mean2 - mean1 > -margin
+        # We want to show treatment is not worse than control by more than margin
+        # Test statistic for (obs_diff - (-non_inferiority_margin)) / se_diff
+        t_stat = (obs_diff - (-non_inferiority_margin)) / se_diff
+        p_value = stats.t.sf(t_stat, df) # Survival function (1 - cdf)
+    elif direction == "upper": # H1: mean2 - mean1 < margin
+        # We want to show treatment is not better than control by more than margin
+        # Test statistic for (obs_diff - non_inferiority_margin) / se_diff
+        t_stat = (obs_diff - non_inferiority_margin) / se_diff
+        p_value = stats.t.cdf(t_stat, df)
+    else:
+        raise ValueError(f"Invalid direction: {direction}. Must be 'lower' or 'upper'.")
+
+    return p_value < alpha_one_sided

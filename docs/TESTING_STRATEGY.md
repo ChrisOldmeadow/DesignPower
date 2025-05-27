@@ -9,64 +9,65 @@ This document outlines a comprehensive testing strategy for the DesignPower appl
 Unit tests focus on testing individual functions in isolation to verify their correctness.
 
 - [ ] **Setup Testing Environment**
-  - [ ] Create a `tests/` directory structure mirroring the core structure
-  - [ ] Set up a test runner and configuration
-  - [ ] Configure coverage reporting
+  - [x] Create a `tests/` directory structure mirroring the core structure
+  - [x] Set up a test runner and configuration
+  - [x] Configure coverage reporting
 
 - [ ] **Binary Outcomes Testing**
   - [ ] Test analytical methods
-    - [ ] `power_binary()`
-    - [ ] `sample_size_binary()`
-    - [ ] `min_detectable_effect_binary()`
-    - [ ] `power_binary_non_inferiority()`
-    - [ ] `sample_size_binary_non_inferiority()`
+    - [x] `power_binary()`
+    - [x] `sample_size_binary()`
+    - [x] `min_detectable_effect_binary()`
+    - [x] `power_binary_non_inferiority()`
+    - [x] `sample_size_binary_non_inferiority()`
   - [ ] Test simulation methods
-    - [ ] `power_binary_sim()`
-    - [ ] `sample_size_binary_sim()`
-    - [ ] `min_detectable_effect_binary_sim()`
-    - [ ] `power_binary_non_inferiority_sim()`
-    - [ ] `sample_size_binary_non_inferiority_sim()`
-    - [ ] `min_detectable_binary_non_inferiority_margin_sim()`
-    - [ ] `simulate_binary_trial()`
-    - [ ] `simulate_binary_non_inferiority()`
+    - [x] `power_binary_sim()`
+    - [x] `sample_size_binary_sim()`
+    - [x] `min_detectable_effect_binary_sim()`
+    - [x] `sample_size_binary_non_inferiority_sim()`
+    - [x] `min_detectable_binary_non_inferiority_margin_sim()`
+    - [x] `simulate_binary_trial()`
+    - [x] `simulate_binary_non_inferiority()`
 
 - [ ] **Continuous Outcomes Testing**
   - [ ] Test analytical methods
-    - [ ] `power_continuous()`
-    - [ ] `sample_size_continuous()`
-    - [ ] `min_detectable_effect_continuous()`
-    - [ ] `power_continuous_non_inferiority()`
-    - [ ] `sample_size_continuous_non_inferiority()`
+    - [x] `power_continuous()`
+    - [x] `sample_size_continuous()`
+    - [x] `min_detectable_effect_continuous()`
+    - [x] `power_continuous_non_inferiority()`
+    - [x] `sample_size_continuous_non_inferiority()`
   - [ ] Test simulation methods
-    - [ ] `power_continuous_sim()`
-    - [ ] `sample_size_continuous_sim()`
-    - [ ] `min_detectable_effect_continuous_sim()`
-    - [ ] `power_continuous_non_inferiority_sim()`
-    - [ ] `sample_size_continuous_non_inferiority_sim()`
-    - [ ] `simulate_continuous_trial()`
-    - [ ] `simulate_continuous_non_inferiority()`
+    - [x] `power_continuous_sim()`
+    - [x] `sample_size_continuous_sim()`
+    - [x] `min_detectable_effect_continuous_sim()`
+    - [x] `power_continuous_non_inferiority_sim()`
+      - [x] With repeated measures (change score & ANCOVA)
+    - [x] `sample_size_continuous_non_inferiority_sim()`
+      - [x] With repeated measures (change score & ANCOVA)
+    - [x] `simulate_continuous_trial()`
+    - [x] `simulate_continuous_non_inferiority()`
 
 - [ ] **Survival Outcomes Testing**
   - [ ] Test analytical methods
-    - [ ] `power_survival()`
-    - [ ] `sample_size_survival()`
-    - [ ] `min_detectable_effect_survival()`
-    - [ ] `power_survival_non_inferiority()`
-    - [ ] `sample_size_survival_non_inferiority()`
+    - [x] `power_survival()`
+    - [x] `sample_size_survival()`
+    - [x] `min_detectable_effect_survival()`
+    - [x] `power_survival_non_inferiority()`
+    - [x] `sample_size_survival_non_inferiority()`
   - [ ] Test simulation methods
-    - [ ] `power_survival_sim()`
-    - [ ] `sample_size_survival_sim()`
-    - [ ] `min_detectable_effect_survival_sim()`
-    - [ ] `power_survival_non_inferiority_sim()`
-    - [ ] `sample_size_survival_non_inferiority_sim()`
-    - [ ] `simulate_survival_trial()`
-    - [ ] `simulate_survival_non_inferiority()`
+    - [x] `power_survival_sim()`
+    - [x] `sample_size_survival_sim()`
+    - [x] `min_detectable_effect_survival_sim()`
+    - [x] `power_survival_non_inferiority_sim()`
+    - [x] `sample_size_survival_non_inferiority_sim()`
+    - [x] `simulate_survival_trial()`
+    - [x] `simulate_survival_non_inferiority()`
 
 ### 2. Integration Testing
 
 Integration tests verify that modules work together correctly.
 
-- [ ] **Module Integration**
+- [ ] **Core Logic Integration**
   - [ ] Test analytical vs. simulation consistency
     - [ ] Binary outcomes
     - [ ] Continuous outcomes
@@ -75,10 +76,28 @@ Integration tests verify that modules work together correctly.
     - [ ] Binary module compatibility
     - [ ] Continuous module compatibility
     - [ ] Survival module compatibility
-  - [ ] Test UI and calculation integration
-    - [ ] Binary UI + calculations
-    - [ ] Continuous UI + calculations
-    - [ ] Survival UI + calculations
+
+- [ ] **Application Component Logic Testing**
+  - [ ] **Location**: `tests/app/components/`
+  - [ ] **Purpose**: Test the internal logic of modules in `app/components/` (e.g., `parallel_rct.py`, `cluster_rct.py`). These components often act as an orchestration layer between the UI and the core statistical functions. Tests in this category focus on:
+    - Correct parameter mapping and transformation from UI-like input structures (e.g., dictionaries).
+    - Conditional logic for selecting and calling appropriate core statistical functions from `core/designs/` (e.g., choosing between analytical vs. simulation, superiority vs. non-inferiority, different outcome types).
+    - Accurate aggregation and formatting of results returned by the component for UI display.
+    - Handling of component-specific logic, such as deriving intermediate parameters or error conditions.
+  - [ ] **Methodology**: Directly import and call functions within `app/components/` modules (e.g., `calculate_parallel_survival`) with various input parameter dictionaries. Assertions are made on the returned values, structure of the results, and any side effects if applicable (though typically these should be minimal for calculation functions).
+  - [ ] **Examples**:
+    - [ ] `tests/app/components/test_parallel_rct.py` (for `app/components/parallel_rct.py`)
+
+- [ ] **UI and Core Calculation Flow Testing**
+  - [ ] **Location**: `tests/ui/`
+  - [ ] **Purpose**: Test the end-to-end flow from simulated UI interactions, through the main application logic (`designpower_app.py`), to the invocation of core statistical functions. These tests verify:
+    - Correct parameter collection by UI rendering functions (e.g., `designpower_app.render_parallel_survival` which uses Streamlit components).
+    - Proper hand-off of parameters from UI rendering functions to application component functions (e.g., `designpower_app.calculate_parallel_survival` which in turn calls functions from `app/components/`).
+    - That the correct core statistical functions in `core/designs/` are ultimately called with the correctly transformed arguments.
+  - [ ] **Methodology**: Mock Streamlit UI components (`st.*`), simulate user inputs by controlling the return values of these mocks, call `designpower_app.py` rendering and calculation functions, and assert that the underlying core statistical functions (from `core/designs/`) are called as expected using `unittest.mock.patch` and `assert_called_once_with` or similar.
+  - [ ] **Examples**:
+    - [x] `tests/ui/test_survival_ui_integration.py`
+    - [ ] `tests/ui/test_ui_integration.py`
 
 ### 3. Regression Testing
 
@@ -333,4 +352,3 @@ python -m unittest tests.designs.parallel.test_analytical_binary
 coverage run -m unittest discover
 coverage report -m
 coverage html  # Generate HTML report
-```
