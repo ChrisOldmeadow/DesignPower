@@ -62,5 +62,21 @@ class TestAnalyticalContinuous(unittest.TestCase):
         )
         self.assertTrue(0.8 <= result["power"] <= 1.0)  # Power should be high
 
+    def test_sample_size_continuous_non_inferiority(self):
+        """Test sample size calculation for non-inferiority continuous outcomes"""
+        result = analytical_continuous.sample_size_continuous_non_inferiority(
+            mean1=10,
+            non_inferiority_margin=2,
+            sd1=3, # sd2 will default to sd1
+            power=0.8,
+            alpha=0.05, # one-sided
+            assumed_difference=0.5, # mean2 = 10.5
+            direction="lower"
+        )
+        # Expected n1 = ceil(((1.64485 + 0.84162)^2 * (3^2 + 3^2)) / ( (10.5 - (10-2)) ^2 ))
+        # Expected n1 = ceil((2.48647^2 * 18) / (2.5^2)) = ceil(6.1825 * 18 / 6.25) = ceil(111.285 / 6.25) = ceil(17.8056) = 18
+        self.assertEqual(result["sample_size_1"], 18)
+        self.assertEqual(result["sample_size_2"], 18) # Default allocation_ratio=1.0
+
 if __name__ == '__main__':
     unittest.main()

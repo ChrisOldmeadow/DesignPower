@@ -478,7 +478,7 @@ def min_detectable_effect_binary_sim(n1, n2, p1, power=0.8, nsim=1000, alpha=0.0
 
 def sample_size_binary_non_inferiority_sim(p1, non_inferiority_margin, power=0.8, alpha=0.05, 
                                         allocation_ratio=1.0, nsim=1000, min_n=10, max_n=1000, 
-                                        step=10, assumed_difference=0.0, direction="lower"):
+                                        step=10, assumed_difference=0.0, direction="lower", seed=None):
     """
     Calculate sample size for non-inferiority test with binary outcome using simulation.
     
@@ -506,6 +506,8 @@ def sample_size_binary_non_inferiority_sim(p1, non_inferiority_margin, power=0.8
         Assumed true difference between proportions (0 = proportions truly equivalent), by default 0.0
     direction : str, optional
         Direction of non-inferiority test ("lower" or "upper"), by default "lower"
+    seed : int, optional
+        Random seed for reproducibility, by default None
     
     Returns
     -------
@@ -533,7 +535,8 @@ def sample_size_binary_non_inferiority_sim(p1, non_inferiority_margin, power=0.8
             nsim=nsim, 
             alpha=alpha, 
             assumed_difference=assumed_difference,
-            direction=direction
+            direction=direction,
+            seed=seed
         )
         
         # Extract achieved power
@@ -563,7 +566,8 @@ def sample_size_binary_non_inferiority_sim(p1, non_inferiority_margin, power=0.8
             nsim=nsim, 
             alpha=alpha, 
             assumed_difference=assumed_difference,
-            direction=direction
+            direction=direction,
+            seed=seed
         )
         achieved_power = sim_result["empirical_power"]
     
@@ -586,7 +590,7 @@ def sample_size_binary_non_inferiority_sim(p1, non_inferiority_margin, power=0.8
     }
 
 def min_detectable_binary_non_inferiority_margin_sim(n1, n2, p1, power=0.8, alpha=0.05, nsim=1000, 
-                                                  precision=0.01, assumed_difference=0.0, direction="lower"):
+                                                  precision=0.01, assumed_difference=0.0, direction="lower", seed=None):
     """
     Calculate the minimum detectable non-inferiority margin for binary outcomes using simulation.
     
@@ -610,6 +614,8 @@ def min_detectable_binary_non_inferiority_margin_sim(n1, n2, p1, power=0.8, alph
         Assumed true difference between proportions (0 = proportions truly equivalent), by default 0.0
     direction : str, optional
         Direction of non-inferiority test ("lower" or "upper"), by default "lower"
+    seed : int, optional
+        Random seed for reproducibility, by default None
     
     Returns
     -------
@@ -643,7 +649,8 @@ def min_detectable_binary_non_inferiority_margin_sim(n1, n2, p1, power=0.8, alph
             nsim=nsim, 
             alpha=alpha, 
             assumed_difference=assumed_difference,
-            direction=direction
+            direction=direction,
+            seed=seed
         )
         
         # Extract achieved power
@@ -651,12 +658,13 @@ def min_detectable_binary_non_inferiority_margin_sim(n1, n2, p1, power=0.8, alph
         
         # Adjust the margin based on achieved power
         if achieved_power < power:
-            # Margin too large (making it harder to demonstrate non-inferiority)
-            # Decrease the margin
-            high_margin = current_margin
-        else:
-            # Power sufficient, try to increase margin (making the test more stringent)
+            # Power is too low. Current margin is too stringent (too small).
+            # Need to try a LARGER margin.
             low_margin = current_margin
+        else: # achieved_power >= power
+            # Power is sufficient (or too high). Current margin is achievable (or too lenient/large).
+            # Try a SMALLER margin to see if it's still achievable.
+            high_margin = current_margin
         
         # Set new midpoint for next iteration
         current_margin = (low_margin + high_margin) / 2
@@ -671,7 +679,8 @@ def min_detectable_binary_non_inferiority_margin_sim(n1, n2, p1, power=0.8, alph
         nsim=nsim, 
         alpha=alpha, 
         assumed_difference=assumed_difference,
-        direction=direction
+        direction=direction,
+        seed=seed
     )
     
     # Return results

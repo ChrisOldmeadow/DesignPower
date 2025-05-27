@@ -225,7 +225,7 @@ def power_binary(n1, n2, p1, p2, alpha=0.05, test_type="normal approximation", c
         z_beta = (effect_size / se - z_alpha)
         power = stats.norm.cdf(z_beta) * factor
         
-    elif test_type == "likelihood ratio":
+    elif test_type == "likelihood_ratio":
         # For likelihood ratio test
         # Likelihood ratio test is typically more powerful than normal approximation
         factor = 1.05
@@ -256,19 +256,19 @@ def power_binary(n1, n2, p1, p2, alpha=0.05, test_type="normal approximation", c
             correction_value = 0.5 * (1/n1 + 1/n2)
             adjusted_effect_size = max(0, effect_size - correction_value)
             
-            # Calculate critical value
-            z_alpha = stats.norm.ppf(1 - alpha/2)
+            # Calculate critical value for two-sided test
+            z_alpha_sided = stats.norm.ppf(1 - alpha/2)
             
-            # Calculate power with correction
-            z_beta = adjusted_effect_size / se - z_alpha
-            power = stats.norm.cdf(z_beta)
+            # Calculate power with correction for two-sided test
+            adj_es_on_se = adjusted_effect_size / se
+            power = stats.norm.cdf(adj_es_on_se - z_alpha_sided) + stats.norm.cdf(-adj_es_on_se - z_alpha_sided)
         else:
-            # Calculate critical value
-            z_alpha = stats.norm.ppf(1 - alpha/2)
+            # Calculate critical value for two-sided test
+            z_alpha_sided = stats.norm.ppf(1 - alpha/2)
             
-            # Calculate standard power
-            z_beta = effect_size / se - z_alpha
-            power = stats.norm.cdf(z_beta)
+            # Calculate standard power for two-sided test
+            es_on_se = effect_size / se
+            power = stats.norm.cdf(es_on_se - z_alpha_sided) + stats.norm.cdf(-es_on_se - z_alpha_sided)
     
     # Ensure power is between 0 and 1
     power = max(0, min(1, power))
@@ -344,7 +344,7 @@ def sample_size_binary(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, test
         n1_base = numerator / denominator
         n1 = math.ceil(n1_base * factor)
         
-    elif test_type == "likelihood ratio":
+    elif test_type == "likelihood_ratio":
         # For likelihood ratio test, use a slightly different formula
         # This is an approximation as exact formulas for likelihood ratio tests are complex
         p_diff = abs(p1 - p2)

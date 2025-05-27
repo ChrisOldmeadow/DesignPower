@@ -718,7 +718,7 @@ def min_detectable_effect_survival_sim(n1, n2, median1, enrollment_period=1.0, f
 
 def power_survival_non_inferiority_sim(n1, n2, median1, non_inferiority_margin, enrollment_period=1.0,
                                     follow_up_period=1.0, dropout_rate=0.1, alpha=0.05, 
-                                    nsim=1000, assumed_hazard_ratio=1.0):
+                                    nsim=1000, assumed_hazard_ratio=1.0, seed=None):
     """
     Calculate power for non-inferiority test with survival outcome using simulation.
     
@@ -744,6 +744,8 @@ def power_survival_non_inferiority_sim(n1, n2, median1, non_inferiority_margin, 
         Number of simulations, by default 1000
     assumed_hazard_ratio : float, optional
         Assumed true hazard ratio (1.0 = treatments truly equivalent), by default 1.0
+    seed : int, optional
+        Random seed for reproducibility, by default None
     
     Returns
     -------
@@ -761,7 +763,8 @@ def power_survival_non_inferiority_sim(n1, n2, median1, non_inferiority_margin, 
         dropout_rate=dropout_rate,
         nsim=nsim,
         alpha=alpha,
-        assumed_hazard_ratio=assumed_hazard_ratio
+        assumed_hazard_ratio=assumed_hazard_ratio,
+        seed=seed
     )
     
     # Return results with consistent key naming
@@ -789,7 +792,7 @@ def power_survival_non_inferiority_sim(n1, n2, median1, non_inferiority_margin, 
 def sample_size_survival_non_inferiority_sim(median1, non_inferiority_margin, enrollment_period=1.0, 
                                           follow_up_period=1.0, dropout_rate=0.1, power=0.8, alpha=0.05, 
                                           allocation_ratio=1.0, nsim=1000, min_n=10, max_n=1000, step=10,
-                                          assumed_hazard_ratio=1.0):
+                                          assumed_hazard_ratio=1.0, seed=None):
     """
     Calculate sample size for non-inferiority test with survival outcome using simulation.
     
@@ -810,7 +813,7 @@ def sample_size_survival_non_inferiority_sim(median1, non_inferiority_margin, en
     alpha : float, optional
         Significance level (one-sided for non-inferiority), by default 0.05
     allocation_ratio : float, optional
-        Ratio of sample sizes (n2/n1), by default 1.0
+        Allocation ratio (n2/n1), by default 1.0
     nsim : int, optional
         Number of simulations per sample size, by default 1000
     min_n : int, optional
@@ -821,6 +824,8 @@ def sample_size_survival_non_inferiority_sim(median1, non_inferiority_margin, en
         Step size for incrementing sample size, by default 10
     assumed_hazard_ratio : float, optional
         Assumed true hazard ratio (1.0 = treatments truly equivalent), by default 1.0
+    seed : int, optional
+        Random seed for reproducibility, by default None
     
     Returns
     -------
@@ -844,6 +849,7 @@ def sample_size_survival_non_inferiority_sim(median1, non_inferiority_margin, en
         raise ValueError("Allocation ratio must be positive")
     
     # Initialize search parameters
+    final_n1 = min_n # Store the last n1 that was tested within max_n
     n1 = min_n
     achieved_power = 0.0
     iterations = 0
@@ -851,6 +857,7 @@ def sample_size_survival_non_inferiority_sim(median1, non_inferiority_margin, en
     # Perform search to find required sample size
     while n1 <= max_n and achieved_power < power:
         iterations += 1
+        final_n1 = n1 # Update final_n1 before potential increment
         # Calculate n2 based on allocation ratio
         n2 = math.ceil(n1 * allocation_ratio)
         
@@ -865,7 +872,8 @@ def sample_size_survival_non_inferiority_sim(median1, non_inferiority_margin, en
             dropout_rate=dropout_rate,
             nsim=nsim,
             alpha=alpha,
-            assumed_hazard_ratio=assumed_hazard_ratio
+            assumed_hazard_ratio=assumed_hazard_ratio,
+            seed=seed
         )
         
         # Extract achieved power
@@ -878,6 +886,14 @@ def sample_size_survival_non_inferiority_sim(median1, non_inferiority_margin, en
         # Otherwise, increase sample size
         n1 += step
     
+    # If loop exited due to exceeding max_n without achieving power, cap n1 at max_n
+    if achieved_power < power and final_n1 == max_n:
+        n1 = max_n # Use the actual max_n that was tested
+    elif achieved_power < power and n1 > max_n: # If n1 went past max_n
+        n1 = final_n1 # Revert to the last tested n1 within bounds
+
+    # Recalculate n2 based on the final n1 to ensure consistency
+    n2 = math.ceil(n1 * allocation_ratio)
     # Calculate total sample size
     n_total = n1 + n2
     

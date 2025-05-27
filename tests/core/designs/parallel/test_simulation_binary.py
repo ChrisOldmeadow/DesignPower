@@ -82,5 +82,77 @@ class TestSimulationBinary(unittest.TestCase):
         # Results should be within a reasonable margin
         self.assertLess(abs(analytical_result["power"] - sim_result["power"]), 0.1)
 
+    def test_sample_size_binary_non_inferiority_sim(self):
+        """Test simulation-based sample size for non-inferiority binary outcomes"""
+        # Using a smaller nsim and a tighter range for faster execution
+        # Analytical equivalent (p1=0.7, margin=0.1, power=0.8, alpha=0.05) yielded n=272
+        result = simulation_binary.sample_size_binary_non_inferiority_sim(
+            p1=0.7,
+            non_inferiority_margin=0.1,
+            power=0.8,
+            alpha=0.05, # one-sided
+            nsim=200, # Reduced for speed
+            min_n=200,
+            max_n=350,
+            step=25,
+            assumed_difference=0.0,
+            direction="lower",
+            seed=123
+        )
+        # Expect sample size to be in the vicinity of the analytical result (272)
+        # Allowing a wider range due to simulation variability and smaller nsim
+        self.assertTrue(200 <= result["sample_size_1"] <= 350, f"Unexpected sample_size_1: {result['sample_size_1']}")
+        self.assertEqual(result["sample_size_1"], result["sample_size_2"]) # Default allocation_ratio=1.0
+
+    def test_min_detectable_binary_non_inferiority_margin_sim(self):
+        """Test simulation-based min detectable non-inferiority margin for binary outcomes"""
+        result = simulation_binary.min_detectable_binary_non_inferiority_margin_sim(
+            n1=200,
+            n2=200,
+            p1=0.7,
+            power=0.8,
+            alpha=0.05, # one-sided
+            nsim=200,   # Reduced for speed
+            precision=0.01,
+            assumed_difference=0.0,
+            direction="lower",
+            seed=123
+        )
+        # For n=200, p1=0.7, power=0.8, alpha=0.05, the margin should be > 0.1
+        # (since n=272 was needed for margin=0.1 in analytical test)
+        # Expecting margin to be between 0.1 and 0.2, for example.
+        # The exact value depends on simulation, so a range is appropriate.
+        self.assertTrue(0.1 < result["minimum_detectable_margin"] < 0.2, 
+                        f"Unexpected minimum_detectable_margin: {result['minimum_detectable_margin']}")
+        self.assertAlmostEqual(result["target_power"], result["achieved_power"], delta=0.15, 
+                               msg=f"Achieved power {result['achieved_power']} far from target {result['target_power']}")
+
+    def test_simulate_binary_non_inferiority(self):
+        """Test core simulation function for non-inferiority binary outcomes."""
+        result = simulation_binary.simulate_binary_non_inferiority(
+            n1=275,
+            n2=275,
+            p1=0.7,
+            non_inferiority_margin=0.1,
+            nsim=1000, # Using a decent number of simulations
+            alpha=0.05, # one-sided
+            assumed_difference=0.0, # p2 = p1
+            direction="lower",
+            seed=123
+        )
+        # Expected power around 0.8 for these parameters
+        # (Analytical sample size for 80% power was 272)
+        self.assertIn("empirical_power", result)
+        self.assertAlmostEqual(result["empirical_power"], 0.8, delta=0.05, 
+                               msg=f"Empirical power {result['empirical_power']} not close to 0.8")
+        self.assertEqual(result["simulations"], 1000)
+        self.assertEqual(result["n1"], 275)
+        self.assertEqual(result["n2"], 275)
+        self.assertEqual(result["p1"], 0.7)
+        self.assertEqual(result["p2"], 0.7) # Since assumed_difference is 0
+        self.assertEqual(result["non_inferiority_margin"], 0.1)
+        self.assertEqual(result["alpha"], 0.05)
+        self.assertEqual(result["direction"], "lower")
+
 if __name__ == '__main__':
     unittest.main()

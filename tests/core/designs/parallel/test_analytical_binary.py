@@ -61,5 +61,21 @@ class TestAnalyticalBinary(unittest.TestCase):
         )
         self.assertTrue(0.9 <= result["power"] <= 1.0)  # Power should be high
 
+    def test_sample_size_binary_non_inferiority(self):
+        """Test non-inferiority sample size calculation for binary outcomes"""
+        result = analytical_binary.sample_size_binary_non_inferiority(
+            p1=0.7, 
+            non_inferiority_margin=0.1, 
+            power=0.8, 
+            alpha=0.05, 
+            assumed_difference=0.0, # Assuming p1 and p2 are truly equivalent
+            direction="lower"
+        )
+        # Expected sample size for p1=0.7, margin=0.1, power=0.8, alpha=0.05 (1-sided)
+        # For p2 >= p1 - margin, i.e. p2 >= 0.6
+        # Actual calculated value from test run: 272
+        self.assertTrue(270 <= result["sample_size_1"] <= 274, f"Unexpected sample_size_1: {result['sample_size_1']}")
+        self.assertEqual(result["sample_size_1"], result["sample_size_2"]) # Assuming allocation_ratio=1.0 (default)
+
 if __name__ == '__main__':
     unittest.main()

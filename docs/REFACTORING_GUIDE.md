@@ -9,8 +9,7 @@ The refactoring of DesignPower follows these core principles:
 1. **Separation of Concerns**: Each module has a specific responsibility with clear boundaries
 2. **Logical Hierarchy**: Code organization follows a natural hierarchy based on study design and outcome type
 3. **Clean APIs**: Each module exposes a well-defined API through its `__init__.py` file
-4. **Backward Compatibility**: Legacy code paths are maintained through wrapper modules
-5. **Progressive Enhancement**: New features can be added independently without affecting existing functionality
+4. **Progressive Enhancement**: New features can be added independently without affecting existing functionality
 
 ### Directory Structure
 
@@ -18,7 +17,6 @@ The refactoring of DesignPower follows these core principles:
 DesignPower/
 ├── app/                           # Frontend application code
 │   ├── components/                # UI components for each design type
-│   ├── power_calculations.py      # Legacy wrapper for backward compatibility
 │   └── designpower_app.py         # Main application entry point
 ├── core/                          # Core statistical calculations
 │   ├── designs/                   # All study design modules
@@ -408,107 +406,10 @@ When implementing new functionality:
 - [ ] **Unit Tests**: Create tests for all new functions
 - [ ] **Validation**: Include parameter validation in all user-facing functions
 - [ ] **Error Handling**: Provide clear error messages for invalid inputs
-- [ ] **Backward Compatibility**: Ensure changes don't break existing code
 - [ ] **Performance**: Consider computation efficiency for large simulations
 - [ ] **Simulation Support**: Implement both analytical and simulation-based methods
 - [ ] **UI Integration**: Update UI components to expose new functionality including method toggle options
 - [ ] **Examples**: Add example usage in documentation
-
-## Legacy Code Management
-
-### Strategy for Handling Legacy Code
-
-1. **Deprecation Process**:
-   - Mark legacy functions with deprecation warnings
-   - Provide migration path in warning messages
-   - Set timeline for removal
-
-2. **Wrapper Modules**:
-   - Keep wrapper modules like `app/power_calculations.py` for backward compatibility
-   - Implement using imports from the new structure
-   - Document as "legacy" and point to new alternatives
-
-3. **Documentation**:
-   - Clearly mark legacy code sections in documentation
-   - Provide migration examples
-   - Update all documentation to reference new structure
-
-### Cleaning Up Legacy Code
-
-The following modules contain legacy code that should eventually be refactored:
-
-- `app/power_calculations.py` - Replace with direct imports from core modules
-- Legacy simulation modules that are not properly integrated into the new structure:
-  - `binary_simulation.py` - Consolidate with the binary.py module
-  - `binary_tests.py` - Integrate into the binary.py module
-- Duplicate calculation functions - Remove in favor of core implementations
-
-### Implementation Status
-
-1. **Phase 1** (Completed): Basic restructuring and refactoring
-   - Created new directory structure
-   - Moved core functions to appropriate modules
-   - Maintained backward compatibility
-
-2. **Phase 2** (Completed): Outcome-specific module separation
-   - Separated functions by outcome type (continuous, binary, survival)
-   - Created dedicated analytical and simulation modules
-   - Updated UI components to use the new modular structure
-
-3. **Phase 3** (Completed): Simulation methods implementation
-   - Added simulation toggle in UI for all outcome types
-   - Implemented simulation-specific parameter controls
-   - Created simulation-based calculation functions
-
-4. **Phase 4** (Completed): Advanced statistical options
-   - Added test type selection for binary outcomes
-   - Implemented correction options (continuity correction)
-   - Enhanced result formatting and extraction
-   - Added non-inferiority hypothesis support for all outcome types
-
-5. **Phase 5** (In Progress): Performance optimizations and enhancements
-   - Parameter validation and error handling improvements
-   - Code documentation enhancements
-   - UI/UX improvements
-
-### Future Work
-
-1. **Phase 6** (Planned): Integration of machine learning models
-   - Implement machine learning-based sample size calculations
-   - Integrate with existing simulation framework
-   - Update UI to include machine learning options
-
-2. **Phase 7** (Planned): Advanced visualization tools
-   - Implement interactive visualizations for results
-   - Add support for custom visualization options
-   - Update UI to include visualization components
-
-3. **Phase 8** (Planned): Cloud deployment and scalability
-   - Deploy application on cloud infrastructure
-   - Implement scalability features for large-scale simulations
-   - Update UI to include cloud-specific features
-
-## Migration Timeline
-
-1. **Phase 1** (Completed): Basic restructuring and refactoring
-   - Create new directory structure
-   - Move core functions to appropriate modules
-   - Maintain backward compatibility
-
-2. **Phase 2** (Current): Documentation and stabilization
-   - Document new structure
-   - Create migration guides
-   - Add comprehensive tests
-
-3. **Phase 3** (Future): Deprecation and cleanup
-   - Add deprecation warnings to legacy code
-   - Update all internal code to use new structure
-   - Plan for eventual removal of legacy interfaces
-
-4. **Phase 4** (Future): Complete migration
-   - Remove deprecated interfaces
-   - Finalize documentation
-   - Release new major version
 
 ## Best Practices for Extending DesignPower
 
@@ -550,3 +451,41 @@ The following modules contain legacy code that should eventually be refactored:
 3. **Pull Requests**: Include tests and documentation
 4. **Review Process**: Ensure code review by at least one other developer
 5. **Version Control**: Use semantic versioning for releases
+
+## Migration Timeline
+
+1. **Phase 1** (Completed): Basic restructuring and refactoring
+   - Create new directory structure
+   - Move core functions to appropriate modules
+
+2. **Phase 2** (Current): Documentation and stabilization
+   - Document new structure
+   - Create migration guides
+   - Add comprehensive tests
+
+3. **Phase 3** (Future): Deprecation and cleanup
+   - Add deprecation warnings to legacy code
+   - Update all internal code to use new structure
+   - Plan for eventual removal of legacy interfaces
+
+4. **Phase 4** (Future): Complete migration
+   - Remove deprecated interfaces
+   - Finalize documentation
+   - Release new major version
+
+## Future Work
+
+1. **Phase 6** (Planned): Integration of machine learning models
+   - Implement machine learning-based sample size calculations
+   - Integrate with existing simulation framework
+   - Update UI to include machine learning options
+
+2. **Phase 7** (Planned): Advanced visualization tools
+   - Implement interactive visualizations for results
+   - Add support for custom visualization options
+   - Update UI to include visualization components
+
+3. **Phase 8** (Planned): Cloud deployment and scalability
+   - Deploy application on cloud infrastructure
+   - Implement scalability features for large-scale simulations
+   - Update UI to include cloud-specific features

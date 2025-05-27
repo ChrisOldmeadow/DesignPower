@@ -8,3 +8,7 @@
     - Update the corresponding tests in `test_simulation_continuous.py` to check for this richer information.
 - [ ] **Review and Update CmdStan Documentation**:
     - Ensure project documentation (if any exists for local setup or advanced usage) accurately reflects the CmdStan installation process, the use of `cmdstanpy`, and the `statsmodels` dependency.
+- [ ] **Improve Test Coverage**:
+    - Review the overall test coverage (currently ~35%).
+    - Identify modules and functions with low coverage (e.g., many parts of `core/designs/parallel/`, `core/designs/single_arm/`, `core/outcomes/`, `core/utils/`).
+    - Prioritize and write new unit tests to increase coverage for critical components.

@@ -518,7 +518,7 @@ def calculate_cluster_continuous(params):
         elif calc_type == "Power":
             required_params = ["n_clusters", "cluster_size", "icc", "mean1", "mean2", "std_dev", "alpha"]
         elif calc_type == "Minimum Detectable Effect":
-            required_params = ["n_clusters", "cluster_size", "icc", "std_dev", "power", "alpha"]
+            required_params = ["n_clusters", "cluster_size", "icc", "mean1", "std_dev", "power", "alpha"]
         
         # Validate required parameters
         for param in required_params:
@@ -606,7 +606,13 @@ def calculate_cluster_continuous(params):
                     alpha=params["alpha"]
                 )
             else:  # simulation
+                progress_bar = st.progress(0.0)
+                
+                def _update_progress(i, total):
+                    progress_bar.progress(i / total)
+                
                 results = simulation_continuous.min_detectable_effect_continuous_sim(
+                    mean1=params["mean1"],
                     n_clusters=params["n_clusters"],
                     cluster_size=params["cluster_size"],
                     icc=params["icc"],
@@ -622,7 +628,9 @@ def calculate_cluster_continuous(params):
                     bayes_warmup=params.get("bayes_warmup", 500),
                     lmm_method=params.get("lmm_method", "auto"),
                     lmm_reml=params.get("lmm_reml", True),
+                    progress_callback=_update_progress,
                 )
+                progress_bar.empty()
         
         # Add calculation method and design method to results
         results["design_method"] = "Cluster RCT"

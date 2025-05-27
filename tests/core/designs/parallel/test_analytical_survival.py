@@ -65,5 +65,24 @@ class TestAnalyticalSurvival(unittest.TestCase):
         print(f"Non-inferiority power: {result['power']}")
         self.assertTrue(0.6 <= result["power"] <= 1.0)  # Adjusted power expectation
 
+    def test_sample_size_survival_non_inferiority(self):
+        """Test sample size calculation for non-inferiority with survival outcomes"""
+        result = analytical_survival.sample_size_survival_non_inferiority(
+            median1=12, 
+            non_inferiority_margin=1.5,  # Hazard Ratio margin
+            enrollment_period=12, 
+            follow_up_period=18, 
+            dropout_rate=0.1,
+            power=0.8, 
+            alpha=0.025, # Common one-sided alpha for NI
+            assumed_hazard_ratio=1.0 # Assuming true equivalence for sample size
+        )
+        # Check if sample sizes are within a plausible range
+        # These ranges are approximate and might need adjustment based on expected behavior
+        self.assertTrue(100 <= result["sample_size_1"] <= 500) 
+        self.assertEqual(result["sample_size_1"], result["sample_size_2"]) # Default allocation ratio is 1
+        self.assertTrue(200 <= result["total_sample_size"] <= 1000)
+        self.assertTrue(result["total_events"] > 0)
+
 if __name__ == '__main__':
     unittest.main()

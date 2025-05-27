@@ -85,17 +85,27 @@ def simulate_binary_trial(n_clusters, cluster_size, icc, p1, p2, cluster_sizes=N
         control_probs = np.full(n_clusters, p1)
         intervention_probs = np.full(n_clusters, p2)
     else:
-        # Control arm beta parameters
-        alpha1 = p1 * (1 - icc) / icc
-        beta1 = (1 - p1) * (1 - icc) / icc
-        
-        # Intervention arm beta parameters
-        alpha2 = p2 * (1 - icc) / icc
-        beta2 = (1 - p2) * (1 - icc) / icc
-        
-        # Generate cluster-level probabilities from beta distributions
-        control_probs = np.random.beta(alpha1, beta1, n_clusters)
-        intervention_probs = np.random.beta(alpha2, beta2, n_clusters)
+        # Handle p1 = 0 or p1 = 1 for control arm
+        if p1 == 0.0:
+            control_probs = np.zeros(n_clusters)
+        elif p1 == 1.0:
+            control_probs = np.ones(n_clusters)
+        else:
+            # Control arm beta parameters
+            alpha1 = p1 * (1 - icc) / icc
+            beta1 = (1 - p1) * (1 - icc) / icc
+            control_probs = np.random.beta(alpha1, beta1, n_clusters)
+
+        # Handle p2 = 0 or p2 = 1 for intervention arm
+        if p2 == 0.0:
+            intervention_probs = np.zeros(n_clusters)
+        elif p2 == 1.0:
+            intervention_probs = np.ones(n_clusters)
+        else:
+            # Intervention arm beta parameters
+            alpha2 = p2 * (1 - icc) / icc
+            beta2 = (1 - p2) * (1 - icc) / icc
+            intervention_probs = np.random.beta(alpha2, beta2, n_clusters)
     
     # Generate binomial data for each cluster with variable cluster sizes
     control_successes = np.zeros(n_clusters)
@@ -127,13 +137,13 @@ def simulate_binary_trial(n_clusters, cluster_size, icc, p1, p2, cluster_sizes=N
     
     # Avoid division by zero
     if se == 0:
-        z_stat = 0
-        p_value = 1
+        z_statistic = 0.0
+        p_value = 1.0
     else:
-        z_stat = abs(intervention_mean - control_mean) / se
-        p_value = 2 * (1 - stats.norm.cdf(z_stat))  # Two-sided p-value
+        z_statistic = abs(intervention_mean - control_mean) / se
+        p_value = 2 * (1 - stats.norm.cdf(z_statistic))  # Two-sided p-value
     
-    return z_stat, p_value
+    return z_statistic, p_value
 
 
 def power_binary_sim(n_clusters, cluster_size, icc, p1, p2=None, 
@@ -628,7 +638,8 @@ def min_detectable_effect_binary_sim(n_clusters, cluster_size, icc, p1,
         "design_effect": deff,
         "cv_cluster_size": cv_cluster_size,
         "alpha": alpha,
-        "power": power,
+        "power": power, # This is the target power
+        "achieved_power": achieved_power, # This is the empirical power for the MDE
         "nsim": nsim,
         "iterations": iteration,
         "sim_details": {

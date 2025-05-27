@@ -110,5 +110,34 @@ class TestSimulationSurvival(unittest.TestCase):
         # Simply check the power is valid between 0 and 1
         self.assertTrue(0 <= result["power"] <= 1.0)
 
+    def test_sample_size_survival_non_inferiority_sim(self):
+        """Test simulation-based sample size calculation for non-inferiority survival outcomes"""
+        # Using small nsim, min_n, max_n, step for faster test execution
+        result = simulation_survival.sample_size_survival_non_inferiority_sim(
+            median1=12,
+            non_inferiority_margin=1.8, # Hazard Ratio margin
+            enrollment_period=10,
+            follow_up_period=15,
+            dropout_rate=0.05,
+            power=0.7, # Target power
+            alpha=0.025, # One-sided alpha
+            nsim=50, # Low number of simulations for speed
+            min_n=50,
+            max_n=150,
+            step=50,
+            assumed_hazard_ratio=1.0, # Assuming true equivalence
+            seed=123
+        )
+        # Print result for debugging if needed
+        print(f"Sample Size NI Sim Result: {result}")
+
+        self.assertTrue(result["sample_size_1"] >= 50) # Should be at least min_n
+        self.assertTrue(result["sample_size_1"] <= 150) # Should not exceed max_n if power not met
+        self.assertEqual(result["sample_size_1"], result["sample_size_2"]) # Default allocation
+        self.assertTrue(0 <= result["achieved_power"] <= 1.0)
+        # Check if achieved power is reasonably close to target if sample size didn't hit max_n
+        if result["sample_size_1"] < 150:
+            self.assertTrue(result["achieved_power"] >= result["target_power"] or result["achieved_power"] > 0.5) # allow some leeway
+
 if __name__ == '__main__':
     unittest.main()

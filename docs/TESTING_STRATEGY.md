@@ -14,7 +14,7 @@ Unit tests focus on testing individual functions in isolation to verify their co
   - [x] Configure coverage reporting
 
 - [ ] **Binary Outcomes Testing**
-  - [ ] Test analytical methods
+  - [x] Test analytical methods
     - [x] `power_binary()`
     - [x] `sample_size_binary()`
     - [x] `min_detectable_effect_binary()`
@@ -28,6 +28,30 @@ Unit tests focus on testing individual functions in isolation to verify their co
     - [x] `min_detectable_binary_non_inferiority_margin_sim()`
     - [x] `simulate_binary_trial()`
     - [x] `simulate_binary_non_inferiority()`
+
+- [ ] **Cluster RCT Testing**
+  - [ ] Test analytical methods (Binary)
+    - [x] `power_cluster_binary()` 
+    - [x] `sample_size_cluster_binary()` 
+    - [x] `mde_cluster_binary()` 
+    - [ ] Non-inferiority functions if applicable (None found for analytical binary)
+  - [ ] Test analytical methods (Continuous)
+    - [x] `power_cluster_continuous()` (Implemented, tested)
+    - [x] `sample_size_cluster_continuous()` (Implemented, tested)
+    - [x] `mde_cluster_continuous()` (Implemented, tested)
+    - [ ] Non-inferiority functions if applicable (None found for analytical continuous)
+  - [ ] Test simulation methods (Binary)
+    - [x] `power_cluster_binary_sim()` (Implemented, tested)
+    - [x] `sample_size_cluster_binary_sim()` (Implemented, tested)
+    - [x] `mde_cluster_binary_sim()` (Implemented, tested)
+    - [ ] Non-inferiority functions if applicable
+    - [x] `simulate_cluster_binary_trial()` (Helper, tested)
+  - [X] Test simulation methods (Continuous)
+    - [X] `power_cluster_continuous_sim()` (Implemented, tested)
+    - [X] `sample_size_cluster_continuous_sim()` (Implemented, tested)
+    - [X] `mde_cluster_continuous_sim()` (Implemented, tested)
+    - [ ] Non-inferiority functions if applicable (None found for simulation continuous)
+    - [X] `simulate_cluster_continuous_trial()` (Helper, formally tested)
 
 - [ ] **Continuous Outcomes Testing**
   - [ ] Test analytical methods
@@ -97,7 +121,7 @@ Integration tests verify that modules work together correctly.
   - [ ] **Methodology**: Mock Streamlit UI components (`st.*`), simulate user inputs by controlling the return values of these mocks, call `designpower_app.py` rendering and calculation functions, and assert that the underlying core statistical functions (from `core/designs/`) are called as expected using `unittest.mock.patch` and `assert_called_once_with` or similar.
   - [ ] **Examples**:
     - [x] `tests/ui/test_survival_ui_integration.py`
-    - [ ] `tests/ui/test_ui_integration.py`
+    - [x] `tests/ui/test_ui_integration.py`
 
 ### 3. Regression Testing
 
