@@ -6,6 +6,13 @@ maintainable and extensible application structure.
 """
 import os
 import sys
+
+# Make sure the project root is in the path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+import base64
 import streamlit as st
 import math
 import numpy as np
@@ -14,11 +21,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import graphviz
 
-# Make sure the project root is in the path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-    
 # Import component modules
 from core.utils.report_generator import generate_report
 from app.components.parallel_rct import (
@@ -359,16 +361,17 @@ if component_key in COMPONENTS:
                 
                 # Generate Report Button (Common to all non-survival results displayed in this 'else' block)
                 if st.button("Generate Report"):
-                    report_html_content, report_name = generate_report_for_streamlit(
-                        design_type=st.session_state.design_type,
-                        outcome_type=st.session_state.outcome_type,
-                        calculation_type=st.session_state.calculation_type,
-                        hypothesis_type=st.session_state.hypothesis_type,
-                        params=params, 
+                    report_text = generate_report(
                         results=results,
-                        method=st.session_state.get("method", "Analytical")
+                        params=params, # params should contain calc_type, hypothesis_type, method etc.
+                        design_type=st.session_state.design_type,
+                        outcome_type=st.session_state.outcome_type
                     )
+                    report_html_content = f"<pre>{report_text}</pre>"
+                    report_name = f"{st.session_state.design_type.replace(' ', '_')}_{st.session_state.outcome_type.replace(' ', '_')}_{st.session_state.calculation_type.replace(' ', '_')}_report"
                     if report_html_content:
+                        st.markdown("---<br>Generated Report:", unsafe_allow_html=True) # Add a separator and title
+                        st.markdown(report_html_content, unsafe_allow_html=True)
                         b64 = base64.b64encode(report_html_content.encode()).decode()
                         href = f'<a href="data:text/html;base64,{b64}" download="{report_name}.html">Download Report</a>'
                         st.markdown(href, unsafe_allow_html=True)

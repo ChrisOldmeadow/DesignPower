@@ -10,7 +10,11 @@ from scipy import stats
 from tqdm import tqdm
 import math
 import pandas as pd
+import statsmodels.formula.api as smf
 import statsmodels.api as sm
+from statsmodels.regression.mixed_linear_model import MixedLM
+from statsmodels.base._penalties import L2
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
 from statsmodels.stats.anova import anova_lm
 from statsmodels.genmod.cov_struct import Exchangeable
 import warnings
@@ -94,6 +98,8 @@ def simulate_continuous_trial(
     bayes_warmup: int = 500,
     lmm_method: str = "auto",
     lmm_reml: bool = True,
+    lmm_cov_penalty_weight: float = 0.0,  # Added: Weight for L2 penalty on covariance
+    lmm_fit_kwargs: dict = None,  # Added: Additional kwargs for MixedLM.fit()
     return_details: bool = False,
 ):
     """
@@ -129,6 +135,10 @@ def simulate_continuous_trial(
         Optimizer to use for MixedLM. Can be 'auto' (default), 'lbfgs', 'powell', 'cg', 'bfgs', 'newton', 'nm'.
     lmm_reml : bool, optional
         Whether to use REML for MixedLM. Default True.
+    lmm_cov_penalty_weight : float, optional
+        Weight for L2 penalty on covariance structure for MixedLM. Default 0.0 (no penalty).
+    lmm_fit_kwargs : dict, optional
+        Additional keyword arguments to pass to MixedLM.fit() (e.g., {'gtol': 1e-8}). Default None.
     return_details : bool, optional
         If True, returns additional details about the simulation.
     """
@@ -185,64 +195,89 @@ def simulate_continuous_trial(
     df = pd.concat([df_control, df_interv], ignore_index=True)
 
     if analysis_model == "mixedlm":
+        fit_status = "fit_error_ttest_fallback" # Default status if all else fails
+        tvalue, p_value = np.nan, np.nan
         try:
-            model = sm.MixedLM.from_formula("y ~ treatment", groups="cluster", data=df)
-            # Determine optimizer list
+            model = sm.MixedLM.from_formula("y ~ treatment", groups="cluster", data=df)  # Create model first
+            if lmm_cov_penalty_weight > 0:
+                # L2.__init__ takes 'weights' (plural); a single value scales all penalized params equally if applicable here.
+                l2_penalty_obj = L2(weights=lmm_cov_penalty_weight)
+                model.re_pen = l2_penalty_obj  # Assign to re_pen attribute
             if lmm_method == "auto":
-                method_list = [
-                    "lbfgs",
-                    "powell",
-                    "cg",
-                    "bfgs",
-                    "newton",
-                    "nm",
-                ]
+                method_list = ["lbfgs", "powell", "cg", "bfgs", "newton", "nm"]
             else:
                 method_list = [lmm_method]
 
             result = None
+            fit_exception = None
+            convergence_warning_occurred = False
+
             for m in method_list:
                 try:
-                    result = model.fit(reml=lmm_reml, method=m, disp=False)
-                    break
-                except Exception:
+                    with warnings.catch_warnings(record=True) as caught_warnings:
+                        warnings.simplefilter("always", ConvergenceWarning)
+                        current_fit_kwargs = {'reml': lmm_reml, 'method': m, 'disp': False}
+                        if lmm_fit_kwargs:
+                            current_fit_kwargs.update(lmm_fit_kwargs)
+                        result = model.fit(**current_fit_kwargs)
+                        
+                        # Check if ConvergenceWarning was issued
+                        for caught_warn in caught_warnings:
+                            if issubclass(caught_warn.category, ConvergenceWarning):
+                                convergence_warning_occurred = True
+                                break
+                    # If fit succeeded (even with warning), break
+                    break 
+                except Exception as e:
+                    fit_exception = e
                     continue
 
             if result is None:
-                raise RuntimeError("All optimizers failed for MixedLM")
-
-            tvalue = result.tvalues["treatment"]
-            if use_satterthwaite:
-                df_resid = max(1, result.df_resid)
-                p_value = 2 * stats.t.sf(np.abs(tvalue), df=df_resid)
-            else:
-                p_value = result.pvalues["treatment"]
-            
-            converged = not (
-                np.isnan(p_value)
-                or np.isinf(p_value)
-                or np.isnan(tvalue)
-                or float(result.cov_re.iloc[0, 0]) < 1e-6
-            )
-            if not converged:
+                # This means all optimizers failed
+                fit_status = "fit_error_ols_fallback"
                 warnings.warn(
-                    "MixedLM returned invalid statistics; falling back to cluster-robust OLS.",
-                    RuntimeWarning,
+                    f"All MixedLM optimizers failed (last error: {fit_exception}). Falling back to cluster-robust OLS.",
+                    RuntimeWarning
                 )
                 tvalue, p_value = _ols_cluster_test(df)
-                if return_details:
-                    return tvalue, p_value, {"converged": converged, "model": "mixedlm", "fallback": (not converged)}
-                return tvalue, p_value
             else:
-                if return_details:
-                    return tvalue, p_value, {"converged": converged, "model": "mixedlm"}
-                return tvalue, p_value
-        except Exception as e:
-            # Fallback to t-test if model fails
-            t_stat, p_value = stats.ttest_ind(control_data, intervention_data, equal_var=True)
+                # Fit succeeded with at least one optimizer
+                tvalue = result.tvalues["treatment"]
+                if use_satterthwaite:
+                    df_resid = max(1, result.df_resid) # Ensure df_resid is at least 1
+                    p_value = 2 * stats.t.sf(np.abs(tvalue), df=df_resid)
+                else:
+                    p_value = result.pvalues["treatment"]
+
+                is_boundary = float(result.cov_re.iloc[0, 0]) < 1e-6
+                is_invalid_stat = np.isnan(p_value) or np.isinf(p_value) or np.isnan(tvalue)
+
+                if is_invalid_stat:
+                    fit_status = "fit_error_ols_fallback_invalid_stats"
+                    warnings.warn(
+                        "MixedLM produced invalid statistics (NaN/Inf p-value or t-value). Falling back to cluster-robust OLS.",
+                        RuntimeWarning
+                    )
+                    tvalue, p_value = _ols_cluster_test(df)
+                elif is_boundary:
+                    fit_status = "success_boundary_condition"
+                    # Retain LMM results but flag as boundary
+                elif convergence_warning_occurred:
+                    fit_status = "success_convergence_warning"
+                    # Retain LMM results but flag convergence warning
+                else:
+                    fit_status = "success"
+            
             if return_details:
-                return t_stat, p_value, {"converged": False, "model": "mixedlm", "fallback": True}
-            return t_stat, p_value
+                return tvalue, p_value, {"model": "mixedlm", "status": fit_status, "lmm_converged": (result is not None and not is_invalid_stat)}
+            return tvalue, p_value
+
+        except Exception as e_outer: # Catch any other unexpected error during mixedlm setup/fallback
+            warnings.warn(f"Outer exception in MixedLM block: {e_outer}. Falling back to basic t-test.", RuntimeWarning)
+            t_stat_fallback, p_value_fallback = stats.ttest_ind(control_data, intervention_data, equal_var=True)
+            if return_details:
+                return t_stat_fallback, p_value_fallback, {"model": "mixedlm", "status": "fit_error_ttest_fallback_outer", "lmm_converged": False}
+            return t_stat_fallback, p_value_fallback
 
     if analysis_model == "gee":
         try:
@@ -338,6 +373,8 @@ def power_continuous_sim(
     bayes_warmup: int = 500,
     lmm_method: str = "auto",
     lmm_reml: bool = True,
+    lmm_cov_penalty_weight: float = 0.0,
+    lmm_fit_kwargs: dict = None,
     progress_callback=None,
 ):
     """
@@ -348,16 +385,18 @@ def power_continuous_sim(
     if seed is not None:
         np.random.seed(seed)
     
-    # Initialize counter for significant results
+    # Initialize counters
     sig_count = 0
-    
-    # Initialize counter for converged results
-    converged_count = 0
-    
-    # Store p-values for all simulations
     p_values = []
     
-    # Run simulations with progress bar
+    # LMM specific counters
+    lmm_success_count = 0
+    lmm_convergence_warnings_count = 0
+    lmm_boundary_conditions_count = 0
+    lmm_ols_fallbacks_count = 0 # Covers fit_error_ols_fallback and fit_error_ols_fallback_invalid_stats
+    lmm_ttest_fallbacks_outer_count = 0
+    lmm_total_considered_for_power = 0
+
     if progress_callback is None:
         iterator = tqdm(range(nsim), desc="Running simulations", disable=False)
     else:
@@ -366,60 +405,73 @@ def power_continuous_sim(
     for i in iterator:
         if analysis_model == "mixedlm":
             _, p_value, details = simulate_continuous_trial(
-                n_clusters,
-                cluster_size,
-                icc,
-                mean1,
-                mean2,
-                std_dev,
-                analysis_model=analysis_model,
-                use_satterthwaite=use_satterthwaite,
-                use_bias_correction=use_bias_correction,
-                bayes_draws=bayes_draws,
-                bayes_warmup=bayes_warmup,
-                lmm_method=lmm_method,
-                lmm_reml=lmm_reml,
-                return_details=True,
+                n_clusters, cluster_size, icc, mean1, mean2, std_dev,
+                analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
+                use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
+                bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
+                lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
+                return_details=True
             )
-            if details["converged"]:
-                converged_count += 1
+            status = details.get("status", "unknown")
+            
+            # Increment status counters
+            if status == "success":
+                lmm_success_count += 1
+            elif status == "success_convergence_warning":
+                lmm_convergence_warnings_count += 1
+            elif status == "success_boundary_condition":
+                lmm_boundary_conditions_count += 1
+            elif status in ["fit_error_ols_fallback", "fit_error_ols_fallback_invalid_stats"]:
+                lmm_ols_fallbacks_count += 1
+            elif status == "fit_error_ttest_fallback_outer":
+                lmm_ttest_fallbacks_outer_count += 1
+            
+            # Collect p-value and count significance if the result is considered usable for power
+            # Exclude 'fit_error_ttest_fallback_outer' from primary power calculation for LMM
+            if status not in ["fit_error_ttest_fallback_outer", "unknown"] and not np.isnan(p_value):
+                p_values.append(p_value)
+                lmm_total_considered_for_power += 1
+                if p_value < alpha:
+                    sig_count += 1
+            elif np.isnan(p_value) and status not in ["fit_error_ttest_fallback_outer", "unknown"]:
+                 # Still count it as considered if it was supposed to be, but p_value was NaN from a fallback
+                 lmm_total_considered_for_power += 1 
+
+        else: # For 'ttest', 'gee', 'bayes'
+            # These models have simpler or self-contained fallback logic in simulate_continuous_trial
+            _, p_value, details = simulate_continuous_trial(
+                n_clusters, cluster_size, icc, mean1, mean2, std_dev,
+                analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
+                use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
+                bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
+                lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
+                return_details=True # Get details for GEE/Bayes fallbacks if any
+            )
+            # For non-LMM, if p_value is valid, count it.
+            # The 'status' for GEE/Bayes might indicate fallback to t-test, which is fine.
+            if not np.isnan(p_value):
                 p_values.append(p_value)
                 if p_value < alpha:
                     sig_count += 1
-        else:
-            _, p_value = simulate_continuous_trial(
-                n_clusters,
-                cluster_size,
-                icc,
-                mean1,
-                mean2,
-                std_dev,
-                analysis_model=analysis_model,
-                use_satterthwaite=use_satterthwaite,
-                use_bias_correction=use_bias_correction,
-                bayes_draws=bayes_draws,
-                bayes_warmup=bayes_warmup,
-                lmm_method=lmm_method,
-                lmm_reml=lmm_reml,
-            )
-            p_values.append(p_value)
-            if p_value < alpha:
-                sig_count += 1
-
+        
         if progress_callback and ((i + 1) % max(1, nsim // 100) == 0 or (i + 1) == nsim):
             progress_callback(i + 1, nsim)
 
     # Calculate design effect
-    deff = 1 + (cluster_size - 1) * icc
+    deff = 1 + (cluster_size - 1) * icc if cluster_size > 0 else 1.0
     
     # Calculate effective sample size
-    n_eff = n_clusters * cluster_size / deff
+    n_eff = n_clusters * cluster_size / deff if deff > 0 else 0
     
     # Calculate empirical power
-    denom = converged_count if analysis_model == "mixedlm" else nsim
+    if analysis_model == "mixedlm":
+        denom = lmm_total_considered_for_power
+    else:
+        # For ttest, gee, bayes, power is based on all simulations that yielded a p-value
+        denom = len(p_values) 
     empirical_power = sig_count / denom if denom > 0 else 0.0
     
-    # Format results as dictionary
+    # Base results dictionary
     results = {
         "power": empirical_power,
         "n_clusters": n_clusters,
@@ -435,11 +487,8 @@ def power_continuous_sim(
         "alpha": alpha,
         "nsim": nsim,
         "significant_sims": sig_count,
-        "converged_sims": converged_count if analysis_model == "mixedlm" else nsim,
-        "failed_sims": nsim - converged_count if analysis_model == "mixedlm" else 0,
-        "p_values_mean": np.mean(p_values),
-        "p_values_median": np.median(p_values),
-        # Expose model choices directly for easier reporting
+        "p_values_mean": np.mean(p_values) if p_values else np.nan,
+        "p_values_median": np.median(p_values) if p_values else np.nan,
         "analysis_model": analysis_model,
         "use_satterthwaite": use_satterthwaite if analysis_model == "mixedlm" else None,
         "use_bias_correction": use_bias_correction if analysis_model == "gee" else None,
@@ -447,19 +496,42 @@ def power_continuous_sim(
         "lmm_reml": lmm_reml if analysis_model == "mixedlm" else None,
         "bayes_draws": bayes_draws if analysis_model == "bayes" else None,
         "bayes_warmup": bayes_warmup if analysis_model == "bayes" else None,
-        "sim_details": {
-            "method": "simulation",
-            "sim_type": "cluster_continuous",
-            "analysis_model": analysis_model,
-            "use_satterthwaite": use_satterthwaite,
-            "use_bias_correction": use_bias_correction,
-            "bayes_draws": bayes_draws if analysis_model == "bayes" else None,
-            "lmm_method": lmm_method if analysis_model == "mixedlm" else None,
-            "lmm_reml": lmm_reml if analysis_model == "mixedlm" else None,
-            "stan_installed": _STAN_AVAILABLE,
-        },
     }
-    
+
+    # Add LMM specific details if applicable
+    if analysis_model == "mixedlm":
+        results["lmm_fit_stats"] = {
+            "successful_fits": lmm_success_count,
+            "convergence_warnings": lmm_convergence_warnings_count,
+            "boundary_conditions": lmm_boundary_conditions_count,
+            "ols_fallbacks": lmm_ols_fallbacks_count,
+            "ttest_fallbacks_outer": lmm_ttest_fallbacks_outer_count,
+            "total_considered_for_power": lmm_total_considered_for_power,
+            "total_not_converged_or_failed_lmm_path": nsim - lmm_total_considered_for_power - lmm_ttest_fallbacks_outer_count
+        }
+        # For backward compatibility / simplicity in other reports, provide a general converged_sims
+        results["converged_sims"] = lmm_total_considered_for_power
+        results["failed_sims"] = nsim - lmm_total_considered_for_power
+    else:
+        # For other models, assume all simulations that produced a p_value are 'converged'
+        results["converged_sims"] = len(p_values)
+        results["failed_sims"] = nsim - len(p_values)
+
+    # Sim details sub-dictionary (can be expanded)
+    results["sim_details"] = {
+        "method": "simulation",
+        "sim_type": "cluster_continuous",
+        "analysis_model": analysis_model,
+        "use_satterthwaite": use_satterthwaite,
+        "use_bias_correction": use_bias_correction,
+        "bayes_draws": bayes_draws if analysis_model == "bayes" else None,
+        "lmm_method": lmm_method if analysis_model == "mixedlm" else None,
+        "lmm_reml": lmm_reml if analysis_model == "mixedlm" else None,
+        "stan_installed": _STAN_AVAILABLE,
+    }
+    if analysis_model == "mixedlm":
+        results["sim_details"]["lmm_fit_stats"] = results["lmm_fit_stats"]
+
     return results
 
 
@@ -468,13 +540,16 @@ def sample_size_continuous_sim(
     mean2,
     std_dev,
     icc,
-    cluster_size,
     power=0.8,
     alpha=0.05,
     nsim=1000,
-    min_n=2,
-    max_n=100,
     seed=None,
+    cluster_size=None, 
+    n_clusters_fixed=None, 
+    min_n_clusters=2, 
+    max_n_clusters=100, 
+    min_cluster_size=2, 
+    max_cluster_size=500, 
     *,
     analysis_model: str = "ttest",
     use_satterthwaite: bool = False,
@@ -483,119 +558,266 @@ def sample_size_continuous_sim(
     bayes_warmup: int = 500,
     lmm_method: str = "auto",
     lmm_reml: bool = True,
+    lmm_cov_penalty_weight: float = 0.0,
+    lmm_fit_kwargs: dict = None,
+    progress_callback=None,
 ):
     """
-    Find required sample size for a cluster RCT with continuous outcome using simulation.
+    Find required sample size (number of clusters or cluster size) for a cluster RCT 
+    with continuous outcome using simulation.
+
+    Exactly one of 'cluster_size' (to solve for number of clusters) or 
+    'n_clusters_fixed' (to solve for cluster size) must be specified.
+
+    Parameters
+    ----------
+    mean1 : float
+        Mean outcome in control group.
+    mean2 : float
+        Mean outcome in intervention group.
+    std_dev : float
+        Pooled standard deviation of the outcome.
+    icc : float
+        Intracluster correlation coefficient.
+    power : float, optional
+        Desired statistical power (1 - beta), by default 0.8.
+    alpha : float, optional
+        Significance level, by default 0.05.
+    nsim : int, optional
+        Number of simulations to run for each power estimation, by default 1000.
+    seed : int, optional
+        Random seed for reproducibility, by default None.
+    cluster_size : int, optional
+        Average number of individuals per cluster. Provide to calculate n_clusters.
+    n_clusters_fixed : int, optional
+        Number of clusters per arm. Provide to calculate cluster_size.
+    min_n_clusters : int, optional
+        Minimum number of clusters per arm for search range, by default 2.
+    max_n_clusters : int, optional
+        Maximum number of clusters per arm for search range, by default 100.
+    min_cluster_size : int, optional
+        Minimum average cluster size for search range, by default 2.
+    max_cluster_size : int, optional
+        Maximum average cluster size for search range, by default 500.
+    analysis_model : str, optional
+        The statistical model to use for analysis in simulations ('ttest', 'mixedlm', 'gee', 'bayes').
+    use_satterthwaite : bool, optional
+        Whether to use Satterthwaite approximation for mixed models, by default False.
+    use_bias_correction : bool, optional
+        Whether to use bias correction for GEE models, by default False.
+    bayes_draws : int, optional
+        Number of posterior draws for Bayesian models, by default 500.
+    bayes_warmup : int, optional
+        Number of warmup/burn-in draws for Bayesian models, by default 500.
+    lmm_method : str, optional
+        Optimization method for LMM, by default "auto".
+    lmm_reml : bool, optional
+        Whether to use REML for LMM, by default True.
+    lmm_cov_penalty_weight : float, optional
+        Weight for L2 penalty on covariance structure for MixedLM. Default 0.0 (no penalty).
+    lmm_fit_kwargs : dict, optional
+        Additional keyword arguments to pass to MixedLM.fit() (e.g., {'gtol': 1e-8}). Default None.
+    progress_callback : function, optional
+        A function to call with progress updates during simulation.
+
+    Returns
+    -------
+    dict
+        Dictionary containing the determined sample size parameters (n_clusters, cluster_size),
+        total sample size, achieved power, design effect, and simulation details.
+        May include a 'warning' key.
     """
+
+    if not ( (cluster_size is not None and n_clusters_fixed is None) or \
+             (cluster_size is None and n_clusters_fixed is not None) ):
+        raise ValueError("Exactly one of 'cluster_size' (to solve for n_clusters) or 'n_clusters_fixed' (to solve for cluster_size) must be specified.")
+
+    if icc < 0 or icc > 1: raise ValueError("ICC must be between 0 and 1.")
+    if power <= 0 or power >= 1: raise ValueError("Power must be between 0 and 1 (exclusive).")
+    if alpha <= 0 or alpha >= 1: raise ValueError("Alpha must be between 0 and 1 (exclusive).")
+    if std_dev <= 0: raise ValueError("Standard deviation must be positive.")
+    if nsim < 1: raise ValueError("Number of simulations (nsim) must be at least 1.")
+
     # Set random seed if provided
     if seed is not None:
         np.random.seed(seed)
     
-    # Get a rough estimate from analytical formula to use as a starting point
-    # Design effect
-    deff = 1 + (cluster_size - 1) * icc
-    
     # Calculate effect size (standardized mean difference)
     delta = abs(mean1 - mean2) / std_dev
-    
-    # Critical values for significance level and power
+    if delta == 0:
+        return {
+            "n_clusters": float('inf'), "cluster_size": float('inf'), "total_n": float('inf'),
+            "mean1": mean1, "mean2": mean2, "difference": 0, "std_dev": std_dev, "icc": icc,
+            "design_effect": float('inf'), "alpha": alpha, "target_power": power, "achieved_power": 0.0,
+            "nsim": nsim, "analysis_model": analysis_model,
+            "warning": "Mean outcomes are identical (delta=0), cannot simulate sample size for a difference."
+        }
+
+    # Critical values for significance level and power (used for analytical estimate if any)
     z_alpha = stats.norm.ppf(1 - alpha/2)
     z_beta = stats.norm.ppf(power)
-    
-    # Calculate required effective sample size per arm
-    n_eff = 2 * ((z_alpha + z_beta) / delta)**2
-    
-    # Calculate required number of clusters per arm (accounting for design effect)
-    n_clusters_estimate = max(min_n, min(max_n, math.ceil(n_eff * deff / cluster_size)))
-    
-    # Use binary search to find the optimal number of clusters
-    low = min_n
-    high = max(n_clusters_estimate * 2, max_n)  # Double the analytical estimate as upper bound
-    
-    # Track the minimum n_clusters that meets the power requirement
-    min_adequate_n = high
-    
-    print(f"Starting binary search with n_clusters between {low} and {high}")
-    
-    while low <= high:
-        mid = (low + high) // 2
-        print(f"Testing n_clusters = {mid}...")
+    n_eff_analytical = 2 * ((z_alpha + z_beta) / delta)**2 # Effective sample size per arm from analytical formula
+
+    final_n_clusters_result = None
+    final_cluster_size_result = None
+    warning_message = None
+
+    # --- Scenario 1: Solve for Number of Clusters (k) given Cluster Size (m) --- 
+    if cluster_size is not None:
+        if not isinstance(cluster_size, int) or cluster_size < min_cluster_size:
+            raise ValueError(f"Input cluster_size must be an integer >= {min_cluster_size}.")
+        final_cluster_size_result = cluster_size
+
+        # Analytical estimate for n_clusters to guide search range
+        deff_analytical = 1 + (final_cluster_size_result - 1) * icc
+        n_clusters_estimate_analytical = max(min_n_clusters, math.ceil(n_eff_analytical * deff_analytical / final_cluster_size_result))
+        n_clusters_if_icc0 = math.ceil(n_eff_analytical / final_cluster_size_result) if final_cluster_size_result > 0 else min_n_clusters
+        low_k = max(min_n_clusters, n_clusters_if_icc0)
+        # Adjust high_k based on analytical estimate, but ensure it's within max_n_clusters
+        high_k = min(max(n_clusters_estimate_analytical * 2, low_k + 10), max_n_clusters) 
+        if high_k < low_k: high_k = low_k # Ensure high is not less than low
+
+        min_adequate_k = high_k + 1 # Initialize to a value outside search range, indicating not found
+
+        print(f"Simulating to find n_clusters (k) with fixed m={final_cluster_size_result}. Search range k: [{low_k}-{high_k}]")
+        current_low_k, current_high_k = low_k, high_k
+        iterations_k = 0
+        max_iterations_k = 30 # Max iterations for k search
+        while current_low_k <= current_high_k:
+            if iterations_k >= max_iterations_k:
+                warning_message = (
+                    f"Binary search for n_clusters (k) exceeded maximum iterations ({max_iterations_k}). "
+                    f"Using k={min_adequate_k if min_adequate_k <= max_n_clusters else max_n_clusters} based on current findings."
+                )
+                print(f"Warning: {warning_message}")
+                break
+            iterations_k += 1
+            mid_k = (current_low_k + current_high_k) // 2
+            if mid_k < min_n_clusters: mid_k = min_n_clusters # Ensure mid_k is not below min
+            if mid_k == 0: # Avoid n_clusters = 0
+                current_low_k = 1
+                continue
+
+            print(f"  Testing k = {mid_k}, m = {final_cluster_size_result}...")
+            sim_results = power_continuous_sim(
+                n_clusters=mid_k, cluster_size=final_cluster_size_result, icc=icc,
+                mean1=mean1, mean2=mean2, std_dev=std_dev, nsim=nsim, alpha=alpha, seed=seed,
+                analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
+                use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
+                bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
+                lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
+                progress_callback=progress_callback
+            )
+            empirical_power = sim_results["power"]
+            print(f"  Achieved power for k={mid_k}, m={final_cluster_size_result}: {empirical_power:.4f} (Target: {power:.4f})")
+            
+            if empirical_power >= power:
+                min_adequate_k = min(min_adequate_k, mid_k)
+                current_high_k = mid_k - 1
+            else:
+                current_low_k = mid_k + 1
         
-        # Run simulation with current n_clusters
-        sim_results = power_continuous_sim(
-            n_clusters=mid, 
-            cluster_size=cluster_size,
-            icc=icc,
-            mean1=mean1,
-            mean2=mean2,
-            std_dev=std_dev,
-            nsim=nsim,
-            alpha=alpha,
-            seed=seed,
-            analysis_model=analysis_model,
-            use_satterthwaite=use_satterthwaite,
-            use_bias_correction=use_bias_correction,
-            bayes_draws=bayes_draws,
-            bayes_warmup=bayes_warmup,
-            lmm_method=lmm_method,
-            lmm_reml=lmm_reml,
-        )
-        
-        empirical_power = sim_results["power"]
-        print(f"Achieved power: {empirical_power:.4f}")
-        
-        if empirical_power >= power:
-            # This n_clusters is sufficient, try smaller
-            min_adequate_n = min(min_adequate_n, mid)
-            high = mid - 1
+        if min_adequate_k > max_n_clusters and min_adequate_k == high_k + 1: # Initial value not updated
+             # This means power was not achieved even at high_k. Use high_k for final sim to report achieved power.
+            final_n_clusters_result = max_n_clusters 
+            warning_message = f"Target power {power:.2f} may not be achievable with m={final_cluster_size_result} within k=[{min_n_clusters}-{max_n_clusters}]. Reporting for k={final_n_clusters_result}."
+        elif min_adequate_k == high_k + 1: # Still initial value, but high_k might have been small
+            final_n_clusters_result = max_n_clusters # Default to max if nothing found
+            warning_message = f"Target power {power:.2f} not achieved with m={final_cluster_size_result} up to k={max_n_clusters}. Consider increasing max_n_clusters or check parameters."
         else:
-            # This n_clusters is insufficient, try larger
-            low = mid + 1
+            final_n_clusters_result = min_adequate_k
+
+    # --- Scenario 2: Solve for Cluster Size (m) given Number of Clusters (k) --- 
+    elif n_clusters_fixed is not None:
+        if not isinstance(n_clusters_fixed, int) or n_clusters_fixed < min_n_clusters:
+            raise ValueError(f"Input n_clusters_fixed must be an integer >= {min_n_clusters}.")
+        final_n_clusters_result = n_clusters_fixed
+        m_if_icc0 = math.ceil(n_eff_analytical / final_n_clusters_result) if final_n_clusters_result > 0 else min_cluster_size
+        low_m = max(min_cluster_size, m_if_icc0)
+        high_m = max_cluster_size
+        min_adequate_m = high_m + 1 # Initialize to a value outside search range
+
+        print(f"Simulating to find cluster_size (m) with fixed k={final_n_clusters_result}. Search range m: [{low_m}-{high_m}]")
+        current_low_m, current_high_m = low_m, high_m
+        iterations_m = 0
+        max_iterations_m = 30 # Max iterations for m search
+        while current_low_m <= current_high_m:
+            if iterations_m >= max_iterations_m:
+                warning_message = (
+                    f"Binary search for cluster_size (m) exceeded maximum iterations ({max_iterations_m}). "
+                    f"Using m={min_adequate_m if min_adequate_m <= max_cluster_size else max_cluster_size} based on current findings."
+                )
+                print(f"Warning: {warning_message}")
+                break
+            iterations_m += 1
+            mid_m = (current_low_m + current_high_m) // 2
+            if mid_m < min_cluster_size: mid_m = min_cluster_size
+            if mid_m == 0: # Avoid cluster_size = 0
+                current_low_m = 1
+                continue
+
+            print(f"  Testing k = {final_n_clusters_result}, m = {mid_m}...")
+            sim_results = power_continuous_sim(
+                n_clusters=final_n_clusters_result, cluster_size=mid_m, icc=icc,
+                mean1=mean1, mean2=mean2, std_dev=std_dev, nsim=nsim, alpha=alpha, seed=seed,
+                analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
+                use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
+                bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
+                lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
+                progress_callback=progress_callback
+            )
+            empirical_power = sim_results["power"]
+            print(f"  Achieved power for k={final_n_clusters_result}, m={mid_m}: {empirical_power:.4f} (Target: {power:.4f})")
+
+            if empirical_power >= power:
+                min_adequate_m = min(min_adequate_m, mid_m)
+                current_high_m = mid_m - 1
+            else:
+                current_low_m = mid_m + 1
+        
+        if min_adequate_m > max_cluster_size and min_adequate_m == high_m + 1:
+            final_cluster_size_result = max_cluster_size
+            warning_message = f"Target power {power:.2f} may not be achievable with k={final_n_clusters_result} within m=[{min_cluster_size}-{max_cluster_size}]. Reporting for m={final_cluster_size_result}."
+        elif min_adequate_m == high_m + 1:
+            final_cluster_size_result = max_cluster_size
+            warning_message = f"Target power {power:.2f} not achieved with k={final_n_clusters_result} up to m={max_cluster_size}. Consider increasing max_cluster_size or check parameters."
+        else:
+            final_cluster_size_result = min_adequate_m
     
-    # Use the minimum n_clusters that meets the power requirement
-    final_n_clusters = min_adequate_n
-    
-    # Run final simulation to get accurate power estimate
-    final_results = power_continuous_sim(
-        n_clusters=final_n_clusters, 
-        cluster_size=cluster_size,
-        icc=icc,
-        mean1=mean1,
-        mean2=mean2,
-        std_dev=std_dev,
-        nsim=nsim,
-        alpha=alpha,
-        seed=seed,
-        analysis_model=analysis_model,
-        use_satterthwaite=use_satterthwaite,
-        use_bias_correction=use_bias_correction,
-        bayes_draws=bayes_draws,
-        bayes_warmup=bayes_warmup,
-        lmm_method=lmm_method,
-        lmm_reml=lmm_reml,
+    # Run final simulation with the determined parameters for accurate power and other metrics
+    print(f"Running final simulation with k={final_n_clusters_result}, m={final_cluster_size_result}...")
+    final_sim_output = power_continuous_sim(
+        n_clusters=final_n_clusters_result, 
+        cluster_size=final_cluster_size_result,
+        icc=icc, mean1=mean1, mean2=mean2, std_dev=std_dev, nsim=nsim, alpha=alpha, seed=seed,
+        analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
+        use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
+        bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
+        lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
+        progress_callback=progress_callback
     )
     
-    # Extract the empirical power from final simulation
-    achieved_power = final_results["power"]
-    
-    # Format results as dictionary
+    achieved_power_final = final_sim_output["power"]
+    final_deff = 1 + (final_cluster_size_result - 1) * icc if final_cluster_size_result > 0 else 1
+
+    # Assemble results dictionary
     results = {
-        "n_clusters": final_n_clusters,
-        "cluster_size": cluster_size,
-        "total_n": 2 * final_n_clusters * cluster_size,
+        "n_clusters": final_n_clusters_result,
+        "cluster_size": final_cluster_size_result,
+        "total_n": 2 * final_n_clusters_result * final_cluster_size_result,
         "icc": icc,
         "mean1": mean1,
         "mean2": mean2,
         "difference": abs(mean1 - mean2),
         "std_dev": std_dev,
-        "design_effect": deff,
+        "design_effect": final_deff,
         "alpha": alpha,
         "target_power": power,
-        "achieved_power": achieved_power,
+        "achieved_power": achieved_power_final,
         "nsim": nsim,
-        "p_values_mean": final_results["p_values_mean"],
-        "p_values_median": final_results["p_values_median"],
-        # Expose model choices directly for easier reporting
+        # Include details from final_sim_output that might be useful
+        "p_values_mean": final_sim_output.get("p_values_mean"),
+        "p_values_median": final_sim_output.get("p_values_median"),
         "analysis_model": analysis_model,
         "use_satterthwaite": use_satterthwaite if analysis_model == "mixedlm" else None,
         "use_bias_correction": use_bias_correction if analysis_model == "gee" else None,
@@ -603,18 +825,10 @@ def sample_size_continuous_sim(
         "lmm_reml": lmm_reml if analysis_model == "mixedlm" else None,
         "bayes_draws": bayes_draws if analysis_model == "bayes" else None,
         "bayes_warmup": bayes_warmup if analysis_model == "bayes" else None,
-        "sim_details": {
-            "method": "simulation",
-            "sim_type": "cluster_continuous",
-            "analysis_model": analysis_model,
-            "use_satterthwaite": use_satterthwaite,
-            "use_bias_correction": use_bias_correction,
-            "bayes_draws": bayes_draws if analysis_model == "bayes" else None,
-            "lmm_method": lmm_method if analysis_model == "mixedlm" else None,
-            "lmm_reml": lmm_reml if analysis_model == "mixedlm" else None,
-            "stan_installed": _STAN_AVAILABLE,
-        },
+        "sim_details": final_sim_output.get("sim_details", {})
     }
+    if warning_message:
+        results["warning"] = warning_message
     
     return results
 

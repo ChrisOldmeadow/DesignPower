@@ -127,6 +127,35 @@ DesignPower implements simulation-based approaches for cluster randomized trials
    - Using binary search, find the smallest effect size that achieves the desired power
    - For each effect size, run multiple simulations
 
+### Key Simulation Function Parameters
+
+When using simulation-based approaches for continuous outcomes in Cluster RCTs, the following functions and their key parameters are central. Notably, options to fine-tune `MixedLM` fitting have been added:
+
+#### `power_continuous_sim`
+
+Estimates statistical power for a given design.
+- **`n_clusters`**: Number of clusters per arm.
+- **`cluster_size`**: Average number of individuals per cluster.
+- **`icc`**: Intracluster correlation coefficient.
+- **`mean1`, `mean2`**: Mean outcomes in control and intervention arms.
+- **`std_dev`**: Total standard deviation of the outcome.
+- **`analysis_model`**: The analysis model to use (e.g., `'mixedlm'`, `'ttest'`).
+- **`lmm_method`**: Optimizer for `MixedLM` (e.g., `'auto'`, `'lbfgs'`). Default: `'auto'`.
+- **`lmm_reml`**: Whether to use REML for `MixedLM`. Default: `True`.
+- **`lmm_cov_penalty_weight`**: (float, optional) Weight for an L2 penalty on the covariance structure in `MixedLM`. A small positive value (e.g., `1e-4`) can help stabilize estimation if variance components are near zero, potentially reducing issues with singular Hessians or non-convergence. Default: `0.0` (no penalty).
+- **`lmm_fit_kwargs`**: (dict, optional) Additional keyword arguments to pass directly to the `statsmodels.MixedLM.fit()` method. This allows for finer control over the optimization process, such as setting convergence tolerances (e.g., `{'gtol': 1e-8}`) or maximum iterations (e.g., `{'maxiter': 200}`). Default: `None`.
+
+#### `sample_size_continuous_sim`
+
+Calculates the required sample size (number of clusters or cluster size).
+- Accepts similar parameters to `power_continuous_sim` regarding outcome characteristics and `MixedLM` settings.
+- **`power`**: Desired statistical power.
+- **`cluster_size`** (optional): Fixed cluster size, to solve for `n_clusters`.
+- **`n_clusters_fixed`** (optional): Fixed number of clusters, to solve for `cluster_size`.
+- Also includes `lmm_cov_penalty_weight` and `lmm_fit_kwargs` which are passed down to `power_continuous_sim` internally.
+
+These parameters provide greater flexibility and control when simulating trials, especially when encountering convergence issues with mixed-effects models.
+
 ## Practical Considerations
 
 ### ICC Estimation

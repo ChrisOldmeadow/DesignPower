@@ -38,11 +38,36 @@ def generate_cluster_sample_size_report(results, params, outcome_type):
     Generate a report for Cluster RCT sample size calculations.
     """
     # Extract shared parameters
-    n_clusters = results.get('n_clusters', 0)
-    cluster_size = params.get('cluster_size', 0)
-    total_n = n_clusters * 2 * cluster_size
+    determine_ss_param = params.get("determine_ss_param")
     icc = params.get('icc', 0)
-    design_effect = results.get('design_effect', 1 + (cluster_size - 1) * icc)
+
+    if determine_ss_param == "Average Cluster Size (m)":
+        # We solved for cluster_size (m), so n_clusters (k) was an input
+        # Input k is params['n_clusters_input_for_m_calc'] from UI, or results['n_clusters_fixed'] from calculation
+        report_n_clusters = params.get('n_clusters_input_for_m_calc', results.get('n_clusters_fixed', 0))
+        report_cluster_size = results.get('cluster_size', 0)
+    elif determine_ss_param == "Number of Clusters (k)":
+        # We solved for n_clusters (k), so cluster_size (m) was an input
+        # Input m is params['cluster_size_input_for_k_calc'] from UI, or results['cluster_size_fixed'] from calculation
+        report_n_clusters = results.get('n_clusters', 0)
+        report_cluster_size = params.get('cluster_size_input_for_k_calc', results.get('cluster_size_fixed', 0))
+    else:
+        # Fallback for older calls or if determine_ss_param is not set
+        report_n_clusters = results.get('n_clusters', 0)
+        # Try to get calculated cluster_size from results first, then input from params
+        report_cluster_size = results.get('cluster_size', params.get('cluster_size', 0)) 
+
+    # Ensure values are integers for display and DE calculation if they are numbers
+    report_n_clusters = int(report_n_clusters) if isinstance(report_n_clusters, (int, float)) and report_n_clusters is not None else 0
+    report_cluster_size = int(report_cluster_size) if isinstance(report_cluster_size, (int, float)) and report_cluster_size is not None else 0
+
+    total_n = report_n_clusters * 2 * report_cluster_size
+    # Calculate design_effect using the appropriate cluster_size for the report
+    # If report_cluster_size is 0 or 1, DE is 1. Avoid (0-1)*icc or (1-1)*icc.
+    if report_cluster_size > 1:
+        design_effect = results.get('design_effect', 1 + (report_cluster_size - 1) * icc)
+    else:
+        design_effect = 1.0
     alpha = params.get('alpha', 0.05)
     power = params.get('power', 0.8)
     method = params.get('method', 'analytical')
@@ -64,7 +89,7 @@ def generate_cluster_sample_size_report(results, params, outcome_type):
         return textwrap.dedent(f"""
         Sample Size Calculation Report for Cluster Randomized Controlled Trial:
         
-        A design with {n_clusters} clusters per arm and an average of {cluster_size} 
+        A design with {report_n_clusters} clusters per arm and an average of {report_cluster_size} 
         individuals per cluster (total N = {total_n}) will provide {power * 100:.0f}% power 
         to detect a difference in means of {abs(mean2 - mean1):.2f} between arms, 
         assuming a standard deviation of {std_dev:.2f}.
@@ -84,7 +109,7 @@ def generate_cluster_sample_size_report(results, params, outcome_type):
         return textwrap.dedent(f"""
         Sample Size Calculation Report for Cluster Randomized Controlled Trial:
         
-        A design with {n_clusters} clusters per arm and an average of {cluster_size} 
+        A design with {report_n_clusters} clusters per arm and an average of {report_cluster_size} 
         individuals per cluster (total N = {total_n}) will provide {power * 100:.0f}% power 
         to detect a difference in proportions from {p1:.2f} in the control arm to {p2:.2f} 
         in the intervention arm (risk difference = {abs(p2 - p1):.2f}).

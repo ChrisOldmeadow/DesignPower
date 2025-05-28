@@ -199,6 +199,18 @@ def render_continuous_advanced_options():
             key="cluster_continuous_model_select",
             help="Choose the analysis model applied to each simulated dataset. The simple two-sample t-test analyses individual-level data ignoring clustering but with design-effect adjustment. Mixed models explicitly model random cluster intercepts and can provide more power when cluster counts are moderate to large. GEE provides marginal (population-averaged) inference and is robust to some model misspecification, but small-sample bias can be an issue."
         )
+        advanced_params["lmm_cov_penalty_weight"] = 0.0 # Default if not LMM
+        if "Linear Mixed Model" in model_display:
+            advanced_params["lmm_cov_penalty_weight"] = st.number_input(
+                "LMM Covariance L2 Penalty Weight",
+                min_value=0.0,
+                value=0.0,
+                step=0.001,
+                format="%.4f",
+                key="cluster_continuous_lmm_penalty",
+                help="L2 penalty weight for LMM random effects covariance structure. Helps stabilize model fitting, especially with few clusters or complex structures. 0.0 means no penalty. Small positive values (e.g., 0.001, 0.01) can sometimes help convergence or prevent singular fits. Use with caution."
+            )
+
         model_map = {
             "T-test (cluster-level)": "ttest",
             "Linear Mixed Model (REML)": "mixedlm",
@@ -285,12 +297,6 @@ def render_cluster_continuous(calc_type, hypothesis_type):
     with col1:
         # Cluster parameters
         st.markdown("#### Cluster Parameters")
-        params["cluster_size"] = st.number_input(
-            "Average Cluster Size", 
-            value=20, 
-            min_value=2, 
-            help="Average number of individuals per cluster"
-        )
         
         params["icc"] = st.number_input(
             "Intracluster Correlation Coefficient (ICC)", 
@@ -298,30 +304,78 @@ def render_cluster_continuous(calc_type, hypothesis_type):
             min_value=0.0, 
             max_value=1.0, 
             format="%f", 
-            help="Correlation between individuals within the same cluster"
+            help="Correlation between individuals within the same cluster",
+            key="cluster_cont_icc"
         )
         
         if calc_type == "Sample Size":
+            params["determine_ss_param"] = st.radio(
+                "Determine which sample size parameter:",
+                ("Number of Clusters (k)", "Average Cluster Size (m)"),
+                key="cluster_cont_determine_ss_radio",
+                horizontal=True,
+                index=0, # Default to determining Number of Clusters
+                help="Select whether to calculate the number of clusters (given average size) or the average cluster size (given number of clusters)."
+            )
+
+            if params["determine_ss_param"] == "Number of Clusters (k)":
+                params["cluster_size_input_for_k_calc"] = st.number_input(
+                    "Average Cluster Size (m)", 
+                    value=20, 
+                    min_value=2, 
+                    key="cluster_cont_m_for_k_calc",
+                    help="Assumed average number of individuals per cluster."
+                )
+                # k will be the output
+            elif params["determine_ss_param"] == "Average Cluster Size (m)":
+                params["n_clusters_input_for_m_calc"] = st.number_input(
+                    "Number of Clusters per Arm (k)", 
+                    min_value=2, 
+                    value=10, 
+                    key="cluster_cont_k_for_m_calc",
+                    help="Assumed number of clusters in each treatment arm."
+                )
+                # m will be the output
+            
             params["power"] = st.slider(
                 "Power (1-β)", 
                 min_value=0.7, 
                 max_value=0.99, 
                 value=0.8, 
                 step=0.01, 
-                format="%0.2f"
+                format="%0.2f",
+                key="cluster_cont_power_ss"
             )
         elif calc_type == "Power":
+            # Original inputs for Power calculation - k and m are both inputs
+            params["cluster_size"] = st.number_input(
+                "Average Cluster Size (m)", 
+                value=20, 
+                min_value=2, 
+                key="cluster_cont_m_for_power_calc",
+                help="Average number of individuals per cluster"
+            )
             params["n_clusters"] = st.number_input(
-                "Number of Clusters per Arm", 
+                "Number of Clusters per Arm (k)", 
                 min_value=2, 
                 value=15,
+                key="cluster_cont_k_for_power_calc",
                 help="Number of clusters in each treatment arm"
             )
         elif calc_type == "Minimum Detectable Effect":
+            # Original inputs for MDE calculation - k and m are both inputs
+            params["cluster_size"] = st.number_input(
+                "Average Cluster Size (m)", 
+                value=20, 
+                min_value=2, 
+                key="cluster_cont_m_for_mde_calc",
+                help="Average number of individuals per cluster"
+            )
             params["n_clusters"] = st.number_input(
-                "Number of Clusters per Arm", 
+                "Number of Clusters per Arm (k)", 
                 min_value=2, 
                 value=15,
+                key="cluster_cont_k_for_mde_calc",
                 help="Number of clusters in each treatment arm"
             )
             params["power"] = st.slider(
@@ -330,7 +384,8 @@ def render_cluster_continuous(calc_type, hypothesis_type):
                 max_value=0.99, 
                 value=0.8, 
                 step=0.01, 
-                format="%0.2f"
+                format="%0.2f",
+                key="cluster_cont_power_mde"
             )
     
     with col2:
@@ -514,7 +569,11 @@ def calculate_cluster_continuous(params):
     try:
         # Check for required parameters based on calculation type
         if calc_type == "Sample Size":
-            required_params = ["mean1", "mean2", "std_dev", "icc", "cluster_size", "power", "alpha"]
+            required_params = ["mean1", "mean2", "std_dev", "icc", "power", "alpha"]
+            if params.get("determine_ss_param") == "Number of Clusters (k)":
+                required_params.append("cluster_size_input_for_k_calc")
+            elif params.get("determine_ss_param") == "Average Cluster Size (m)":
+                required_params.append("n_clusters_input_for_m_calc")
         elif calc_type == "Power":
             required_params = ["n_clusters", "cluster_size", "icc", "mean1", "mean2", "std_dev", "alpha"]
         elif calc_type == "Minimum Detectable Effect":
@@ -528,34 +587,69 @@ def calculate_cluster_continuous(params):
         # Call appropriate function based on calculation type and method
         if calc_type == "Sample Size":
             if method == "analytical":
-                results = analytical_continuous.sample_size_continuous(
-                    mean1=params["mean1"],
-                    mean2=params["mean2"],
-                    std_dev=params["std_dev"],
-                    icc=params["icc"],
-                    cluster_size=params["cluster_size"],
-                    power=params["power"],
-                    alpha=params["alpha"]
-                )
+                if params.get("determine_ss_param") == "Number of Clusters (k)":
+                    results = analytical_continuous.sample_size_continuous(
+                        mean1=params["mean1"],
+                        mean2=params["mean2"],
+                        std_dev=params["std_dev"],
+                        icc=params["icc"],
+                        cluster_size=params["cluster_size_input_for_k_calc"],
+                        power=params["power"],
+                        alpha=params["alpha"]
+                    )
+                elif params.get("determine_ss_param") == "Average Cluster Size (m)":
+                    results = analytical_continuous.sample_size_continuous(
+                        mean1=params["mean1"],
+                        mean2=params["mean2"],
+                        std_dev=params["std_dev"],
+                        icc=params["icc"],
+                        cluster_size=None,
+                        n_clusters_fixed=params["n_clusters_input_for_m_calc"],
+                        power=params["power"],
+                        alpha=params["alpha"]
+                    )
             else:  # simulation
-                results = simulation_continuous.sample_size_continuous_sim(
-                    mean1=params["mean1"],
-                    mean2=params["mean2"],
-                    std_dev=params["std_dev"],
-                    icc=params["icc"],
-                    cluster_size=params["cluster_size"],
-                    power=params["power"],
-                    alpha=params["alpha"],
-                    nsim=params.get("nsim", 1000),
-                    seed=params.get("seed", 42),
-                    analysis_model=params.get("analysis_model", "ttest"),
-                    use_satterthwaite=params.get("use_satterthwaite", False),
-                    use_bias_correction=params.get("use_bias_correction", False),
-                    bayes_draws=params.get("bayes_draws", 500),
-                    bayes_warmup=params.get("bayes_warmup", 500),
-                    lmm_method=params.get("lmm_method", "auto"),
-                    lmm_reml=params.get("lmm_reml", True),
-                )
+                if params.get("determine_ss_param") == "Number of Clusters (k)":
+                    results = simulation_continuous.sample_size_continuous_sim(
+                        mean1=params["mean1"],
+                        mean2=params["mean2"],
+                        std_dev=params["std_dev"],
+                        icc=params["icc"],
+                        cluster_size=params["cluster_size_input_for_k_calc"],
+                        power=params["power"],
+                        alpha=params["alpha"],
+                        nsim=params.get("nsim", 1000),
+                        seed=params.get("seed", 42),
+                        analysis_model=params.get("analysis_model", "ttest"),
+                        use_satterthwaite=params.get("use_satterthwaite", False),
+                        use_bias_correction=params.get("use_bias_correction", False),
+                        bayes_draws=params.get("bayes_draws", 500),
+                        bayes_warmup=params.get("bayes_warmup", 500),
+                        lmm_method=params.get("lmm_method", "auto"),
+                        lmm_reml=params.get("lmm_reml", True),
+                        lmm_cov_penalty_weight=params.get("lmm_cov_penalty_weight", 0.0),
+                    )
+                elif params.get("determine_ss_param") == "Average Cluster Size (m)":
+                    results = simulation_continuous.sample_size_continuous_sim(
+                        mean1=params["mean1"],
+                        mean2=params["mean2"],
+                        std_dev=params["std_dev"],
+                        icc=params["icc"],
+                        cluster_size=None,
+                        n_clusters_fixed=params["n_clusters_input_for_m_calc"],
+                        power=params["power"],
+                        alpha=params["alpha"],
+                        nsim=params.get("nsim", 1000),
+                        seed=params.get("seed", 42),
+                        analysis_model=params.get("analysis_model", "ttest"),
+                        use_satterthwaite=params.get("use_satterthwaite", False),
+                        use_bias_correction=params.get("use_bias_correction", False),
+                        bayes_draws=params.get("bayes_draws", 500),
+                        bayes_warmup=params.get("bayes_warmup", 500),
+                        lmm_method=params.get("lmm_method", "auto"),
+                        lmm_reml=params.get("lmm_reml", True),
+                        lmm_cov_penalty_weight=params.get("lmm_cov_penalty_weight", 0.0),
+                    )
         
         elif calc_type == "Power":
             if method == "analytical":
@@ -591,6 +685,7 @@ def calculate_cluster_continuous(params):
                     bayes_warmup=params.get("bayes_warmup", 500),
                     lmm_method=params.get("lmm_method", "auto"),
                     lmm_reml=params.get("lmm_reml", True),
+                    lmm_cov_penalty_weight=params.get("lmm_cov_penalty_weight", 0.0),
                     progress_callback=_update_progress,
                 )
                 progress_bar.empty()
@@ -631,8 +726,37 @@ def calculate_cluster_continuous(params):
                     progress_callback=_update_progress,
                 )
                 progress_bar.empty()
+
+                # Check for Bayesian MDE simulation failure and fallback
+                if params.get("analysis_model") == "bayes" and \
+                   (results.get("mde") is None or results.get("error")):
+                    warning_message = (
+                        "Bayesian MDE simulation failed to converge or returned an error. "
+                        "Falling back to analytical MDE calculation. "
+                        "The analytical result may differ and does not account for "
+                        "Bayesian posterior uncertainty."
+                    )
+                    st.warning(warning_message)
+                    
+                    # Store nsim from the attempted simulation, if available
+                    nsim_attempted = results.get("nsim", params.get("nsim", 1000))
+
+                    results = analytical_continuous.min_detectable_effect_continuous(
+                        n_clusters=params["n_clusters"],
+                        cluster_size=params["cluster_size"],
+                        icc=params["icc"],
+                        std_dev=params["std_dev"],
+                        power=params["power"],
+                        alpha=params["alpha"]
+                    )
+                    results["warning"] = warning_message
+                    results["nsim"] = nsim_attempted # Preserve nsim from the sim attempt
         
         # Add calculation method and design method to results
+        # Ensure results is a dictionary before trying to update it, esp. after fallback
+        if not isinstance(results, dict):
+            results = {} # Should not happen if core functions return dicts or None triggers error
+            
         results["design_method"] = "Cluster RCT"
         
         return results
@@ -661,11 +785,11 @@ def calculate_cluster_binary(params):
     try:
         # Check for required parameters based on calculation type
         if calc_type == "Sample Size":
-            required_params = ["p1", "p2", "icc", "cluster_size", "power", "alpha"]
+            required_params = ["p1", "p2", "icc", "power", "alpha"]
         elif calc_type == "Power":
             required_params = ["n_clusters", "cluster_size", "icc", "p1", "p2", "alpha"]
         elif calc_type == "Minimum Detectable Effect":
-            required_params = ["n_clusters", "cluster_size", "icc", "p1", "power", "alpha"]
+            required_params = ["n_clusters", "cluster_size", "icc", "p1", "power", "alpha", "effect_measure"]
         
         # Validate required parameters
         for param in required_params:

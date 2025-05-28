@@ -111,6 +111,9 @@ Integration tests verify that modules work together correctly.
   - [ ] **Methodology**: Directly import and call functions within `app/components/` modules (e.g., `calculate_parallel_survival`) with various input parameter dictionaries. Assertions are made on the returned values, structure of the results, and any side effects if applicable (though typically these should be minimal for calculation functions).
   - [ ] **Examples**:
     - [ ] `tests/app/components/test_parallel_rct.py` (for `app/components/parallel_rct.py`)
+    - [x] `tests/app/components/test_cluster_rct.py` (for `app/components/cluster_rct.py`)
+        - Covers `calculate_cluster_continuous` (analytical power, sample size, MDE; simulation power, sample size, MDE including Bayesian fallback; parameter validation).
+        - Covers `calculate_cluster_binary` (analytical power, sample size, MDE; ICC logit conversion; simulation power, sample size, MDE; parameter validation).
 
 - [ ] **UI and Core Calculation Flow Testing**
   - [ ] **Location**: `tests/ui/`
