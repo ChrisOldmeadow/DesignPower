@@ -260,8 +260,13 @@ def simulate_continuous_trial(
                     )
                     tvalue, p_value = _ols_cluster_test(df)
                 elif is_boundary:
-                    fit_status = "success_boundary_condition"
-                    # Retain LMM results but flag as boundary
+                    fit_status = "success_boundary_ols_fallback" # New status
+                    warnings.warn(
+                        "MixedLM estimated zero cluster variance (boundary condition). "
+                        "Using p-value from cluster-robust OLS for this replicate.",
+                        RuntimeWarning
+                    )
+                    tvalue, p_value = _ols_cluster_test(df) # Use OLS p-value
                 elif convergence_warning_occurred:
                     fit_status = "success_convergence_warning"
                     # Retain LMM results but flag convergence warning
@@ -392,7 +397,7 @@ def power_continuous_sim(
     # LMM specific counters
     lmm_success_count = 0
     lmm_convergence_warnings_count = 0
-    lmm_boundary_conditions_count = 0
+    lmm_success_boundary_ols_fallback_count = 0 # Updated counter name
     lmm_ols_fallbacks_count = 0 # Covers fit_error_ols_fallback and fit_error_ols_fallback_invalid_stats
     lmm_ttest_fallbacks_outer_count = 0
     lmm_total_considered_for_power = 0
@@ -402,60 +407,63 @@ def power_continuous_sim(
     else:
         iterator = range(nsim)
 
-    for i in iterator:
-        if analysis_model == "mixedlm":
-            _, p_value, details = simulate_continuous_trial(
-                n_clusters, cluster_size, icc, mean1, mean2, std_dev,
-                analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
-                use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
-                bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
-                lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
-                return_details=True
-            )
-            status = details.get("status", "unknown")
-            
-            # Increment status counters
-            if status == "success":
-                lmm_success_count += 1
-            elif status == "success_convergence_warning":
-                lmm_convergence_warnings_count += 1
-            elif status == "success_boundary_condition":
-                lmm_boundary_conditions_count += 1
-            elif status in ["fit_error_ols_fallback", "fit_error_ols_fallback_invalid_stats"]:
-                lmm_ols_fallbacks_count += 1
-            elif status == "fit_error_ttest_fallback_outer":
-                lmm_ttest_fallbacks_outer_count += 1
-            
-            # Collect p-value and count significance if the result is considered usable for power
-            # Exclude 'fit_error_ttest_fallback_outer' from primary power calculation for LMM
-            if status not in ["fit_error_ttest_fallback_outer", "unknown"] and not np.isnan(p_value):
-                p_values.append(p_value)
-                lmm_total_considered_for_power += 1
-                if p_value < alpha:
-                    sig_count += 1
-            elif np.isnan(p_value) and status not in ["fit_error_ttest_fallback_outer", "unknown"]:
-                 # Still count it as considered if it was supposed to be, but p_value was NaN from a fallback
-                 lmm_total_considered_for_power += 1 
+    # Suppress RuntimeWarnings from this module during simulations
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=RuntimeWarning, module=simulate_continuous_trial.__module__)
+        for i in iterator:
+            if analysis_model == "mixedlm":
+                _, p_value, details = simulate_continuous_trial(
+                    n_clusters, cluster_size, icc, mean1, mean2, std_dev,
+                    analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
+                    use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
+                    bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
+                    lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
+                    return_details=True
+                )
+                status = details.get("status", "unknown")
+                
+                # Increment status counters
+                if status == "success":
+                    lmm_success_count += 1
+                elif status == "success_convergence_warning":
+                    lmm_convergence_warnings_count += 1
+                elif status == "success_boundary_ols_fallback": # Updated status check
+                    lmm_success_boundary_ols_fallback_count += 1 # Updated counter
+                elif status in ["fit_error_ols_fallback", "fit_error_ols_fallback_invalid_stats"]:
+                    lmm_ols_fallbacks_count += 1
+                elif status == "fit_error_ttest_fallback_outer":
+                    lmm_ttest_fallbacks_outer_count += 1
+                
+                # Collect p-value and count significance if the result is considered usable for power
+                # Exclude 'fit_error_ttest_fallback_outer' from primary power calculation for LMM
+                if status not in ["fit_error_ttest_fallback_outer", "unknown"] and not np.isnan(p_value):
+                    p_values.append(p_value)
+                    lmm_total_considered_for_power += 1
+                    if p_value < alpha:
+                        sig_count += 1
+                elif np.isnan(p_value) and status not in ["fit_error_ttest_fallback_outer", "unknown"]:
+                     # Still count it as considered if it was supposed to be, but p_value was NaN from a fallback
+                     lmm_total_considered_for_power += 1 
 
-        else: # For 'ttest', 'gee', 'bayes'
-            # These models have simpler or self-contained fallback logic in simulate_continuous_trial
-            _, p_value, details = simulate_continuous_trial(
-                n_clusters, cluster_size, icc, mean1, mean2, std_dev,
-                analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
-                use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
-                bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
-                lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
-                return_details=True # Get details for GEE/Bayes fallbacks if any
-            )
-            # For non-LMM, if p_value is valid, count it.
-            # The 'status' for GEE/Bayes might indicate fallback to t-test, which is fine.
-            if not np.isnan(p_value):
-                p_values.append(p_value)
-                if p_value < alpha:
-                    sig_count += 1
-        
-        if progress_callback and ((i + 1) % max(1, nsim // 100) == 0 or (i + 1) == nsim):
-            progress_callback(i + 1, nsim)
+            else: # For 'ttest', 'gee', 'bayes'
+                # These models have simpler or self-contained fallback logic in simulate_continuous_trial
+                _, p_value, details = simulate_continuous_trial(
+                    n_clusters, cluster_size, icc, mean1, mean2, std_dev,
+                    analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
+                    use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
+                    bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
+                    lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
+                    return_details=True # Get details for GEE/Bayes fallbacks if any
+                )
+                # For non-LMM, if p_value is valid, count it.
+                # The 'status' for GEE/Bayes might indicate fallback to t-test, which is fine.
+                if not np.isnan(p_value):
+                    p_values.append(p_value)
+                    if p_value < alpha:
+                        sig_count += 1
+            
+            if progress_callback and ((i + 1) % max(1, nsim // 100) == 0 or (i + 1) == nsim):
+                progress_callback(i + 1, nsim)
 
     # Calculate design effect
     deff = 1 + (cluster_size - 1) * icc if cluster_size > 0 else 1.0
@@ -463,17 +471,25 @@ def power_continuous_sim(
     # Calculate effective sample size
     n_eff = n_clusters * cluster_size / deff if deff > 0 else 0
     
-    # Calculate empirical power
+    # Calculate power
+    # For LMM, power is based on simulations that were successfully processed through LMM path or valid fallbacks.
+    # For other models, it's based on total simulations (nsim).
     if analysis_model == "mixedlm":
-        denom = lmm_total_considered_for_power
+        power = sig_count / lmm_total_considered_for_power if lmm_total_considered_for_power > 0 else 0
+    elif nsim > 0:
+        # This branch covers 'ttest', 'gee', 'bayes'. 
+        # For these, simulate_continuous_trial handles its own fallbacks (usually to ttest), 
+        # and all nsim are generally considered unless p_value is NaN.
+        # The current p_values list for non-LMM models includes all non-NaN p-values.
+        # If a non-LMM model consistently produced NaNs, len(p_values) would be < nsim.
+        # Power should be based on valid p-values obtained.
+        power = sig_count / len(p_values) if len(p_values) > 0 else 0
     else:
-        # For ttest, gee, bayes, power is based on all simulations that yielded a p-value
-        denom = len(p_values) 
-    empirical_power = sig_count / denom if denom > 0 else 0.0
-    
+        power = 0
+
     # Base results dictionary
     results = {
-        "power": empirical_power,
+        "power": power,
         "n_clusters": n_clusters,
         "cluster_size": cluster_size,
         "total_n": 2 * n_clusters * cluster_size,
@@ -500,16 +516,19 @@ def power_continuous_sim(
 
     # Add LMM specific details if applicable
     if analysis_model == "mixedlm":
+        # Calculate total fits that did not contribute to power due to LMM path issues (e.g. ttest_fallback_outer or other unhandled NaN p-values)
+        # This is essentially nsim minus those that *were* considered.
+        total_not_converged_or_failed_lmm_path = nsim - lmm_total_considered_for_power
+
         results["lmm_fit_stats"] = {
             "successful_fits": lmm_success_count,
             "convergence_warnings": lmm_convergence_warnings_count,
-            "boundary_conditions": lmm_boundary_conditions_count,
-            "ols_fallbacks": lmm_ols_fallbacks_count,
-            "ttest_fallbacks_outer": lmm_ttest_fallbacks_outer_count,
+            "success_boundary_ols_fallbacks": lmm_success_boundary_ols_fallback_count, # Updated key
+            "ols_fallbacks_errors": lmm_ols_fallbacks_count, # covers fit_error_ols_fallback and fit_error_ols_fallback_invalid_stats
+            "ttest_fallbacks_outer_errors": lmm_ttest_fallbacks_outer_count,
             "total_considered_for_power": lmm_total_considered_for_power,
-            "total_not_converged_or_failed_lmm_path": nsim - lmm_total_considered_for_power - lmm_ttest_fallbacks_outer_count
-        }
-        # For backward compatibility / simplicity in other reports, provide a general converged_sims
+            "total_not_converged_or_failed_lmm_path": total_not_converged_or_failed_lmm_path
+        }# For backward compatibility / simplicity in other reports, provide a general converged_sims
         results["converged_sims"] = lmm_total_considered_for_power
         results["failed_sims"] = nsim - lmm_total_considered_for_power
     else:

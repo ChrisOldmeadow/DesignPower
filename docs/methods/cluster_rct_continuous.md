@@ -142,7 +142,7 @@ Estimates statistical power for a given design.
 - **`analysis_model`**: The analysis model to use (e.g., `'mixedlm'`, `'ttest'`).
 - **`lmm_method`**: Optimizer for `MixedLM` (e.g., `'auto'`, `'lbfgs'`). Default: `'auto'`.
 - **`lmm_reml`**: Whether to use REML for `MixedLM`. Default: `True`.
-- **`lmm_cov_penalty_weight`**: (float, optional) Weight for an L2 penalty on the covariance structure in `MixedLM`. A small positive value (e.g., `1e-4`) can help stabilize estimation if variance components are near zero, potentially reducing issues with singular Hessians or non-convergence. Default: `0.0` (no penalty).
+- **`lmm_cov_penalty_weight`**: (float, optional) Weight for an L2 penalty on the covariance structure in `MixedLM`. A small positive value (e.g., `1e-4`) can help stabilize estimation if variance components are near zero. Default: `0.0` (no penalty). Note: If a `MixedLM` fit results in an estimated cluster variance at the boundary (i.e., zero), the p-value for that simulation replicate is derived from an OLS model with cluster-robust standard errors to ensure robust power estimation.
 - **`lmm_fit_kwargs`**: (dict, optional) Additional keyword arguments to pass directly to the `statsmodels.MixedLM.fit()` method. This allows for finer control over the optimization process, such as setting convergence tolerances (e.g., `{'gtol': 1e-8}`) or maximum iterations (e.g., `{'maxiter': 200}`). Default: `None`.
 
 #### `sample_size_continuous_sim`
