@@ -380,13 +380,37 @@ def generate_power_report(results, params, design_type, outcome_type):
     hypothesis_type = params.get('hypothesis_type', 'Superiority')
     method = params.get('method', 'analytical')
     
-    # Default report for other types
-    report_text = textwrap.dedent(f"""
-    Power Calculation Report:
-    
-    With a total sample size of {n1 + n2} participants, the study will have {power * 100:.1f}% power 
-    for the specified design with a Type I error rate of {alpha * 100:.0f}%.
-    """)
+    if design_type == 'Parallel RCT' and 'Continuous' in outcome_type:
+        mean1 = params.get('mean1', 0)
+        mean2 = params.get('mean2', 0)
+        sd1 = params.get('sd1', 1)
+        sd2 = params.get('sd2', params.get('sd1', 1)) # Use sd1 if sd2 is not present
+        actual_effect_size = results.get('effect_size') # From power_continuous results
+        difference = abs(mean1 - mean2)
+
+        # Determine if sd2 was explicitly provided and different from sd1 for reporting
+        sd_text = f"{sd1:.2f}" 
+        if params.get('sd2') is not None and sd1 != sd2:
+            sd_text += f" in group 1 and {sd2:.2f} in group 2"
+        else:
+            sd_text += " (pooled or per group)"
+
+        report_text = textwrap.dedent(f"""
+        Power Calculation Report (Parallel RCT - Continuous Outcome):
+
+        For a study designed to compare two parallel groups with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), targeting a difference between means of {difference:.2f} (group 1 mean: {mean1:.2f}, group 2 mean: {mean2:.2f}), and assuming standard deviation(s) of {sd_text}, the estimated statistical power is {power * 100:.1f}%. This calculation uses a Type I error rate (alpha) of {alpha*100:.0f}%. The standardized effect size (Cohen's d) for this scenario is {actual_effect_size:.2f}.
+        """)
+        # Add reference
+        ref_details = get_method_reference('continuous', method=method, design=None) # Standard parallel design
+        report_text += f"\n\nMethod Reference: {ref_details['citation']} ({ref_details['doi']})"
+    else:
+        # Default report for other types
+        report_text = textwrap.dedent(f"""
+        Power Calculation Report:
+        
+        With a total sample size of {n1 + n2} participants, the study will have {power * 100:.1f}% power 
+        for the specified design with a Type I error rate of {alpha * 100:.0f}%.
+        """)
     
     return report_text.strip()
 
@@ -421,13 +445,35 @@ def generate_mde_report(results, params, design_type, outcome_type):
     hypothesis_type = params.get('hypothesis_type', 'Superiority')
     method = params.get('method', 'analytical')
     
-    # Default report for other types
-    report_text = textwrap.dedent(f"""
-    Minimum Detectable Effect Report:
-    
-    With a total sample size of {n1 + n2} participants and {power * 100:.0f}% power, 
-    the study can detect the specified minimum effect with a Type I error rate of {alpha * 100:.0f}%.
-    """)
+    if design_type == 'Parallel RCT' and 'Continuous' in outcome_type:
+        mde_val = results.get('mde')
+        cohen_d_val = results.get('cohen_d')
+        sd1 = params.get('sd1', 1)
+        sd2 = params.get('sd2', params.get('sd1', 1))
+
+        # Determine if sd2 was explicitly provided and different from sd1 for reporting
+        sd_text = f"{sd1:.2f}"
+        if params.get('sd2') is not None and sd1 != sd2:
+            sd_text += f" in group 1 and {sd2:.2f} in group 2"
+        else:
+            sd_text += " (pooled or per group)"
+        
+        report_text = textwrap.dedent(f"""
+        Minimum Detectable Effect Report (Parallel RCT - Continuous Outcome):
+
+        For a study with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), aiming for {power * 100:.0f}% statistical power, and assuming standard deviation(s) of {sd_text}, the minimum detectable difference in means is {mde_val:.2f}. This corresponds to a standardized effect size (Cohen's d) of {cohen_d_val:.2f}. This calculation uses a Type I error rate (alpha) of {alpha*100:.0f}%.
+        """)
+        # Add reference
+        ref_details = get_method_reference('continuous', method=method, design=None) # Standard parallel design
+        report_text += f"\n\nMethod Reference: {ref_details['citation']} ({ref_details['doi']})"
+    else:
+        # Default report for other types
+        report_text = textwrap.dedent(f"""
+        Minimum Detectable Effect Report:
+        
+        With a total sample size of {n1 + n2} participants and {power * 100:.0f}% power, 
+        the study can detect the specified minimum effect with a Type I error rate of {alpha * 100:.0f}%.
+        """)
     
     return report_text.strip()
 

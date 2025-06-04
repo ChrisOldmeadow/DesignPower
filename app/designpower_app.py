@@ -43,7 +43,8 @@ from app.components.cluster_rct import (
 from app.components.cluster_display_utils import (
     display_sensitivity_analysis,
     display_cluster_variation_info,
-    display_icc_conversion_info
+    display_icc_conversion_info,
+    display_cluster_continuous_results
 )
 
 # Dictionary of available designs and their parameters
@@ -261,6 +262,11 @@ if component_key in COMPONENTS:
                     calculation_type=calc_type,
                     hypothesis_type=hypothesis_type
                 )
+            elif design_name == "Cluster RCT" and outcome_name == "Continuous Outcome":
+                # Use the new display function for Cluster RCT Continuous results
+                # 'params' is available from the render call earlier in this scope
+                # 'calc_type' is also available
+                display_cluster_continuous_results(results, params, calc_type)
             else:
                 # Existing generic results display logic (Corrected Indentation)
                 st.markdown("### Results Summary")
