@@ -1,298 +1,250 @@
-# DesignPower: Power and Sample Size Calculator
+# DesignPower: Comprehensive Statistical Power Analysis
 
-A comprehensive application for statistical power analysis and sample size calculation across various study designs, featuring both analytical and simulation-based methods.
+A modern, comprehensive application for statistical power analysis and sample size calculation across various clinical trial designs, featuring analytical methods, Monte Carlo simulations, and cutting-edge Bayesian inference.
 
-## Features
-
-### Calculation Types
-- **Sample Size Calculation**: Determine required sample sizes for a desired power level
-- **Power Calculation**: Calculate statistical power for a given sample size
-- **Minimum Detectable Effect**: Estimate the smallest effect size detectable with a given sample size and power
+## 🚀 Key Features
 
 ### Study Designs
-- **Parallel RCTs** with multiple outcome types:
-  - Continuous outcomes (with equal or unequal variance options)
-  - Binary outcomes (with various statistical test options)
-  - Survival outcomes
-- **Single Arm Trials** with multiple outcome types
-  - Continuous outcomes
-  - Binary outcomes
-    - Standard design
-    - A'Hern's design
-    - Simon's two-stage design
-  - Survival outcomes
-- **Cluster RCTs** with multiple outcome types:
-  - Continuous outcomes (accounting for intracluster correlation)
-  - Binary outcomes (accounting for intracluster correlation)
+- **Parallel RCTs**: Two-arm randomized controlled trials
+- **Single Arm Trials**: Single-group studies with historical controls
+- **Cluster RCTs**: Randomized trials at the cluster level
+- **Interrupted Time Series**: Time series intervention analysis
+- **Stepped Wedge**: Sequential cluster rollout designs
 
-### Hypothesis Types
-- **Superiority**: Testing if a new treatment is better than a control
-- **Non-Inferiority**: Testing if a new treatment is not worse than a control by a pre-specified margin
+### Outcome Types
+- **Continuous**: Normal and non-normal distributions
+- **Binary**: Proportions and rates
+- **Survival**: Time-to-event analysis
+- **Count**: Poisson and negative binomial outcomes
 
-### Calculation Methods
-- **Analytical**: Based on established statistical formulas
-- **Simulation**: Monte Carlo simulations for more complex designs and robust estimates
+### Calculation Types
+- **Sample Size**: Determine required sample sizes for desired power
+- **Power**: Calculate statistical power for given sample sizes
+- **Minimum Detectable Effect**: Estimate smallest detectable effect sizes
 
-## Advanced Features
+### Hypothesis Testing
+- **Superiority**: Testing if new treatment is better
+- **Non-Inferiority**: Testing if new treatment is not worse by specified margin
+- **Equivalence**: Testing if treatments are equivalent within bounds
 
-### Binary Outcome Advanced Options
+## 🧠 Advanced Analysis Methods
 
-#### Statistical Test Types
-- **Normal Approximation**: Standard chi-square test approach (z-test)
-- **Fisher's Exact Test**: More conservative exact test, ideal for small sample sizes
-- **Likelihood Ratio Test**: Often more powerful than chi-square tests
+### Analytical Methods
+- Closed-form statistical formulas
+- Design effect adjustments for clustering
+- Variance inflation corrections
+- Satterthwaite approximations
 
-#### Continuity Correction
-- Optional continuity correction for improved accuracy in discrete data
+### Monte Carlo Simulation
+- **Full Simulation**: Individual-level data generation
+- **Bootstrap Methods**: Resampling-based inference
+- **Mixed Models**: Linear and generalized linear mixed models (LMM/GLMM)
+- **GEE**: Generalized Estimating Equations for clustered data
 
-### Cluster RCT Advanced Features
+### 🔬 Bayesian Inference (NEW!)
 
-#### Unequal Cluster Sizes
-- Support for unequal cluster sizes through design effect adjustments
-- Coefficient of variation (CV) control for modeling cluster size variability
-- Automatic design effect adjustment based on CV
+#### Full MCMC Backends
+- **Stan (CmdStanPy)**: Industry-standard probabilistic programming
+- **PyMC**: Pure Python Bayesian modeling with NUTS sampling
 
-#### ICC Features
-- Support for both linear and logit ICC scales with automatic conversion
-- ICC sensitivity analysis to explore result variations across different ICC values
-- Graphical visualization of ICC impact on power, sample size, and design effect
+#### Fast Approximate Methods
+- **Variational Bayes**: Laplace approximation (10-100x faster than MCMC)
+- **ABC**: Approximate Bayesian Computation (ultra-lightweight)
 
-#### Binary Outcome Enhancements
-- Multiple effect measure options (risk difference, risk ratio, odds ratio)
-- Small cluster validation with appropriate warnings
-- Comprehensive results with all effect measures calculated
+#### Bayesian Inference Methods
+- **Credible Intervals**: 95% posterior credible intervals
+- **Posterior Probability**: Probability of favorable effects
+- **ROPE**: Region of Practical Equivalence testing
 
-### Single Arm Binary Outcome Designs
+#### Smart Resource Management
+- **Environment Detection**: Automatically suggests appropriate methods
+- **Fallback Hierarchy**: Stan/PyMC → Variational → ABC → Classical
+- **Web-Friendly**: ABC methods work on minimal server resources
 
-#### A'Hern's Design
-- Exact binomial calculations for smaller sample sizes
-- More precise than normal approximation methods
-- Single-stage design with clear decision rules
+## 🏗️ Architecture
 
-#### Simon's Two-Stage Design
-- Allows early stopping for futility after the first stage
-- Reduces expected sample size when treatment is ineffective
-- Multiple optimality criteria:
-  - **Optimal**: Minimizes expected sample size under null hypothesis
-  - **Minimax**: Minimizes maximum sample size
-- Provides stage-specific decision thresholds
-- Highly optimized calculation algorithm based on industry-standard methods
-
-### Simulation Features
-- **Customizable Simulations**: Set the number of simulations and random seed
-- **Reproducibility**: Fixed random seeds ensure reproducible results
-- **Parameter Optimization**: Automatic optimization for sample size and MDE calculations
-
-### Unequal Variance Support
-- For continuous outcomes, option to specify different standard deviations for treatment and control groups
-
-## Project Structure
-
+### Modular Design
 ```
 DesignPower/
-├── app/
-│   ├── designpower_app.py     # Streamlit main application
-│   └── components/            # Modular UI components
-│       ├── parallel_rct.py    # Parallel RCT components
-│       └── single_arm.py      # Single arm trial components
-├── core/
-│   ├── compatibility.py       # Backward compatibility
-│   ├── power.py               # Main interface for calculations
-│   └── designs/               # Design-specific implementations
-│       ├── parallel/          # Parallel design modules
-│       │   ├── analytical_continuous.py  # Analytical methods for continuous outcomes
-│       │   ├── simulation_continuous.py  # Simulation methods for continuous outcomes
-│       │   ├── analytical_binary.py      # Analytical methods for binary outcomes
-│       │   ├── simulation_binary.py      # Simulation methods for binary outcomes
-│       │   ├── analytical_survival.py    # Analytical methods for survival outcomes
-│       │   └── simulation_survival.py    # Simulation methods for survival outcomes
-│       └── single/            # Single arm design modules
-├── requirements.txt           # Python dependencies
-└── README.md                  # This documentation
+├── app/                          # Streamlit web interface
+│   ├── designpower_app.py        # Main application
+│   └── components/               # UI components by design type
+├── core/                         # Core calculation engine
+│   ├── designs/                  # Design-specific implementations
+│   │   ├── parallel/             # Parallel RCT methods
+│   │   ├── single_arm/           # Single arm methods
+│   │   ├── cluster_rct/          # Cluster RCT methods
+│   │   └── interrupted_time_series/ # ITS methods
+│   ├── outcomes/                 # Outcome-specific utilities
+│   ├── methods/                  # Statistical method implementations
+│   └── utils/                    # Shared utilities and reports
+├── api/                          # FastAPI REST interface
+├── tests/                        # Comprehensive test suite
+└── docs/                         # Documentation and methodology
 ```
 
-## Installation
+### Backend Interfaces
+- **Web Interface**: Streamlit-based interactive application
+- **REST API**: FastAPI for programmatic access
+- **CLI**: Command-line interface for automation
+- **Python API**: Direct function calls for integration
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/DesignPower.git
-   cd DesignPower
-   ```
+## 📊 Cluster RCT Specialization
 
-2. Install Python dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+### Advanced Clustering Features
+- **ICC Handling**: Linear and logit scale ICC with automatic conversion
+- **Unequal Clusters**: Design effect adjustments for cluster size variation
+- **Small Sample Corrections**: Specialized methods for few clusters
+- **Sensitivity Analysis**: ICC impact visualization
 
-## Usage
+### Mixed Model Support
+- **LMM**: Linear Mixed Models with REML/ML estimation
+- **Robust Methods**: Cluster-robust standard errors
+- **Fallback Systems**: Automatic degradation when models fail
+- **Convergence Diagnostics**: Detailed fitting statistics
 
-### Running the Streamlit App
+### Bayesian Hierarchical Models
+```python
+# Hierarchical model structure
+y_ij ~ Normal(α + β*treatment_j + u_j, σ_e)
+u_j ~ Normal(0, σ_u)  # Random cluster effects
+β ~ Normal(0, 10)     # Treatment effect prior
+```
 
+## 🛠️ Installation
+
+### Basic Installation
 ```bash
+git clone https://github.com/yourusername/DesignPower.git
 cd DesignPower
-streamlit run app/designpower_app.py
+pip install -r requirements.txt
 ```
 
-This will start the web application locally and open a browser window with the interface.
+### Bayesian Backends (Optional)
+```bash
+# For Stan backend (full MCMC)
+pip install cmdstanpy
 
-### Using the Application
+# For PyMC backend (full MCMC) 
+pip install pymc
 
-1. **Select Study Design and Outcome Type**
-   - Choose between Parallel RCT or Single Arm Trial
-   - Select the outcome type (Continuous, Binary, or Survival)
+# Approximate methods use scipy (included in requirements.txt)
+```
 
-2. **Choose Hypothesis Type**
-   - Select between Superiority or Non-Inferiority hypothesis
+### Development Installation
+```bash
+pip install -e .
+pip install -r requirements-dev.txt
+```
 
-3. **Select Calculation Type**
-   - Sample Size: Calculate required sample size for a given power
-   - Power: Calculate power for a given sample size
-   - Minimum Detectable Effect: Determine the smallest effect size detectable
-
-4. **Input Parameters**
-   - Enter basic parameters specific to your chosen design
-   - Configure advanced options as needed (test type, simulation parameters, etc.)
-
-5. **Calculate Results**
-   - Click the Calculate button to perform the analysis
-   - View results including visualizations
-
-### Advanced Options
-
-#### Simulation vs. Analytical Methods
-
-For more complex designs or to verify analytical results, the simulation method provides:  
-- More robust estimates through Monte Carlo simulation
-- Customizable number of simulations (higher = more precision)
-- Ability to set a random seed for reproducibility
-
-#### Binary Outcome Test Types
-
-Different test types affect the calculated sample size and power:
-- **Normal Approximation**: Standard approach, efficient for larger samples
-- **Fisher's Exact Test**: More conservative, better for smaller samples
-- **Likelihood Ratio Test**: Often more powerful than chi-square tests
-
-Applying continuity correction improves accuracy but generally increases required sample sizes.
-
-## Modular Structure
-
-The application follows a modular design pattern:
-- **UI Components**: Separated by study design and outcome type
-- **Calculation Modules**: Organized by analytical vs. simulation methods
-- **Core Functions**: Shared utilities and interfaces
-
-## Contributing
-
-Contributions to DesignPower are welcome! To contribute:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature-name`)
-3. Commit your changes (`git commit -m 'Add some feature'`)
-4. Push to the branch (`git push origin feature/your-feature-name`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-     ```python
-     import julia
-     julia.install()
-     ```
-
-## Usage
+## 🚀 Usage
 
 ### Web Interface
-
-Run the Streamlit app:
-
 ```bash
-streamlit run app/streamlit_app.py
+streamlit run app/designpower_app.py
 ```
+Open http://localhost:8501
 
-Then open your browser to http://localhost:8501
-
-### API
-
-Start the FastAPI server:
-
+### REST API
 ```bash
 uvicorn api.main:app --reload
 ```
+Documentation at http://localhost:8000/docs
 
-The API will be available at http://localhost:8000 with interactive documentation at http://localhost:8000/docs
-
-### Command Line Interface
-
-The CLI provides quick access to calculations:
-
+### Command Line
 ```bash
-# Calculate sample size for a parallel RCT with continuous outcome
-python cli.py sample-size --design parallel --outcome continuous --delta 0.5 --std-dev 1.0 --power 0.8
+# Parallel RCT sample size
+python cli.py sample-size --design parallel --outcome continuous \
+  --delta 0.5 --std-dev 1.0 --power 0.8
 
-# Calculate power for a cluster RCT with binary outcome
-python cli.py power --design cluster --outcome binary --n-clusters 10 --cluster-size 20 --icc 0.05 --p1 0.5 --p2 0.6
-
-# Calculate minimum detectable effect
-python cli.py mde --design cluster --outcome binary --n-clusters 15 --cluster-size 25 --icc 0.1 --p1 0.5 --power 0.8
+# Cluster RCT with Bayesian analysis
+python cli.py power --design cluster --outcome continuous \
+  --n-clusters 10 --cluster-size 20 --icc 0.05 \
+  --mean1 3.0 --mean2 3.5 --std-dev 1.2 \
+  --method simulation --analysis-model bayes --backend pymc
 ```
 
-### Using Julia for High-Performance Simulation
+### Python API
+```python
+from core.designs.cluster_rct import simulation_continuous
 
-To test if Julia is correctly configured:
+# Bayesian power analysis
+results = simulation_continuous.power_continuous_sim(
+    n_clusters=10, cluster_size=20, icc=0.05,
+    mean1=3.0, mean2=3.5, std_dev=1.2,
+    analysis_model="bayes", bayes_backend="variational",
+    bayes_inference_method="credible_interval"
+)
 
-```bash
-python cli.py julia
+print(f"Power: {results['power']:.3f}")
+print(f"Backend: {results['sim_details']['bayes_backend']}")
 ```
 
-## Core Modules
+## 📈 Performance Comparison
 
-### `core.power`
+| Method | Speed | Accuracy | Memory | Use Case |
+|--------|-------|----------|--------|----------|
+| **Analytical** | ⚡⚡⚡⚡ | 📊📊📊 | 💾 | Quick estimates |
+| **Classical Simulation** | ⚡⚡⚡ | 📊📊📊📊 | 💾💾 | Standard analysis |
+| **Bayesian (Stan/PyMC)** | ⚡ | 📊📊📊📊📊 | 💾💾💾💾 | Research quality |
+| **Bayesian (Variational)** | ⚡⚡⚡ | 📊📊📊📊 | 💾💾 | Fast exploration |
+| **Bayesian (ABC)** | ⚡⚡ | 📊📊📊 | 💾 | Web deployment |
 
-Contains analytical functions for power and sample size calculation:
-
-- `sample_size_difference_in_means`: Calculate sample size for detecting a difference in means
-- `power_difference_in_means`: Calculate power for detecting a difference in means
-- `power_binary_cluster_rct`: Calculate power for a cluster RCT with binary outcome
-- `sample_size_binary_cluster_rct`: Calculate sample size for a cluster RCT with binary outcome
-- `min_detectable_effect_binary_cluster_rct`: Calculate minimum detectable effect for a cluster RCT
-
-### `core.simulation`
-
-Contains simulation-based functions for more complex designs:
-
-- `simulate_parallel_rct`: Simulate a parallel RCT with continuous outcome
-- `simulate_cluster_rct`: Simulate a cluster RCT with continuous outcome
-- `simulate_stepped_wedge`: Simulate a stepped wedge design
-- `simulate_binary_cluster_rct`: Simulate a cluster RCT with binary outcome
-
-### `julia_backend`
-
-Contains high-performance Julia implementations:
-
-- `stepped_wedge.jl`: Fast simulation for stepped wedge designs
-
-## Running Tests
-
-Run all tests:
+## 🧪 Testing
 
 ```bash
+# Run all tests
 pytest
+
+# Run specific test suites
+pytest tests/core/designs/cluster_rct/
+pytest tests/app/components/
+
+# Run with coverage
+pytest --cov=core --cov=app
+
+# Skip long-running Bayesian tests
+pytest -k "not bayesian"
 ```
 
-Run specific test files:
+## 📚 Documentation
 
-```bash
-pytest tests/test_power.py
-pytest tests/test_simulation.py
-```
+- **Methodology**: See `docs/methods/` for statistical details
+- **API Reference**: Auto-generated from docstrings
+- **Examples**: `docs/EXAMPLES.md` for common use cases
+- **Testing Strategy**: `docs/TESTING_STRATEGY.md`
 
-Skip Julia tests if Julia is not installed:
+## 🤝 Contributing
 
-```bash
-pytest -k "not julia"
-```
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push branch: `git push origin feature/amazing-feature`
+5. Open Pull Request
 
-## License
+### Development Guidelines
+- Follow PEP 8 style guidelines
+- Add tests for new functionality
+- Update documentation for user-facing changes
+- Run full test suite before submitting
 
-[MIT License](LICENSE)
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## 🙏 Acknowledgments
+
+- **Stan Development Team** for probabilistic programming infrastructure
+- **PyMC Contributors** for accessible Bayesian modeling
+- **SciPy Community** for fundamental scientific computing tools
+- **Clinical Trials Research Community** for methodology development
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/yourusername/DesignPower/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/DesignPower/discussions)
+- **Documentation**: [Wiki](https://github.com/yourusername/DesignPower/wiki)
+
+---
+
+**DesignPower**: Bringing modern computational statistics to clinical trial design! 🔬✨

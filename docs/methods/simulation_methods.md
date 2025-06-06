@@ -1,6 +1,6 @@
 # Simulation Methods for Study Design
 
-This document details the simulation-based methodology implemented in DesignPower for calculating sample size, power, and minimum detectable effect across various study designs.
+This document details the comprehensive simulation-based methodology implemented in DesignPower for calculating sample size, power, and minimum detectable effect across various study designs, including classical Monte Carlo methods and modern Bayesian inference approaches.
 
 ## Background
 
@@ -10,6 +10,7 @@ While analytical formulas provide exact results under specific assumptions, simu
 2. **Realistic scenarios**: Can incorporate real-world complexities such as missing data, non-normal distributions, and heterogeneous treatment effects
 3. **Robustness**: Can evaluate the impact of violations of standard assumptions
 4. **Validation**: Can verify analytical results and provide confidence intervals for power estimates
+5. **Bayesian Inference**: Provides full uncertainty quantification through posterior distributions
 
 ## General Simulation Framework
 
@@ -137,6 +138,203 @@ For repeated measures designs, the simulation:
 2. Applies the treatment effect according to the design
 3. Performs the appropriate analysis (e.g., ANCOVA, mixed model)
 4. Records whether the p-value is less than the significance threshold
+
+## Bayesian Simulation Methods
+
+DesignPower implements state-of-the-art Bayesian inference for power analysis, offering both full MCMC and fast approximate methods. Bayesian approaches provide complete uncertainty quantification and natural incorporation of prior information.
+
+### Hierarchical Bayesian Model for Cluster RCTs
+
+The Bayesian framework models cluster RCTs using hierarchical models that explicitly account for clustering:
+
+```
+Level 1 (Individual): y_ij ~ Normal(μ_ij, σ_e²)
+Level 2 (Cluster):    μ_ij = α + β×treatment_j + u_j
+Level 3 (Population): u_j ~ Normal(0, σ_u²)
+
+Priors:
+- α ~ Normal(0, 10²)     # Intercept
+- β ~ Normal(0, 10²)     # Treatment effect
+- σ_u ~ HalfStudentT(3, 0, 2.5)  # Between-cluster SD
+- σ_e ~ HalfStudentT(3, 0, 2.5)  # Within-cluster SD
+```
+
+### Bayesian Inference Backends
+
+#### 1. Stan (CmdStanPy) - Full MCMC
+- **Method**: Hamiltonian Monte Carlo with NUTS sampler
+- **Strengths**: Gold standard for Bayesian inference, excellent convergence
+- **Use Case**: Research-quality analysis, final results
+- **Requirements**: `pip install cmdstanpy`
+
+```python
+# Example usage
+results = simulation_continuous.power_continuous_sim(
+    n_clusters=10, cluster_size=20, icc=0.05,
+    mean1=3.0, mean2=3.5, std_dev=1.2,
+    analysis_model="bayes", bayes_backend="stan",
+    bayes_draws=1000, bayes_warmup=1000
+)
+```
+
+#### 2. PyMC - Full MCMC
+- **Method**: NUTS sampler with pure Python implementation
+- **Strengths**: Easier installation, excellent Python integration
+- **Use Case**: Development, exploration, Python-native workflows
+- **Requirements**: `pip install pymc`
+
+```python
+# PyMC backend
+results = simulation_continuous.power_continuous_sim(
+    n_clusters=10, cluster_size=20, icc=0.05,
+    mean1=3.0, mean2=3.5, std_dev=1.2,
+    analysis_model="bayes", bayes_backend="pymc",
+    bayes_draws=1000, bayes_warmup=1000
+)
+```
+
+#### 3. Variational Bayes - Fast Approximation
+- **Method**: Laplace approximation using MAP estimation + Hessian
+- **Speed**: 10-100x faster than MCMC
+- **Accuracy**: Good approximation for well-behaved posteriors
+- **Use Case**: Rapid exploration, parameter tuning, CI/CD testing
+- **Requirements**: scipy (always available)
+
+**Algorithm**:
+1. Find Maximum A Posteriori (MAP) estimate via optimization
+2. Compute Hessian matrix at MAP for uncertainty quantification
+3. Approximate posterior as multivariate normal
+4. Sample from approximate posterior
+
+```python
+# Variational approximation
+results = simulation_continuous.power_continuous_sim(
+    n_clusters=10, cluster_size=20, icc=0.05,
+    mean1=3.0, mean2=3.5, std_dev=1.2,
+    analysis_model="bayes", bayes_backend="variational",
+    bayes_draws=1000  # Number of approximate samples
+)
+```
+
+#### 4. Approximate Bayesian Computation (ABC) - Ultra-Lightweight
+- **Method**: Simulation-based likelihood-free inference
+- **Speed**: Very fast, minimal memory footprint
+- **Use Case**: Web deployment, free hosting, educational demos
+- **Requirements**: scipy (always available)
+
+**Algorithm**:
+1. Define summary statistics from observed data
+2. Sample parameters from priors
+3. Simulate data using sampled parameters
+4. Accept parameters if simulated statistics ≈ observed statistics
+5. Repeat until sufficient samples collected
+
+```python
+# ABC for web deployment
+results = simulation_continuous.power_continuous_sim(
+    n_clusters=10, cluster_size=20, icc=0.05,
+    mean1=3.0, mean2=3.5, std_dev=1.2,
+    analysis_model="bayes", bayes_backend="abc",
+    bayes_draws=1000  # Number of ABC samples
+)
+```
+
+### Bayesian Inference Methods
+
+All Bayesian backends support three inference approaches for determining statistical significance:
+
+#### 1. Credible Intervals (Default)
+- **Method**: 95% posterior credible interval excludes zero
+- **Interpretation**: "95% probability that true effect is non-zero"
+- **Advantage**: Most interpretable, standard Bayesian approach
+
+```python
+significant = (ci_lower > 0) or (ci_upper < 0)
+```
+
+#### 2. Posterior Probability
+- **Method**: Probability that effect is in favorable direction
+- **Criterion**: P(β > 0) > 97.5% or P(β > 0) < 2.5%
+- **Interpretation**: Direct probability of treatment benefit
+
+```python
+prob_positive = (beta_samples > 0).mean()
+significant = prob_positive > 0.975 or prob_positive < 0.025
+```
+
+#### 3. Region of Practical Equivalence (ROPE)
+- **Method**: Test if effect is practically significant
+- **Criterion**: P(|β| < δ) < 5% where δ is equivalence threshold
+- **Advantage**: Incorporates practical significance, not just statistical
+
+```python
+rope_half_width = 0.1 * std_dev  # 10% of SD as ROPE
+prob_rope = ((beta_samples > -rope_half_width) & 
+             (beta_samples < rope_half_width)).mean()
+significant = prob_rope < 0.05
+```
+
+### Smart Resource Management
+
+DesignPower automatically manages computational resources based on environment constraints:
+
+#### Environment Detection
+```python
+def _detect_resource_constraints():
+    """Detect resource-constrained environments."""
+    memory_gb = psutil.virtual_memory().available / (1024**3)
+    cpu_count = psutil.cpu_count()
+    
+    # Suggest lightweight methods for constrained environments
+    is_constrained = memory_gb < 2.0 or cpu_count <= 1
+    return is_constrained
+```
+
+#### Automatic Fallback Hierarchy
+1. **Primary**: User-selected backend (Stan/PyMC/Variational/ABC)
+2. **Fallback 1**: If primary unavailable → Variational Bayes
+3. **Fallback 2**: If scipy unavailable → Classical t-test
+4. **User notification**: Clear warnings about fallback usage
+
+### Performance Comparison
+
+| Backend | Speed | Memory | Accuracy | Convergence | Dependencies |
+|---------|-------|--------|----------|-------------|--------------|
+| **Stan** | ⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | Heavy |
+| **PyMC** | ⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | Medium |
+| **Variational** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | Light |
+| **ABC** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | Light |
+
+### Convergence Diagnostics
+
+#### MCMC Diagnostics (Stan/PyMC)
+- **R-hat**: Potential Scale Reduction Factor < 1.1
+- **Effective Sample Size**: Independent samples from chains
+- **Trace plots**: Visual inspection of chain mixing
+- **Energy diagnostics**: HMC-specific convergence checks
+
+#### Approximate Method Diagnostics
+- **Variational**: Hessian conditioning, optimization success
+- **ABC**: Acceptance rate, tolerance sensitivity
+- **Warning system**: Automatic detection of poor approximations
+
+### Deployment Considerations
+
+#### Local Development
+- **Recommended**: Stan or PyMC for full accuracy
+- **Fallback**: Variational for rapid iteration
+
+#### Free Web Hosting (Streamlit Cloud, Heroku, etc.)
+- **Recommended**: ABC or Variational
+- **Avoid**: Full MCMC (resource constraints)
+
+#### Production Research
+- **Recommended**: Stan with multiple chains
+- **Validation**: Compare with classical methods
+
+#### Educational/Demo Use
+- **Recommended**: ABC with clear limitation warnings
+- **Advantage**: Works everywhere, minimal dependencies
 
 ## Specialized Simulation Methods
 
