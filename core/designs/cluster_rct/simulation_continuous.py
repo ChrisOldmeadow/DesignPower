@@ -19,13 +19,24 @@ from statsmodels.stats.anova import anova_lm
 from statsmodels.genmod.cov_struct import Exchangeable
 import warnings
 
-# Optional Stan support
+# Optional Bayesian support
 try:
     from cmdstanpy import CmdStanModel
     import tempfile
     import os
     _STAN_AVAILABLE = True
     _STAN_MODEL = None
+except ImportError:
+    _STAN_AVAILABLE = False
+    _STAN_MODEL = None
+
+try:
+    import pymc as pm
+    import pytensor.tensor as pt
+    import arviz as az
+    _PYMC_AVAILABLE = True
+except ImportError:
+    _PYMC_AVAILABLE = False
 
     def _get_stan_model():
         global _STAN_MODEL
@@ -77,6 +88,52 @@ except ImportError:
     _STAN_MODEL = None
 
 
+def _fit_pymc_model(df, draws=500, tune=500, chains=4):
+    """Fit PyMC hierarchical model for cluster RCT."""
+    if not _PYMC_AVAILABLE:
+        raise ImportError("PyMC is not available. Please install with: pip install pymc")
+    
+    # Map cluster IDs to consecutive integers starting from 0 (PyMC convention)
+    unique_clusters = sorted(df['cluster'].unique())
+    cluster_map = {old_id: new_id for new_id, old_id in enumerate(unique_clusters)}
+    cluster_ids = df['cluster'].map(cluster_map).values
+    
+    n_clusters = len(unique_clusters)
+    y_obs = df['y'].values
+    treatment = df['treatment'].values
+    
+    with pm.Model() as model:
+        # Priors
+        alpha = pm.Normal("alpha", mu=0, sigma=10)
+        beta = pm.Normal("beta", mu=0, sigma=10)
+        
+        # Cluster random effects
+        sigma_u = pm.HalfStudentT("sigma_u", nu=3, sigma=2.5)
+        u_raw = pm.Normal("u_raw", mu=0, sigma=1, shape=n_clusters)
+        u = pm.Deterministic("u", u_raw * sigma_u)
+        
+        # Individual-level variance
+        sigma_e = pm.HalfStudentT("sigma_e", nu=3, sigma=2.5)
+        
+        # Linear predictor
+        mu = alpha + beta * treatment + u[cluster_ids]
+        
+        # Likelihood
+        y = pm.Normal("y", mu=mu, sigma=sigma_e, observed=y_obs)
+        
+        # Sample
+        trace = pm.sample(
+            draws=draws, 
+            tune=tune, 
+            chains=chains, 
+            return_inferencedata=True,
+            progressbar=False,
+            random_seed=42
+        )
+    
+    return trace, model
+
+
 # ----------------------------------
 # Helper for fallback cluster robust OLS
 # ----------------------------------
@@ -112,6 +169,7 @@ def simulate_continuous_trial(
     bayes_draws: int = 500,
     bayes_warmup: int = 500,
     bayes_inference_method: str = "credible_interval",  # New: Choose Bayesian inference method
+    bayes_backend: str = "stan",  # New: Choose Bayesian backend ("stan" or "pymc")
     lmm_method: str = "auto",
     lmm_reml: bool = True,
     lmm_cov_penalty_weight: float = 0.0,  # Added: Weight for L2 penalty on covariance
@@ -152,6 +210,10 @@ def simulate_continuous_trial(
         - 'credible_interval': 95% credible interval excludes zero (default)
         - 'posterior_probability': Posterior probability > 97.5% or < 2.5%
         - 'rope': Region of Practical Equivalence approach (< 5% prob in ROPE)
+    bayes_backend : str, optional
+        Bayesian backend to use. Options:
+        - 'stan': Use CmdStanPy/Stan (default)
+        - 'pymc': Use PyMC (requires PyMC installation)
     lmm_method : str, optional
         Optimizer to use for MixedLM. Can be 'auto' (default), 'lbfgs', 'powell', 'cg', 'bfgs', 'newton', 'nm'.
     lmm_reml : bool, optional
@@ -336,11 +398,21 @@ def simulate_continuous_trial(
             return z_stat, p_value
 
     if analysis_model == "bayes":
-        if not _STAN_AVAILABLE:
+        # Check which backend to use and availability
+        if bayes_backend == "pymc" and not _PYMC_AVAILABLE:
             warnings.warn(
-                "Bayesian analysis requires cmdstanpy package. Please install with:\n"
+                "PyMC backend requested but not available. Please install with:\n"
+                "pip install pymc\n"
+                "Trying Stan backend as fallback...",
+                UserWarning
+            )
+            bayes_backend = "stan"
+        
+        if bayes_backend == "stan" and not _STAN_AVAILABLE:
+            warnings.warn(
+                "Stan backend not available. Please install with:\n"
                 "pip install cmdstanpy\n"
-                "Falling back to cluster-level t-test for now.",
+                "Falling back to cluster-level t-test.",
                 UserWarning
             )
             # Fall back to cluster-level t-test
@@ -349,46 +421,71 @@ def simulate_continuous_trial(
             interv_means = cluster_means[cluster_means['treatment'] == 1]['y'].values
             t_stat, p_value = stats.ttest_ind(control_means, interv_means, equal_var=True)
             if return_details:
-                return t_stat, p_value, {"converged": False, "model": "bayes", "fallback": True}
+                return t_stat, p_value, {"converged": False, "model": "bayes", "fallback": True, "backend": "ttest"}
             return t_stat, p_value
 
         try:
-            model = _get_stan_model()
-            N = len(df)
-            y = df['y'].values
-            # Map cluster IDs to consecutive integers starting from 1 (Stan convention)
-            unique_clusters = sorted(df['cluster'].unique())
-            cluster_map = {old_id: new_id + 1 for new_id, old_id in enumerate(unique_clusters)}
-            cluster_ids = df['cluster'].map(cluster_map).values
-            treat = df['treatment'].values
-            data = {
-                "N": N,
-                "J": len(unique_clusters),
-                "cluster": cluster_ids.astype(int),
-                "y": y,
-                "treat": treat,
-            }
-            
-            # Use multiple chains for better convergence assessment
-            n_chains = 4
-            fit = model.sample(
-                data=data,
-                chains=n_chains,
-                iter_sampling=bayes_draws,
-                iter_warmup=bayes_warmup,
-                show_progress=False,
-                refresh=1,  # Changed from 0 to 1
-            )
-            
-            beta_samples = fit.stan_variable("beta")
-            
-            # Check convergence using R-hat
-            summary_df = fit.summary()
-            beta_rhat = summary_df.loc[summary_df.index.str.contains('beta'), 'R_hat'].iloc[0]
-            converged = beta_rhat < 1.1
-            
-            if not converged:
-                warnings.warn(f"Bayesian model did not converge (R-hat = {beta_rhat:.3f}). Results may be unreliable.")
+            if bayes_backend == "pymc":
+                # PyMC implementation
+                trace, model = _fit_pymc_model(
+                    df, 
+                    draws=bayes_draws, 
+                    tune=bayes_warmup, 
+                    chains=4
+                )
+                
+                # Extract beta samples
+                beta_samples = trace.posterior["beta"].values.flatten()
+                
+                # Check convergence using R-hat
+                rhat_summary = az.rhat(trace)
+                beta_rhat = float(rhat_summary["beta"].values)
+                converged = beta_rhat < 1.1
+                
+                if not converged:
+                    warnings.warn(f"PyMC model did not converge (R-hat = {beta_rhat:.3f}). Results may be unreliable.")
+                
+                backend_used = "pymc"
+                
+            else:  # Stan backend
+                model = _get_stan_model()
+                N = len(df)
+                y = df['y'].values
+                # Map cluster IDs to consecutive integers starting from 1 (Stan convention)
+                unique_clusters = sorted(df['cluster'].unique())
+                cluster_map = {old_id: new_id + 1 for new_id, old_id in enumerate(unique_clusters)}
+                cluster_ids = df['cluster'].map(cluster_map).values
+                treat = df['treatment'].values
+                data = {
+                    "N": N,
+                    "J": len(unique_clusters),
+                    "cluster": cluster_ids.astype(int),
+                    "y": y,
+                    "treat": treat,
+                }
+                
+                # Use multiple chains for better convergence assessment
+                n_chains = 4
+                fit = model.sample(
+                    data=data,
+                    chains=n_chains,
+                    iter_sampling=bayes_draws,
+                    iter_warmup=bayes_warmup,
+                    show_progress=False,
+                    refresh=1,  # Changed from 0 to 1
+                )
+                
+                beta_samples = fit.stan_variable("beta")
+                
+                # Check convergence using R-hat
+                summary_df = fit.summary()
+                beta_rhat = summary_df.loc[summary_df.index.str.contains('beta'), 'R_hat'].iloc[0]
+                converged = beta_rhat < 1.1
+                
+                if not converged:
+                    warnings.warn(f"Stan model did not converge (R-hat = {beta_rhat:.3f}). Results may be unreliable.")
+                
+                backend_used = "stan"
             
             # Calculate Bayesian inference methods
             # Method 1: Credible Interval (95% CI excludes zero)
@@ -430,6 +527,7 @@ def simulate_continuous_trial(
                 bayes_details = {
                     "converged": converged, 
                     "model": "bayes",
+                    "backend": backend_used,
                     "rhat": beta_rhat,
                     "beta_mean": np.mean(beta_samples),
                     "beta_sd": np.std(beta_samples),
@@ -484,6 +582,7 @@ def power_continuous_sim(
     bayes_draws: int = 500,
     bayes_warmup: int = 500,
     bayes_inference_method: str = "credible_interval",
+    bayes_backend: str = "stan",
     lmm_method: str = "auto",
     lmm_reml: bool = True,
     lmm_cov_penalty_weight: float = 0.0,
@@ -525,6 +624,7 @@ def power_continuous_sim(
                     analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
                     use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
                     bayes_warmup=bayes_warmup, bayes_inference_method=bayes_inference_method,
+                    bayes_backend=bayes_backend,
                     lmm_method=lmm_method, lmm_reml=lmm_reml,
                     lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
                     return_details=True
@@ -561,6 +661,7 @@ def power_continuous_sim(
                     analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
                     use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
                     bayes_warmup=bayes_warmup, bayes_inference_method=bayes_inference_method,
+                    bayes_backend=bayes_backend,
                     lmm_method=lmm_method, lmm_reml=lmm_reml,
                     lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
                     return_details=True # Get details for GEE/Bayes fallbacks if any
@@ -654,9 +755,11 @@ def power_continuous_sim(
         "use_satterthwaite": use_satterthwaite,
         "use_bias_correction": use_bias_correction,
         "bayes_draws": bayes_draws if analysis_model == "bayes" else None,
+        "bayes_backend": bayes_backend if analysis_model == "bayes" else None,
         "lmm_method": lmm_method if analysis_model == "mixedlm" else None,
         "lmm_reml": lmm_reml if analysis_model == "mixedlm" else None,
         "stan_installed": _STAN_AVAILABLE,
+        "pymc_installed": _PYMC_AVAILABLE,
     }
     if analysis_model == "mixedlm":
         results["sim_details"]["lmm_fit_stats"] = results["lmm_fit_stats"]
@@ -686,6 +789,7 @@ def sample_size_continuous_sim(
     bayes_draws: int = 500,
     bayes_warmup: int = 500,
     bayes_inference_method: str = "credible_interval",
+    bayes_backend: str = "stan",
     lmm_method: str = "auto",
     lmm_reml: bool = True,
     lmm_cov_penalty_weight: float = 0.0,
@@ -984,6 +1088,7 @@ def min_detectable_effect_continuous_sim(
     bayes_draws: int = 500,
     bayes_warmup: int = 500,
     bayes_inference_method: str = "credible_interval",
+    bayes_backend: str = "stan",
     lmm_method: str = "auto",
     lmm_reml: bool = True,
 ):

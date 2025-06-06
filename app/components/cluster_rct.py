@@ -711,12 +711,18 @@ def render_continuous_advanced_options():
             )
         
         st.markdown("#### Analysis Model")
-        # Check if cmdstanpy is available for Bayesian option
+        # Check availability of Bayesian backends
         try:
             import cmdstanpy
-            bayesian_available = True
+            stan_available = True
         except ImportError:
-            bayesian_available = False
+            stan_available = False
+            
+        try:
+            import pymc
+            pymc_available = True
+        except ImportError:
+            pymc_available = False
         
         model_options = [
             "T-test (cluster-level)",
@@ -724,10 +730,16 @@ def render_continuous_advanced_options():
             "GEE (Exchangeable)",
         ]
         
-        if bayesian_available:
+        # Add Bayesian options based on availability
+        if stan_available:
             model_options.append("Bayesian (Stan)")
         else:
             model_options.append("Bayesian (Stan) - Not Available")
+            
+        if pymc_available:
+            model_options.append("Bayesian (PyMC)")
+        else:
+            model_options.append("Bayesian (PyMC) - Not Available")
         
         model_display = st.selectbox(
             "Statistical Model Used to Analyse Each Simulated Trial",
@@ -738,12 +750,21 @@ def render_continuous_advanced_options():
         )
         
         # Show installation message if Bayesian is selected but not available
-        if "Bayesian" in model_display and not bayesian_available:
+        if "Bayesian (Stan)" in model_display and not stan_available:
             st.error(
-                "📦 **Bayesian analysis requires additional installation**\n\n"
-                "To use Bayesian analysis, please install cmdstanpy:\n"
+                "📦 **Stan backend requires additional installation**\n\n"
+                "To use Stan for Bayesian analysis, please install cmdstanpy:\n"
                 "```bash\n"
                 "pip install cmdstanpy\n"
+                "```\n"
+                "The calculation will fall back to cluster-level t-test if you proceed."
+            )
+        elif "Bayesian (PyMC)" in model_display and not pymc_available:
+            st.error(
+                "📦 **PyMC backend requires additional installation**\n\n"
+                "To use PyMC for Bayesian analysis, please install pymc:\n"
+                "```bash\n"
+                "pip install pymc\n"
                 "```\n"
                 "The calculation will fall back to cluster-level t-test if you proceed."
             )
@@ -765,8 +786,16 @@ def render_continuous_advanced_options():
             "GEE (Exchangeable)": "gee",
             "Bayesian (Stan)": "bayes",
             "Bayesian (Stan) - Not Available": "bayes",  # Will fall back to ttest automatically
+            "Bayesian (PyMC)": "bayes",
+            "Bayesian (PyMC) - Not Available": "bayes",  # Will fall back to ttest automatically
         }
         advanced_params["analysis_model"] = model_map[model_display]
+        
+        # Set Bayesian backend based on selection
+        if "Bayesian (PyMC)" in model_display:
+            advanced_params["bayes_backend"] = "pymc"
+        else:
+            advanced_params["bayes_backend"] = "stan"  # Default to Stan
         
         # Model-specific options
         if advanced_params["analysis_model"] == "mixedlm":
@@ -819,6 +848,10 @@ def render_continuous_advanced_options():
                     key="cluster_continuous_bayes_warmup",
                 )
             
+            # Show backend information
+            backend_name = "PyMC" if advanced_params["bayes_backend"] == "pymc" else "Stan"
+            st.info(f"🔧 **Bayesian Backend**: Using {backend_name} for MCMC sampling")
+            
             # Bayesian inference method selection
             st.markdown("**Bayesian Inference Method**")
             inference_options = {
@@ -831,10 +864,12 @@ def render_continuous_advanced_options():
                 options=list(inference_options.keys()),
                 index=0,
                 key="cluster_continuous_bayes_inference",
-                help="""Choose how to determine statistical significance:
+                help=f"""Choose how to determine statistical significance (using {backend_name} backend):
                 • **Credible Interval**: 95% credible interval excludes zero (most standard)
                 • **Posterior Probability**: >97.5% probability effect is in favorable direction
-                • **ROPE**: <5% probability effect is in Region of Practical Equivalence around zero"""
+                • **ROPE**: <5% probability effect is in Region of Practical Equivalence around zero
+                
+                Both Stan and PyMC use the NUTS (No-U-Turn Sampler) for efficient sampling."""
             )
             advanced_params["bayes_inference_method"] = inference_options[selected_inference]
     
@@ -1297,6 +1332,7 @@ def calculate_cluster_continuous(params):
                     bayes_draws=params.get("bayes_draws", 500),
                     bayes_warmup=params.get("bayes_warmup", 500),
                     bayes_inference_method=params.get("bayes_inference_method", "credible_interval"),
+                    bayes_backend=params.get("bayes_backend", "stan"),
                     lmm_method=params.get("lmm_method", "auto"),
                     lmm_reml=params.get("lmm_reml", True),
                     lmm_cov_penalty_weight=params.get("lmm_cov_penalty_weight", 0.0),
@@ -1336,6 +1372,7 @@ def calculate_cluster_continuous(params):
                     bayes_draws=params.get("bayes_draws", 500),
                     bayes_warmup=params.get("bayes_warmup", 500),
                     bayes_inference_method=params.get("bayes_inference_method", "credible_interval"),
+                    bayes_backend=params.get("bayes_backend", "stan"),
                     lmm_method=params.get("lmm_method", "auto"),
                     lmm_reml=params.get("lmm_reml", True),
                     progress_callback=_update_progress,
