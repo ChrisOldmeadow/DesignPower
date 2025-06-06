@@ -22,6 +22,8 @@ import warnings
 # Optional Stan support
 try:
     from cmdstanpy import CmdStanModel
+    import tempfile
+    import os
     _STAN_AVAILABLE = True
     _STAN_MODEL = None
 
@@ -32,7 +34,7 @@ try:
             data {
                 int<lower=1> N;
                 int<lower=1> J;
-                int<lower=1,upper=J> cluster[N];
+                array[N] int<lower=1, upper=J> cluster;
                 vector[N] y;
                 vector[N] treat;
             }
@@ -55,7 +57,20 @@ try:
                     y[n] ~ normal(alpha + beta * treat[n] + u[cluster[n]], sigma_e);
             }
             """
-            _STAN_MODEL = CmdStanModel(stan_code=stan_code)
+            # Write Stan code to temporary file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.stan', delete=False) as f:
+                f.write(stan_code)
+                stan_file = f.name
+            
+            # Create the Stan model - don't delete file until after compilation
+            _STAN_MODEL = CmdStanModel(stan_file=stan_file)
+            
+            # Clean up the temporary file after compilation
+            try:
+                if os.path.exists(stan_file):
+                    os.unlink(stan_file)
+            except OSError:
+                pass  # Ignore cleanup errors
         return _STAN_MODEL
 except ImportError:
     _STAN_AVAILABLE = False
@@ -96,6 +111,7 @@ def simulate_continuous_trial(
     use_bias_correction: bool = False,
     bayes_draws: int = 500,
     bayes_warmup: int = 500,
+    bayes_inference_method: str = "credible_interval",  # New: Choose Bayesian inference method
     lmm_method: str = "auto",
     lmm_reml: bool = True,
     lmm_cov_penalty_weight: float = 0.0,  # Added: Weight for L2 penalty on covariance
@@ -131,6 +147,11 @@ def simulate_continuous_trial(
         Number of draws for Bayesian model. Default 500.
     bayes_warmup : int, optional
         Number of warmup iterations for Bayesian model. Default 500.
+    bayes_inference_method : str, optional
+        Bayesian inference method for significance testing. Options:
+        - 'credible_interval': 95% credible interval excludes zero (default)
+        - 'posterior_probability': Posterior probability > 97.5% or < 2.5%
+        - 'rope': Region of Practical Equivalence approach (< 5% prob in ROPE)
     lmm_method : str, optional
         Optimizer to use for MixedLM. Can be 'auto' (default), 'lbfgs', 'powell', 'cg', 'bfgs', 'newton', 'nm'.
     lmm_reml : bool, optional
@@ -146,63 +167,63 @@ def simulate_continuous_trial(
     var_between = icc * std_dev**2
     var_within = (1 - icc) * std_dev**2
 
-    # Generate random cluster effects for control arm
-    control_cluster_effects = np.random.normal(0, np.sqrt(var_between), n_clusters)
+    # Generate cluster effects for all 2*n_clusters clusters
+    total_clusters = 2 * n_clusters
+    cluster_effects = np.random.normal(0, np.sqrt(var_between), total_clusters)
     
-    # Generate random cluster effects for intervention arm
-    intervention_cluster_effects = np.random.normal(0, np.sqrt(var_between), n_clusters)
+    # Randomly assign clusters to treatment arms
+    # First n_clusters go to control, next n_clusters go to intervention
+    cluster_assignments = np.concatenate([np.zeros(n_clusters), np.ones(n_clusters)])
+    np.random.shuffle(cluster_assignments)  # Randomize treatment assignment
     
-    # Initialize arrays for all data points
-    control_data = np.zeros(n_clusters * cluster_size)
-    intervention_data = np.zeros(n_clusters * cluster_size)
+    # Initialize data structures
+    all_data = []
     
     # Generate data for each cluster
-    for i in range(n_clusters):
-        # Control arm: base mean + cluster effect + individual variation
-        start_idx = i * cluster_size
-        end_idx = start_idx + cluster_size
-        control_data[start_idx:end_idx] = mean1 + control_cluster_effects[i] + \
-                                         np.random.normal(0, np.sqrt(var_within), cluster_size)
+    for cluster_id in range(total_clusters):
+        treatment = cluster_assignments[cluster_id]
+        cluster_effect = cluster_effects[cluster_id]
         
-        # Intervention arm: base mean + cluster effect + individual variation
-        intervention_data[start_idx:end_idx] = mean2 + intervention_cluster_effects[i] + \
-                                              np.random.normal(0, np.sqrt(var_within), cluster_size)
+        # Determine mean based on treatment assignment
+        base_mean = mean1 if treatment == 0 else mean2
+        
+        # Generate individual-level data for this cluster
+        individual_outcomes = base_mean + cluster_effect + \
+                            np.random.normal(0, np.sqrt(var_within), cluster_size)
+        
+        # Add to data list
+        for outcome in individual_outcomes:
+            all_data.append({
+                'y': outcome,
+                'treatment': int(treatment),
+                'cluster': cluster_id
+            })
+    
+    # Convert to DataFrame
+    df = pd.DataFrame(all_data)
+    
+    # Convert cluster to categorical for better mixed model handling
+    df['cluster'] = df['cluster'].astype('category')
     
     if analysis_model == "ttest":
         # Cluster-level analysis: aggregate to cluster means to account for ICC
-        control_means = control_data.reshape(n_clusters, cluster_size).mean(axis=1)
-        interv_means = intervention_data.reshape(n_clusters, cluster_size).mean(axis=1)
+        cluster_means = df.groupby(['cluster', 'treatment'], observed=True)['y'].mean().reset_index()
+        control_means = cluster_means[cluster_means['treatment'] == 0]['y'].values
+        interv_means = cluster_means[cluster_means['treatment'] == 1]['y'].values
         t_stat, p_value = stats.ttest_ind(control_means, interv_means, equal_var=True)
         if return_details:
             return t_stat, p_value, {"converged": True, "model": "ttest"}
         return t_stat, p_value
 
-    # Build dataframe for model-based analyses
-    df_control = pd.DataFrame(
-        {
-            "y": control_data,
-            "cluster": np.repeat(np.arange(n_clusters), cluster_size),
-            "treatment": 0,
-        }
-    )
-    df_interv = pd.DataFrame(
-        {
-            "y": intervention_data,
-            "cluster": np.repeat(np.arange(n_clusters, 2 * n_clusters), cluster_size),
-            "treatment": 1,
-        }
-    )
-    df = pd.concat([df_control, df_interv], ignore_index=True)
-
     if analysis_model == "mixedlm":
         fit_status = "fit_error_ttest_fallback" # Default status if all else fails
         tvalue, p_value = np.nan, np.nan
         try:
-            model = sm.MixedLM.from_formula("y ~ treatment", groups="cluster", data=df)  # Create model first
+            model = sm.MixedLM.from_formula("y ~ treatment", groups="cluster", data=df)
+            
             if lmm_cov_penalty_weight > 0:
-                # L2.__init__ takes 'weights' (plural); a single value scales all penalized params equally if applicable here.
                 l2_penalty_obj = L2(weights=lmm_cov_penalty_weight)
-                model.re_pen = l2_penalty_obj  # Assign to re_pen attribute
+                model.re_pen = l2_penalty_obj
             if lmm_method == "auto":
                 method_list = ["lbfgs", "powell", "cg", "bfgs", "newton", "nm"]
             else:
@@ -249,7 +270,9 @@ def simulate_continuous_trial(
                 else:
                     p_value = result.pvalues["treatment"]
 
-                is_boundary = float(result.cov_re.iloc[0, 0]) < 1e-6
+                # Check for boundary condition (very small cluster variance)
+                cluster_var_estimate = float(result.cov_re.iloc[0, 0])
+                is_boundary = cluster_var_estimate < 1e-8  # More lenient threshold
                 is_invalid_stat = np.isnan(p_value) or np.isinf(p_value) or np.isnan(tvalue)
 
                 if is_invalid_stat:
@@ -260,13 +283,10 @@ def simulate_continuous_trial(
                     )
                     tvalue, p_value = _ols_cluster_test(df)
                 elif is_boundary:
-                    fit_status = "success_boundary_ols_fallback" # New status
-                    warnings.warn(
-                        "MixedLM estimated zero cluster variance (boundary condition). "
-                        "Using p-value from cluster-robust OLS for this replicate.",
-                        RuntimeWarning
-                    )
-                    tvalue, p_value = _ols_cluster_test(df) # Use OLS p-value
+                    # When cluster variance is very small, the LMM degenerates and p-values become unreliable
+                    # Always fall back to cluster-robust OLS which is appropriate when ICC ≈ 0
+                    fit_status = "success_boundary_ols_fallback"
+                    tvalue, p_value = _ols_cluster_test(df)
                 elif convergence_warning_occurred:
                     fit_status = "success_convergence_warning"
                     # Retain LMM results but flag convergence warning
@@ -278,8 +298,12 @@ def simulate_continuous_trial(
             return tvalue, p_value
 
         except Exception as e_outer: # Catch any other unexpected error during mixedlm setup/fallback
-            warnings.warn(f"Outer exception in MixedLM block: {e_outer}. Falling back to basic t-test.", RuntimeWarning)
-            t_stat_fallback, p_value_fallback = stats.ttest_ind(control_data, intervention_data, equal_var=True)
+            warnings.warn(f"Outer exception in MixedLM block: {e_outer}. Falling back to cluster-level t-test.", RuntimeWarning)
+            # Fall back to cluster-level t-test
+            cluster_means = df.groupby(['cluster', 'treatment'], observed=True)['y'].mean().reset_index()
+            control_means = cluster_means[cluster_means['treatment'] == 0]['y'].values
+            interv_means = cluster_means[cluster_means['treatment'] == 1]['y'].values
+            t_stat_fallback, p_value_fallback = stats.ttest_ind(control_means, interv_means, equal_var=True)
             if return_details:
                 return t_stat_fallback, p_value_fallback, {"model": "mixedlm", "status": "fit_error_ttest_fallback_outer", "lmm_converged": False}
             return t_stat_fallback, p_value_fallback
@@ -302,59 +326,142 @@ def simulate_continuous_trial(
                 return zvalue, p_value, {"converged": True, "model": "gee"}
             return zvalue, p_value
         except Exception:
-            z_stat, p_value = stats.ttest_ind(control_data, intervention_data, equal_var=True)
+            # Fall back to cluster-level t-test
+            cluster_means = df.groupby(['cluster', 'treatment'], observed=True)['y'].mean().reset_index()
+            control_means = cluster_means[cluster_means['treatment'] == 0]['y'].values
+            interv_means = cluster_means[cluster_means['treatment'] == 1]['y'].values
+            z_stat, p_value = stats.ttest_ind(control_means, interv_means, equal_var=True)
             if return_details:
                 return z_stat, p_value, {"converged": False, "model": "gee", "fallback": True}
             return z_stat, p_value
 
     if analysis_model == "bayes":
         if not _STAN_AVAILABLE:
-            warnings.warn("cmdstanpy not available – Bayesian model not run, falling back to t-test.")
-            t_stat, p_value = stats.ttest_ind(control_data, intervention_data, equal_var=True)
+            warnings.warn(
+                "Bayesian analysis requires cmdstanpy package. Please install with:\n"
+                "pip install cmdstanpy\n"
+                "Falling back to cluster-level t-test for now.",
+                UserWarning
+            )
+            # Fall back to cluster-level t-test
+            cluster_means = df.groupby(['cluster', 'treatment'], observed=True)['y'].mean().reset_index()
+            control_means = cluster_means[cluster_means['treatment'] == 0]['y'].values
+            interv_means = cluster_means[cluster_means['treatment'] == 1]['y'].values
+            t_stat, p_value = stats.ttest_ind(control_means, interv_means, equal_var=True)
             if return_details:
                 return t_stat, p_value, {"converged": False, "model": "bayes", "fallback": True}
             return t_stat, p_value
 
         try:
             model = _get_stan_model()
-            N = len(control_data) + len(intervention_data)
-            y = np.concatenate([control_data, intervention_data])
-            cluster_ids = np.concatenate([
-                np.repeat(np.arange(1, n_clusters + 1), cluster_size),
-                np.repeat(np.arange(n_clusters + 1, 2 * n_clusters + 1), cluster_size),
-            ])
-            treat = np.concatenate([np.zeros(n_clusters * cluster_size), np.ones(n_clusters * cluster_size)])
+            N = len(df)
+            y = df['y'].values
+            # Map cluster IDs to consecutive integers starting from 1 (Stan convention)
+            unique_clusters = sorted(df['cluster'].unique())
+            cluster_map = {old_id: new_id + 1 for new_id, old_id in enumerate(unique_clusters)}
+            cluster_ids = df['cluster'].map(cluster_map).values
+            treat = df['treatment'].values
             data = {
                 "N": N,
-                "J": 2 * n_clusters,
+                "J": len(unique_clusters),
                 "cluster": cluster_ids.astype(int),
                 "y": y,
                 "treat": treat,
             }
+            
+            # Use multiple chains for better convergence assessment
+            n_chains = 4
             fit = model.sample(
                 data=data,
-                chains=1,
+                chains=n_chains,
                 iter_sampling=bayes_draws,
                 iter_warmup=bayes_warmup,
                 show_progress=False,
-                refresh=0,
+                refresh=1,  # Changed from 0 to 1
             )
+            
             beta_samples = fit.stan_variable("beta")
+            
+            # Check convergence using R-hat
+            summary_df = fit.summary()
+            beta_rhat = summary_df.loc[summary_df.index.str.contains('beta'), 'R_hat'].iloc[0]
+            converged = beta_rhat < 1.1
+            
+            if not converged:
+                warnings.warn(f"Bayesian model did not converge (R-hat = {beta_rhat:.3f}). Results may be unreliable.")
+            
+            # Calculate Bayesian inference methods
+            # Method 1: Credible Interval (95% CI excludes zero)
+            ci_lower = np.percentile(beta_samples, 2.5)
+            ci_upper = np.percentile(beta_samples, 97.5)
+            significant_ci = ci_lower > 0 or ci_upper < 0
+            
+            # Method 2: Posterior Probability (probability of favorable effect)
+            prob_positive = (beta_samples > 0).mean()
+            significant_prob = prob_positive > 0.975 or prob_positive < 0.025
+            
+            # Method 3: Region of Practical Equivalence (ROPE)
+            # Use 10% of pooled SD as ROPE half-width (practical equivalence threshold)
+            rope_half_width = 0.1 * std_dev
+            prob_rope = ((beta_samples > -rope_half_width) & (beta_samples < rope_half_width)).mean()
+            significant_rope = prob_rope < 0.05
+            
+            # Choose significance based on selected inference method
+            if bayes_inference_method == "credible_interval":
+                significant = significant_ci
+            elif bayes_inference_method == "posterior_probability":
+                significant = significant_prob
+            elif bayes_inference_method == "rope":
+                significant = significant_rope
+            else:
+                # Default to credible interval if unknown method specified
+                significant = significant_ci
+                bayes_inference_method = "credible_interval"
+            
+            # Convert to p-value equivalent for compatibility with existing code
+            if significant:
+                p_value = 0.01  # Arbitrarily small to indicate significance
+            else:
+                p_value = 0.5   # Arbitrarily large to indicate non-significance
+            
             tvalue = np.mean(beta_samples) / np.std(beta_samples)
-            p_right = (beta_samples > 0).mean()
-            p_left = (beta_samples < 0).mean()
-            p_value = 2 * min(p_left, p_right)
+            
             if return_details:
-                return tvalue, p_value, {"converged": True, "model": "bayes"}
+                bayes_details = {
+                    "converged": converged, 
+                    "model": "bayes",
+                    "rhat": beta_rhat,
+                    "beta_mean": np.mean(beta_samples),
+                    "beta_sd": np.std(beta_samples),
+                    "ci_lower": ci_lower,
+                    "ci_upper": ci_upper,
+                    "significant_ci": significant_ci,
+                    "prob_positive": prob_positive,
+                    "significant_prob": significant_prob,
+                    "rope_half_width": rope_half_width,
+                    "prob_rope": prob_rope,
+                    "significant_rope": significant_rope,
+                    "inference_method": bayes_inference_method  # Actual method used
+                }
+                return tvalue, p_value, bayes_details
             return tvalue, p_value
-        except Exception:
-            t_stat, p_value = stats.ttest_ind(control_data, intervention_data, equal_var=True)
+            
+        except Exception as e:
+            warnings.warn(f"Bayesian model failed with error: {str(e)}. Falling back to cluster-level t-test.")
+            # Fall back to cluster-level t-test
+            cluster_means = df.groupby(['cluster', 'treatment'], observed=True)['y'].mean().reset_index()
+            control_means = cluster_means[cluster_means['treatment'] == 0]['y'].values
+            interv_means = cluster_means[cluster_means['treatment'] == 1]['y'].values
+            t_stat, p_value = stats.ttest_ind(control_means, interv_means, equal_var=True)
             if return_details:
-                return t_stat, p_value, {"converged": False, "model": "bayes", "fallback": True}
+                return t_stat, p_value, {"converged": False, "model": "bayes", "fallback": True, "error": str(e)}
             return t_stat, p_value
 
-    # Default fallback
-    t_stat, p_value = stats.ttest_ind(control_data, intervention_data, equal_var=True)
+    # Default fallback - cluster-level t-test
+    cluster_means = df.groupby(['cluster', 'treatment'], observed=False)['y'].mean().reset_index()
+    control_means = cluster_means[cluster_means['treatment'] == 0]['y'].values
+    interv_means = cluster_means[cluster_means['treatment'] == 1]['y'].values
+    t_stat, p_value = stats.ttest_ind(control_means, interv_means, equal_var=True)
     if return_details:
         return t_stat, p_value, {"converged": True, "model": "ttest"}
     return t_stat, p_value
@@ -376,6 +483,7 @@ def power_continuous_sim(
     use_bias_correction: bool = False,
     bayes_draws: int = 500,
     bayes_warmup: int = 500,
+    bayes_inference_method: str = "credible_interval",
     lmm_method: str = "auto",
     lmm_reml: bool = True,
     lmm_cov_penalty_weight: float = 0.0,
@@ -397,7 +505,7 @@ def power_continuous_sim(
     # LMM specific counters
     lmm_success_count = 0
     lmm_convergence_warnings_count = 0
-    lmm_success_boundary_ols_fallback_count = 0 # Updated counter name
+    lmm_success_boundary_ols_fallback_count = 0 # Boundary condition, used OLS fallback
     lmm_ols_fallbacks_count = 0 # Covers fit_error_ols_fallback and fit_error_ols_fallback_invalid_stats
     lmm_ttest_fallbacks_outer_count = 0
     lmm_total_considered_for_power = 0
@@ -416,7 +524,8 @@ def power_continuous_sim(
                     n_clusters, cluster_size, icc, mean1, mean2, std_dev,
                     analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
                     use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
-                    bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
+                    bayes_warmup=bayes_warmup, bayes_inference_method=bayes_inference_method,
+                    lmm_method=lmm_method, lmm_reml=lmm_reml,
                     lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
                     return_details=True
                 )
@@ -427,8 +536,8 @@ def power_continuous_sim(
                     lmm_success_count += 1
                 elif status == "success_convergence_warning":
                     lmm_convergence_warnings_count += 1
-                elif status == "success_boundary_ols_fallback": # Updated status check
-                    lmm_success_boundary_ols_fallback_count += 1 # Updated counter
+                elif status == "success_boundary_ols_fallback":
+                    lmm_success_boundary_ols_fallback_count += 1
                 elif status in ["fit_error_ols_fallback", "fit_error_ols_fallback_invalid_stats"]:
                     lmm_ols_fallbacks_count += 1
                 elif status == "fit_error_ttest_fallback_outer":
@@ -451,7 +560,8 @@ def power_continuous_sim(
                     n_clusters, cluster_size, icc, mean1, mean2, std_dev,
                     analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
                     use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
-                    bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
+                    bayes_warmup=bayes_warmup, bayes_inference_method=bayes_inference_method,
+                    lmm_method=lmm_method, lmm_reml=lmm_reml,
                     lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
                     return_details=True # Get details for GEE/Bayes fallbacks if any
                 )
@@ -523,7 +633,7 @@ def power_continuous_sim(
         results["lmm_fit_stats"] = {
             "successful_fits": lmm_success_count,
             "convergence_warnings": lmm_convergence_warnings_count,
-            "success_boundary_ols_fallbacks": lmm_success_boundary_ols_fallback_count, # Updated key
+            "success_boundary_ols_fallbacks": lmm_success_boundary_ols_fallback_count, # Boundary, used OLS fallback
             "ols_fallbacks_errors": lmm_ols_fallbacks_count, # covers fit_error_ols_fallback and fit_error_ols_fallback_invalid_stats
             "ttest_fallbacks_outer_errors": lmm_ttest_fallbacks_outer_count,
             "total_considered_for_power": lmm_total_considered_for_power,
@@ -575,6 +685,7 @@ def sample_size_continuous_sim(
     use_bias_correction: bool = False,
     bayes_draws: int = 500,
     bayes_warmup: int = 500,
+    bayes_inference_method: str = "credible_interval",
     lmm_method: str = "auto",
     lmm_reml: bool = True,
     lmm_cov_penalty_weight: float = 0.0,
@@ -723,7 +834,8 @@ def sample_size_continuous_sim(
                 mean1=mean1, mean2=mean2, std_dev=std_dev, nsim=nsim, alpha=alpha, seed=seed,
                 analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
                 use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
-                bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
+                bayes_warmup=bayes_warmup, bayes_inference_method=bayes_inference_method,
+                lmm_method=lmm_method, lmm_reml=lmm_reml,
                 lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
                 progress_callback=progress_callback
             )
@@ -781,7 +893,8 @@ def sample_size_continuous_sim(
                 mean1=mean1, mean2=mean2, std_dev=std_dev, nsim=nsim, alpha=alpha, seed=seed,
                 analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
                 use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
-                bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
+                bayes_warmup=bayes_warmup, bayes_inference_method=bayes_inference_method,
+                lmm_method=lmm_method, lmm_reml=lmm_reml,
                 lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
                 progress_callback=progress_callback
             )
@@ -811,7 +924,8 @@ def sample_size_continuous_sim(
         icc=icc, mean1=mean1, mean2=mean2, std_dev=std_dev, nsim=nsim, alpha=alpha, seed=seed,
         analysis_model=analysis_model, use_satterthwaite=use_satterthwaite,
         use_bias_correction=use_bias_correction, bayes_draws=bayes_draws,
-        bayes_warmup=bayes_warmup, lmm_method=lmm_method, lmm_reml=lmm_reml,
+        bayes_warmup=bayes_warmup, bayes_inference_method=bayes_inference_method,
+        lmm_method=lmm_method, lmm_reml=lmm_reml,
         lmm_cov_penalty_weight=lmm_cov_penalty_weight, lmm_fit_kwargs=lmm_fit_kwargs,
         progress_callback=progress_callback
     )
@@ -869,6 +983,7 @@ def min_detectable_effect_continuous_sim(
     use_bias_correction: bool = False,
     bayes_draws: int = 500,
     bayes_warmup: int = 500,
+    bayes_inference_method: str = "credible_interval",
     lmm_method: str = "auto",
     lmm_reml: bool = True,
 ):
@@ -932,6 +1047,7 @@ def min_detectable_effect_continuous_sim(
             use_bias_correction=use_bias_correction,
             bayes_draws=bayes_draws,
             bayes_warmup=bayes_warmup,
+            bayes_inference_method=bayes_inference_method,
             lmm_method=lmm_method,
             lmm_reml=lmm_reml,
         )
@@ -968,6 +1084,7 @@ def min_detectable_effect_continuous_sim(
         use_bias_correction=use_bias_correction,
         bayes_draws=bayes_draws,
         bayes_warmup=bayes_warmup,
+        bayes_inference_method=bayes_inference_method,
         lmm_method=lmm_method,
         lmm_reml=lmm_reml,
     )

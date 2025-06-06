@@ -339,7 +339,7 @@ if __name__ == "__main__":
     return textwrap.dedent(script_template)
 
 
-def display_cluster_continuous_results(results, params, calc_type):
+def display_cluster_continuous_results(results, params, calc_type, hypothesis_type="Superiority"):
     """
     Display formatted results for Cluster RCT with continuous outcome.
     
@@ -347,12 +347,9 @@ def display_cluster_continuous_results(results, params, calc_type):
         results: Dictionary containing calculation results.
         params: Dictionary of input parameters.
         calc_type: String indicating calculation type (Sample Size, Power, or MDE).
+        hypothesis_type: String indicating hypothesis type (Superiority, Non-Inferiority).
     """
-    st.markdown("## Cluster RCT: Continuous Outcome Results")
-    st.markdown("---")
-
     # --- Key Metrics ---
-    st.markdown("### Key Metrics")
     
     # Adjust number of columns based on calc_type for better layout
     if calc_type == "Sample Size":
@@ -384,6 +381,12 @@ def display_cluster_continuous_results(results, params, calc_type):
         cols[2].metric("Input Average Cluster Size (m)", params.get("cluster_size", "N/A"))
         st.metric("Total Sample Size (N)", results.get("total_n", "N/A"))
 
+    # Show non-inferiority margin as an additional metric if applicable
+    if hypothesis_type == "Non-Inferiority":
+        nim_value = params.get('non_inferiority_margin')
+        if nim_value is not None:
+            st.metric("Non-Inferiority Margin", f"{nim_value:.3f}")
+    
     st.markdown("---")
 
     # --- LMM Fit Statistics (if applicable) ---
@@ -399,8 +402,8 @@ def display_cluster_continuous_results(results, params, calc_type):
             col1, col2 = st.columns(2)
             with col1:
                 st.write(f"**Total Simulations Run:** {total_sims_run}")
-                st.write(f"- Successful Fits: {stats.get('success', 0)} ({stats.get('success', 0)/total_sims_run:.1%})")
-                st.write(f"- Success (Convergence Warning): {stats.get('success_convergence_warnings', 0)} ({stats.get('success_convergence_warnings', 0)/total_sims_run:.1%})")
+                st.write(f"- Successful Fits: {stats.get('successful_fits', 0)} ({stats.get('successful_fits', 0)/total_sims_run:.1%})")
+                st.write(f"- Success (Convergence Warning): {stats.get('convergence_warnings', 0)} ({stats.get('convergence_warnings', 0)/total_sims_run:.1%})")
             with col2:
                 st.write(f"- OLS Fallback (Boundary): {stats.get('success_boundary_ols_fallbacks', 0)} ({stats.get('success_boundary_ols_fallbacks', 0)/total_sims_run:.1%})")
                 st.write(f"- OLS Fallback (Fit Error): {stats.get('ols_fallbacks_errors', 0)} ({stats.get('ols_fallbacks_errors', 0)/total_sims_run:.1%})")
@@ -409,6 +412,28 @@ def display_cluster_continuous_results(results, params, calc_type):
             if "lmm_total_considered_for_power" in stats:
                 st.caption(f"Empirical power for LMM based on {stats.get('lmm_total_considered_for_power', 0)} simulations "
                            f"(excludes outer t-test fallbacks and unknown statuses).")
+                
+                # Warning for high fallback rates
+                successful_lmm = stats.get('successful_fits', 0) + stats.get('convergence_warnings', 0)
+                ols_fallbacks = stats.get('success_boundary_ols_fallbacks', 0)
+                total_valid = stats.get('lmm_total_considered_for_power', 1)
+                
+                lmm_success_rate = successful_lmm / total_valid
+                ols_fallback_rate = ols_fallbacks / total_valid
+                
+                if lmm_success_rate < 0.2 and ols_fallback_rate > 0.7:
+                    st.warning(
+                        f"⚠️ **Low Mixed Model Success Rate ({lmm_success_rate:.1%})**\n\n"
+                        f"Most simulations ({ols_fallback_rate:.1%}) fell back to cluster-robust OLS due to boundary conditions "
+                        f"(very small cluster variance estimates). This suggests:\n\n"
+                        f"• **Clustering effects are minimal** in your scenario\n"
+                        f"• **Results are valid** but based on cluster-level analysis rather than true mixed models\n"
+                        f"• **Consider**: \n"
+                        f"  - Increasing cluster size or number of clusters\n"
+                        f"  - Using 'T-test on Aggregate Data' method (designed for few clusters)\n"
+                        f"  - Using 'Bayesian (Stan)' method (handles small cluster counts better than LMM)\n\n"
+                        f"The power calculation is still accurate but reflects cluster-level analysis."
+                    )
         else:
             st.write("LMM fit statistics reported, but total simulations count is zero or unavailable.")
         st.markdown("---")
@@ -418,21 +443,6 @@ def display_cluster_continuous_results(results, params, calc_type):
     display_sensitivity_analysis(results, calc_type)
     display_cluster_variation_info(results)
     display_icc_conversion_info(results)
-
-    # --- Expander for Full Details ---
-    with st.expander("View Full Simulation Details & Input Parameters"):
-        st.markdown("#### Input Parameters")
-        # Filter params to avoid showing redundant/internal keys if any
-        params_to_display = {k: v for k, v in params.items() if k not in ['calc_type', 'hypothesis_type', 'outcome_type', 'calculation_type']}
-        st.json(params_to_display)
-        
-        st.markdown("#### Full Results Dictionary")
-        # Filter out potentially large data for cleaner display in expander
-        filtered_results_for_expander = {
-            k: v for k, v in results.items() 
-            if k not in ["sensitivity_analysis", "power_curve_data", "p_values_list", "lmm_fit_stats"] # lmm_fit_stats already shown
-        }
-        st.json(filtered_results_for_expander)
 
     # --- Generate Report Button ---
     st.markdown("---")

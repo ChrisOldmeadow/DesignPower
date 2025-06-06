@@ -41,7 +41,9 @@ from app.components.cluster_rct import (
     render_cluster_continuous,
     render_cluster_binary,
     calculate_cluster_continuous,
-    calculate_cluster_binary
+    calculate_cluster_binary,
+    generate_cli_code_cluster_continuous,
+    generate_cli_code_cluster_binary
 )
 from app.components.cluster_display_utils import (
     display_sensitivity_analysis,
@@ -49,6 +51,9 @@ from app.components.cluster_display_utils import (
     display_icc_conversion_info,
     display_cluster_continuous_results
 )
+# Import unified results display system
+from app.components.unified_results_display import unified_display
+from app.components.display_configs import register_all_configs
 
 # Dictionary of available designs and their parameters
 DESIGN_CONFIGS = {
@@ -104,6 +109,9 @@ COMPONENTS = {
 
 # Basic app setup - must be first Streamlit command
 st.set_page_config(page_title="DesignPower", page_icon=":chart_with_upwards_trend:")
+
+# Initialize unified display system
+register_all_configs(unified_display)
 
 # Add app title
 st.title("DesignPower: Power and Sample Size Calculator")
@@ -241,353 +249,13 @@ if component_key in COMPONENTS:
         
     # Display results if available
     if "results" in st.session_state and st.session_state.results is not None:
-        # Check if there's an error in the results
-        if isinstance(st.session_state.results, dict) and "error" in st.session_state.results:
-            st.error(st.session_state.results["error"])
-        else:
-            results = st.session_state.results
-            design_name = st.session_state.design_type
-            outcome_name = st.session_state.outcome_type
-            calc_type = st.session_state.calculation_type # Already available
-            hypothesis_type = st.session_state.hypothesis_type # Already available
-            method_used = st.session_state.method # Get stored method
-
-            if design_name == "Cluster RCT" and outcome_name == "Continuous Outcome":
-                # Use the new display function for Cluster RCT Continuous results
-                # 'params' is available from the render call earlier in this scope
-                # 'calc_type' is also available
-                display_cluster_continuous_results(results, params, calc_type)
-            elif design_name == "Parallel RCT" and outcome_name == "Continuous Outcome":
-                # Display for Parallel RCT Continuous with CLI code generation
-                st.markdown("### Results Summary")
-                st.markdown("---")
-
-                # Display metrics (example, adapt as needed from generic display below)
-                if calc_type == "Sample Size":
-                    st.metric(label="Total Sample Size (N)", value=f"{results.get('total_n', 'N/A')}")
-                    st.metric(label=f"Sample Size per Group (n1)", value=f"{results.get('n1', 'N/A')}")
-                    st.metric(label=f"Sample Size per Group (n2)", value=f"{results.get('n2', 'N/A')}")
-                elif calc_type == "Power":
-                    st.metric(label="Power", value=f"{results.get('power', 'N/A'):.3f}")
-                elif calc_type == "Minimum Detectable Effect":
-                    st.metric(label="Minimum Detectable Effect (MDE)", value=f"{results.get('mde', 'N/A'):.3f}")
-                if hypothesis_type == "Non-Inferiority":
-                    st.metric(label="Non-Inferiority Margin", value=f"{params.get('non_inferiority_margin', 'N/A')}")
-                
-                # Add other relevant metrics as needed, mirroring the generic display's intent
-                # For example, if simulation, show nsim, etc.
-                if results.get('method') == 'simulation' or params.get('method') == 'simulation' or params.get('use_simulation'):
-                    st.markdown("#### Simulation Details")
-                    sim_details_expander = st.expander("View Simulation Specifics")
-                    with sim_details_expander:
-                        st.write(f"Number of simulations run: {results.get('nsim_run', results.get('nsim', params.get('nsim', 'N/A')))}")
-                        # Add other simulation details if available in results
-
-                st.markdown("--- ")
-
-                # Expander for Input Parameters Summary
-                with st.expander("Input Parameters Summary"):
-                    filtered_params_for_display = {k: v for k, v in params.items() if not k.startswith('_') and k not in ['results', 'design_type', 'outcome_type', 'previous_design', 'previous_outcome']}
-                    st.json(filtered_params_for_display)
-
-                # Expander for Detailed HTML Report
-                with st.expander("Detailed HTML Report"):
-                    try:
-                        report_html = generate_report(
-                            design_type=design_name,
-                            outcome_type=outcome_name,
-                            params=params,
-                            results=results
-                        ) # calculation_type, hypothesis_type, and method_used are derived internally by generate_report
-                        st.markdown(report_html, unsafe_allow_html=True)
-
-                        report_button_key_suffix = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()[:8] + "_report_pc"
-                        st.download_button(
-                            label="Download Report (.html)",
-                            data=report_html,
-                            file_name=f"designpower_report_{report_button_key_suffix}.html",
-                            mime="text/html",
-                            key=f"download_report_parallel_continuous_{report_button_key_suffix}"
-                        )
-                    except Exception as e:
-                        st.error(f"Error generating HTML report: {e}")
-                        st.exception(e)
-
-                # Expander for Reproducible Python CLI Code
-                with st.expander("Reproducible Python CLI Code"):
-                    try:
-                        cli_code = generate_cli_code_parallel_continuous(params)
-                        st.code(cli_code, language="python")
-                        
-                        params_str = json.dumps(params, sort_keys=True)
-                        cli_button_key_suffix = hashlib.md5(params_str.encode()).hexdigest()[:8] + "_cli_pc"
-                        st.download_button(
-                            label="Download CLI Script (.py)",
-                            data=cli_code,
-                            file_name=f"designpower_parallel_continuous_cli_{cli_button_key_suffix}.py",
-                            mime="text/x-python",
-                            key=f"download_cli_parallel_continuous_{cli_button_key_suffix}"
-                        )
-                    except Exception as e:
-                        st.error(f"Error generating CLI code: {e}")
-                        st.exception(e)
-
-            elif design_name == "Parallel RCT" and outcome_name == "Binary Outcome":
-                st.markdown("### Results Summary")
-                st.markdown("---")
-
-                # Display metrics
-                if calc_type == "Sample Size":
-                    st.metric(label="Total Sample Size (N)", value=f"{results.get('total_n', 'N/A')}")
-                    st.metric(label=f"Sample Size per Group (n1)", value=f"{results.get('n1', 'N/A')}")
-                    st.metric(label=f"Sample Size per Group (n2)", value=f"{results.get('n2', 'N/A')}")
-                elif calc_type == "Power":
-                    st.metric(label="Power", value=f"{results.get('power', 'N/A'):.3f}")
-                elif calc_type == "Minimum Detectable Effect":
-                    st.metric(label="Minimum Detectable Effect", value=f"{results.get('mde', 'N/A'):.3f}") # Adjust 'mde' key if different for binary
-                if hypothesis_type == "Non-Inferiority":
-                    # For binary, NIM could be on risk difference (rd) or risk ratio (rr) scale.
-                    # Prioritize 'non_inferiority_margin_rd', then 'non_inferiority_margin_rr', then a generic one if available.
-                    nim_value_rd = params.get('non_inferiority_margin_rd')
-                    nim_value_rr = params.get('non_inferiority_margin_rr')
-                    nim_display = 'N/A'
-                    nim_label = "Non-Inferiority Margin"
-                    if nim_value_rd is not None:
-                        nim_display = f"{nim_value_rd}"
-                        nim_label = "Non-Inferiority Margin (Risk Difference)"
-                    elif nim_value_rr is not None:
-                        nim_display = f"{nim_value_rr}"
-                        nim_label = "Non-Inferiority Margin (Risk Ratio)"
-                    elif params.get('non_inferiority_margin') is not None: # Fallback to a generic key
-                         nim_display = f"{params.get('non_inferiority_margin')}"
-                    st.metric(label=nim_label, value=nim_display)
-
-                # Simulation Details (if applicable)
-                if results.get('method') == 'simulation' or params.get('method') == 'simulation' or params.get('use_simulation'):
-                    st.markdown("#### Simulation Details")
-                    sim_details_expander = st.expander("View Simulation Specifics")
-                    with sim_details_expander:
-                        st.write(f"Number of simulations run: {results.get('nsim_run', results.get('nsim', params.get('nsim', 'N/A')))}")
-
-                st.markdown("--- ")
-                # Expander for Input Parameters Summary
-                with st.expander("Input Parameters Summary"):
-                    filtered_params_for_display = {k: v for k, v in params.items() if not k.startswith('_') and k not in ['results', 'design_type', 'outcome_type', 'previous_design', 'previous_outcome']}
-                    st.json(filtered_params_for_display)
-
-                # Expander for Detailed HTML Report
-                with st.expander("Detailed HTML Report"):
-                    try:
-                        report_html = generate_report(
-                            design_type=design_name,
-                            outcome_type=outcome_name,
-                            params=params,
-                            results=results
-                        )
-                        st.markdown(report_html, unsafe_allow_html=True)
-                        report_button_key_suffix = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()[:8] + "_report_pb"
-                        st.download_button(
-                            label="Download Report (.html)",
-                            data=report_html,
-                            file_name=f"designpower_report_{report_button_key_suffix}.html",
-                            mime="text/html",
-                            key=f"download_report_parallel_binary_{report_button_key_suffix}"
-                        )
-                    except Exception as e:
-                        st.error(f"Error generating HTML report: {e}")
-                        st.exception(e)
-
-                # Expander for Reproducible Python CLI Code
-                with st.expander("Reproducible Python CLI Code"):
-                    try:
-                        cli_code = generate_cli_code_parallel_binary(params)
-                        st.code(cli_code, language="python")
-                        params_str = json.dumps(params, sort_keys=True)
-                        cli_button_key_suffix = hashlib.md5(params_str.encode()).hexdigest()[:8] + "_cli_pb"
-                        st.download_button(
-                            label="Download CLI Script (.py)",
-                            data=cli_code,
-                            file_name=f"designpower_parallel_binary_cli_{cli_button_key_suffix}.py",
-                            mime="text/x-python",
-                            key=f"download_cli_parallel_binary_{cli_button_key_suffix}"
-                        )
-                    except Exception as e:
-                        st.error(f"Error generating CLI code: {e}")
-                        st.exception(e)
-            elif design_name == "Parallel RCT" and outcome_name == "Survival Outcome":
-                st.markdown("--- ")
-                display_survival_results(
-                    result=results,
-                    calculation_type=calc_type,
-                    hypothesis_type=hypothesis_type,
-                    use_simulation=(method_used.lower() == "simulation")
-                )
-                # Expander for Input Parameters Summary
-                with st.expander("Input Parameters Summary"):
-                    filtered_params_for_display = {
-                        k: v for k, v in params.items() 
-                        if not k.startswith('_') and k not in [
-                            'results', 'design_type', 'outcome_type', 
-                            'previous_design', 'previous_outcome', 'calculation_type_changed',
-                            'button_calculate_clicked' 
-                        ]
-                    }
-                    st.json(filtered_params_for_display)
-
-                # Expander for Detailed HTML Report
-                with st.expander("Detailed HTML Report"):
-                    try:
-                        report_html = generate_report(
-                            design_type=design_name,
-                            outcome_type=outcome_name,
-                            params=params,
-                            results=results
-                        )
-                        st.markdown(report_html, unsafe_allow_html=True)
-                        
-                        report_button_key_suffix = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()[:8] + "_report_ps"
-                        st.download_button(
-                            label="Download Report (.html)",
-                            data=report_html,
-                            file_name=f"designpower_report_{report_button_key_suffix}.html",
-                            mime="text/html",
-                            key=f"download_report_parallel_survival_{report_button_key_suffix}"
-                        )
-                    except Exception as e:
-                        st.error(f"Error generating HTML report: {e}")
-                        st.exception(e)
-
-                # Expander for Reproducible Python CLI Code
-                with st.expander("Reproducible Python CLI Code"):
-                    try:
-                        cli_code = generate_cli_code_parallel_survival(params) 
-                        st.code(cli_code, language="python")
-                        
-                        params_str = json.dumps(params, sort_keys=True)
-                        cli_button_key_suffix = hashlib.md5(params_str.encode()).hexdigest()[:8] + "_cli_ps"
-                        st.download_button(
-                            label="Download CLI Script (.py)",
-                            data=cli_code,
-                            file_name=f"designpower_parallel_survival_cli_{cli_button_key_suffix}.py",
-                            mime="text/x-python",
-                            key=f"download_cli_parallel_survival_{cli_button_key_suffix}"
-                        )
-                    except Exception as e:
-                        st.error(f"Error generating CLI code: {e}")
-                        st.exception(e)
-            else:
-                # Existing generic results display logic (Corrected Indentation)
-                st.markdown("### Results Summary")
-                st.markdown("---")
-                
-                design_method = results.get("design_method")
-                
-                if design_method == "A'Hern":
-                    st.markdown("### A'Hern Design Results")
-                    st.markdown("---")
-                    tab1, tab2 = st.tabs(["📊 Key Parameters", "📏 Effect Size"])
-                    with tab1:
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.markdown("##### Sample Size Calculation")
-                            st.markdown(f"""<div style='background-color:#e6f3ff;padding:10px;border-radius:5px;margin-bottom:5px;'>
-                                          <b>Required Sample Size (n):</b> {results.get('n')}
-                                          </div>""", unsafe_allow_html=True)
-                            st.markdown(f"""<div style='background-color:#e6f3ff;padding:10px;border-radius:5px;margin-bottom:5px;'>
-                                          <b>Rejection Threshold (r):</b> {results.get('r')}
-                                          </div>""", unsafe_allow_html=True)
-                            st.markdown(f"""<div style='background-color:#e6fff0;padding:10px;border-radius:5px;margin-bottom:5px;'>
-                                          <b>Interpretation:</b> Reject H₀ if {results.get('r')} or more responses are observed
-                                          </div>""", unsafe_allow_html=True)
-                        with col2:
-                            st.markdown("##### Error Rates")
-                            # Ensure 'params' is available here; it should be from the render call scope
-                            st.markdown(f"""<div style='background-color:#fff0e6;padding:10px;border-radius:5px;margin-bottom:5px;'>
-                                          <b>Target Type I Error (α):</b> {params.get('alpha')}
-                                          </div>""", unsafe_allow_html=True)
-                            st.markdown(f"""<div style='background-color:#fff0e6;padding:10px;border-radius:5px;margin-bottom:5px;'>
-                                          <b>Actual Type I Error:</b> {results.get('actual_alpha')}
-                                          </div>""", unsafe_allow_html=True)
-                            st.markdown(f"""<div style='background-color:#e6e6ff;padding:10px;border-radius:5px;margin-bottom:5px;'>
-                                          <b>Target Power:</b> {params.get('power', 1-params.get('beta', 0.2))}
-                                          </div>""", unsafe_allow_html=True)
-                            st.markdown(f"""<div style='background-color:#e6e6ff;padding:10px;border-radius:5px;'>
-                                          <b>Actual Power:</b> {results.get('actual_power')}
-                                          </div>""", unsafe_allow_html=True)
-                    with tab2:
-                        st.markdown("##### Effect Size Parameters")
-                        st.markdown(f"""<div style='background-color:#f0f0f0;padding:10px;border-radius:5px;margin-bottom:5px;'>
-                                      <b>Unacceptable Response Rate (p0):</b> {params.get('p0')}
-                                      </div>""", unsafe_allow_html=True)
-                        st.markdown(f"""<div style='background-color:#f0f0f0;padding:10px;border-radius:5px;'>
-                                      <b>Desirable Response Rate (p1):</b> {params.get('p1')}
-                                      </div>""", unsafe_allow_html=True)
-
-                elif design_method == "Simon's Two-Stage":
-                    st.markdown("### Simon's Two-Stage Design Results")
-                    st.markdown("---")
-                    st.markdown("#### Stage 1")
-                    col1_s1, col2_s1 = st.columns(2)
-                    with col1_s1:
-                        st.metric(label="Sample Size (n1)", value=results.get("n1"))
-                    with col2_s1:
-                        st.metric(label="Rejection Threshold (r1)", value=results.get("r1"))
-                    st.markdown(f"**Interpretation:** If ≤ {results.get('r1')} responses in {results.get('n1')} patients, stop the trial (futility).")
-
-                    st.markdown("#### Stage 2")
-                    col1_s2, col2_s2, col3_s2 = st.columns(3)
-                    with col1_s2:
-                        st.metric(label="Total Sample Size (N)", value=results.get("N"))
-                    with col2_s2:
-                        st.metric(label="Overall Rejection Threshold (r)", value=results.get("r"))
-                    with col3_s2:
-                        st.metric(label="Probability of Early Termination (PET)", value=f"{results.get('PET', 0.0):.3f}")
-                    st.markdown(f"**Interpretation:** If > {results.get('r1')} responses in Stage 1, proceed to Stage 2. "
-                                f"Overall, if ≤ {results.get('r')} responses in {results.get('N')} patients, reject H₁ (treatment ineffective).")
-                    
-                    st.markdown("#### Expected Sample Size")
-                    st.metric(label="Expected Sample Size (EN)", value=f"{results.get('EN', 0.0):.2f}")
-
-                else: 
-                    # Fallback for other generic results
-                    filtered_results = {
-                        k: v for k, v in results.items() 
-                        if k not in [
-                            "design_method", "error", "power_curve_data", 
-                            "survival_curves", "power_vs_hr_data", "plot_data",
-                            "alpha_param", "power_param", "non_inferiority_margin", "assumed_hazard_ratio"
-                        ]
-                    }
-                    if not filtered_results:
-                        st.info("No specific tabular results to display for this configuration. Check visualizations if applicable.")
-                    
-                    for key, value in filtered_results.items():
-                        disp_col1, disp_col2 = st.columns([1, 2])
-                        with disp_col1:
-                            st.markdown(f"**{key.replace('_', ' ').title()}:**")
-                        with disp_col2:
-                            if isinstance(value, float):
-                                st.markdown(f"{value:.3f}")
-                            elif isinstance(value, (list, tuple)) and len(value) == 2 and all(isinstance(i, (int, float)) for i in value):
-                                 st.markdown(f"({value[0]:.3f}, {value[1]:.3f})") # e.g. confidence interval
-                            else:
-                                st.markdown(str(value))
-                
-                # Generate Report Button (Common to all non-survival results displayed in this 'else' block)
-                if st.button("Generate Report"):
-                    report_text = generate_report(
-                        results=results,
-                        params=params, # params should contain calc_type, hypothesis_type, method etc.
-                        design_type=st.session_state.design_type,
-                        outcome_type=st.session_state.outcome_type
-                    )
-                    report_html_content = f"<pre>{report_text}</pre>"
-                    report_name = f"{st.session_state.design_type.replace(' ', '_')}_{st.session_state.outcome_type.replace(' ', '_')}_{st.session_state.calculation_type.replace(' ', '_')}_report"
-                    if report_html_content:
-                        st.markdown("---<br>Generated Report:", unsafe_allow_html=True) # Add a separator and title
-                        st.markdown(report_html_content, unsafe_allow_html=True)
-                        b64 = base64.b64encode(report_html_content.encode()).decode()
-                        href = f'<a href="data:text/html;base64,{b64}" download="{report_name}.html">Download Report</a>'
-                        st.markdown(href, unsafe_allow_html=True)
-                    else:
-                        st.error("Could not generate report.")
+        # Use the unified results display system
+        unified_display.display_results(
+            results=st.session_state.results,
+            params=params,
+            design_type=st.session_state.design_type,
+            outcome_type=st.session_state.outcome_type,
+            calculation_type=st.session_state.calculation_type,
+            hypothesis_type=st.session_state.hypothesis_type,
+            method_used=st.session_state.method
+        )

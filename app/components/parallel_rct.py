@@ -871,7 +871,7 @@ def render_parallel_continuous(calc_type, hypothesis_type):
             
             # For non-inferiority design, show margin and assumed difference
             if hypothesis_type == "Non-Inferiority":
-                params["margin"] = st.number_input("Non-inferiority Margin (NIM)", value=0.2, step=0.1, key="margin_input")
+                params["non_inferiority_margin"] = st.number_input("Non-inferiority Margin (NIM)", value=0.2, step=0.1, key="margin_input")
                 params["assumed_difference"] = st.number_input("Assumed Difference", value=0.0, step=0.1, 
                                                        help="The assumed true difference between treatments (0 = treatments equivalent)", 
                                                        key="assumed_diff_input")
@@ -890,14 +890,14 @@ def render_parallel_continuous(calc_type, hypothesis_type):
                                      
             # For non-inferiority design, show direction
             if hypothesis_type == "Non-Inferiority":
-                params["direction"] = st.selectbox(
+                params["non_inferiority_direction"] = st.selectbox(
                     "Direction",
                     ["lower", "upper"],
                     index=0,
                     key="direction_select"
                 )
                 # Explain the direction based on selection
-                if params["direction"] == "lower":
+                if params["non_inferiority_direction"] == "lower":
                     st.info("Lower means smaller values are better (e.g., pain scores)")
                 else:
                     st.info("Upper means larger values are better (e.g., quality of life)")
