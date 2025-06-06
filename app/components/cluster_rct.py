@@ -18,6 +18,32 @@ import argparse
 import sys
 import os
 import json
+try:
+    import psutil
+    _PSUTIL_AVAILABLE = True
+except ImportError:
+    _PSUTIL_AVAILABLE = False
+
+
+def _detect_resource_constraints():
+    """Detect if we're in a resource-constrained environment."""
+    if not _PSUTIL_AVAILABLE:
+        return False  # Can't detect, assume normal resources
+    
+    try:
+        # Check available memory (suggest lightweight if < 2GB)
+        memory_gb = psutil.virtual_memory().available / (1024**3)
+        
+        # Check if this looks like a free hosting environment
+        # (very rough heuristics)
+        cpu_count = psutil.cpu_count()
+        
+        # Suggest lightweight methods for very constrained environments
+        is_constrained = memory_gb < 2.0 or cpu_count <= 1
+        
+        return is_constrained
+    except:
+        return False  # Default to not constrained if detection fails
 
 
 # For mapping UI analysis method names to backend keywords
@@ -740,6 +766,29 @@ def render_continuous_advanced_options():
             model_options.append("Bayesian (PyMC)")
         else:
             model_options.append("Bayesian (PyMC) - Not Available")
+            
+        # Approximate Bayesian methods (lightweight, always available with scipy)
+        model_options.append("Bayesian (Variational) - Fast")
+        model_options.append("Bayesian (ABC) - Lightweight")
+        
+        # Smart suggestions based on environment
+        is_constrained = _detect_resource_constraints()
+        if is_constrained:
+            st.info(
+                "🌐 **Resource-Constrained Environment Detected**\n\n"
+                "For optimal performance in this environment, consider:\n"
+                "• **Bayesian (ABC) - Lightweight** for basic Bayesian inference\n"
+                "• **Bayesian (Variational) - Fast** for faster approximate inference\n"
+                "• **T-test (cluster-level)** for fastest non-Bayesian analysis\n\n"
+                "Full MCMC methods (Stan/PyMC) may be slow or unavailable."
+            )
+        elif not stan_available and not pymc_available:
+            st.info(
+                "💡 **Bayesian Analysis Available**\n\n"
+                "Stan/PyMC not detected, but approximate Bayesian methods are available:\n"
+                "• **Bayesian (Variational) - Fast** for quick approximate inference\n"
+                "• **Bayesian (ABC) - Lightweight** for simulation-based inference"
+            )
         
         model_display = st.selectbox(
             "Statistical Model Used to Analyse Each Simulated Trial",
@@ -766,7 +815,21 @@ def render_continuous_advanced_options():
                 "```bash\n"
                 "pip install pymc\n"
                 "```\n"
-                "The calculation will fall back to cluster-level t-test if you proceed."
+                "The calculation will fall back to variational approximation if you proceed."
+            )
+        elif "Variational" in model_display:
+            st.info(
+                "⚡ **Fast Variational Bayes**\n\n"
+                "Uses Laplace approximation for fast approximate Bayesian inference. "
+                "Results are approximate but much faster than full MCMC. "
+                "Good for initial exploration or resource-constrained environments."
+            )
+        elif "ABC" in model_display:
+            st.info(
+                "🎯 **Approximate Bayesian Computation**\n\n"
+                "Uses simulation-based approximate inference. Very lightweight and "
+                "suitable for low-resource servers. Results are approximate but "
+                "provide valid uncertainty quantification."
             )
         advanced_params["lmm_cov_penalty_weight"] = 0.0 # Default if not LMM
         if "Linear Mixed Model" in model_display:
@@ -785,15 +848,21 @@ def render_continuous_advanced_options():
             "Linear Mixed Model (REML)": "mixedlm",
             "GEE (Exchangeable)": "gee",
             "Bayesian (Stan)": "bayes",
-            "Bayesian (Stan) - Not Available": "bayes",  # Will fall back to ttest automatically
+            "Bayesian (Stan) - Not Available": "bayes",  # Will fall back automatically
             "Bayesian (PyMC)": "bayes",
-            "Bayesian (PyMC) - Not Available": "bayes",  # Will fall back to ttest automatically
+            "Bayesian (PyMC) - Not Available": "bayes",  # Will fall back automatically
+            "Bayesian (Variational) - Fast": "bayes",
+            "Bayesian (ABC) - Lightweight": "bayes",
         }
         advanced_params["analysis_model"] = model_map[model_display]
         
         # Set Bayesian backend based on selection
         if "Bayesian (PyMC)" in model_display:
             advanced_params["bayes_backend"] = "pymc"
+        elif "Variational" in model_display:
+            advanced_params["bayes_backend"] = "variational"
+        elif "ABC" in model_display:
+            advanced_params["bayes_backend"] = "abc"
         else:
             advanced_params["bayes_backend"] = "stan"  # Default to Stan
         
@@ -848,9 +917,40 @@ def render_continuous_advanced_options():
                     key="cluster_continuous_bayes_warmup",
                 )
             
-            # Show backend information
-            backend_name = "PyMC" if advanced_params["bayes_backend"] == "pymc" else "Stan"
-            st.info(f"🔧 **Bayesian Backend**: Using {backend_name} for MCMC sampling")
+            # Show backend information and resource implications
+            backend = advanced_params["bayes_backend"]
+            if backend == "pymc":
+                backend_name = "PyMC"
+                sampling_type = "MCMC (NUTS)"
+                resource_note = "Full MCMC - High accuracy, moderate resource use"
+            elif backend == "stan":
+                backend_name = "Stan"
+                sampling_type = "MCMC (NUTS)"
+                resource_note = "Full MCMC - High accuracy, moderate resource use"
+            elif backend == "variational":
+                backend_name = "Variational Bayes"
+                sampling_type = "Laplace Approximation"
+                resource_note = "⚡ Fast approximation - Low resource use, good for exploration"
+            elif backend == "abc":
+                backend_name = "ABC"
+                sampling_type = "Simulation-based"
+                resource_note = "🌐 Lightweight - Very low resource use, suitable for web deployment"
+            else:
+                backend_name = backend
+                sampling_type = "Unknown"
+                resource_note = ""
+            
+            st.info(f"🔧 **Bayesian Backend**: {backend_name} ({sampling_type})\n\n{resource_note}")
+            
+            # Show limitations for approximate methods
+            if backend in ["variational", "abc"]:
+                st.warning(
+                    "⚠️ **Approximate Method Limitations**:\n"
+                    "• Results are approximate, not exact posterior samples\n"
+                    "• May underestimate uncertainty in some cases\n"
+                    "• Best used for initial exploration or resource-limited environments\n"
+                    "• For final analyses, consider full MCMC when possible"
+                )
             
             # Bayesian inference method selection
             st.markdown("**Bayesian Inference Method**")
@@ -869,7 +969,10 @@ def render_continuous_advanced_options():
                 • **Posterior Probability**: >97.5% probability effect is in favorable direction
                 • **ROPE**: <5% probability effect is in Region of Practical Equivalence around zero
                 
-                Both Stan and PyMC use the NUTS (No-U-Turn Sampler) for efficient sampling."""
+                **Available Backends**:
+                • Stan/PyMC: Full MCMC with NUTS sampler (high accuracy)
+                • Variational: Fast Laplace approximation (good for exploration)
+                • ABC: Lightweight simulation-based inference (web-friendly)"""
             )
             advanced_params["bayes_inference_method"] = inference_options[selected_inference]
     
