@@ -46,54 +46,51 @@ try:
 except ImportError:
     _SCIPY_AVAILABLE = False
 
-    def _get_stan_model():
-        global _STAN_MODEL
-        if _STAN_MODEL is None:
-            stan_code = """
-            data {
-                int<lower=1> N;
-                int<lower=1> J;
-                array[N] int<lower=1, upper=J> cluster;
-                vector[N] y;
-                vector[N] treat;
-            }
-            parameters {
-                real alpha;
-                real beta;
-                vector[J] u_raw;
-                real<lower=0> sigma_u;
-                real<lower=0> sigma_e;
-            }
-            transformed parameters {
-                vector[J] u = u_raw * sigma_u;
-            }
-            model {
-                beta ~ normal(0,10);
-                u_raw ~ normal(0,1);
-                sigma_u ~ student_t(3,0,2.5);
-                sigma_e ~ student_t(3,0,2.5);
-                for (n in 1:N)
-                    y[n] ~ normal(alpha + beta * treat[n] + u[cluster[n]], sigma_e);
-            }
-            """
-            # Write Stan code to temporary file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.stan', delete=False) as f:
-                f.write(stan_code)
-                stan_file = f.name
-            
-            # Create the Stan model - don't delete file until after compilation
-            _STAN_MODEL = CmdStanModel(stan_file=stan_file)
-            
-            # Clean up the temporary file after compilation
-            try:
-                if os.path.exists(stan_file):
-                    os.unlink(stan_file)
-            except OSError:
-                pass  # Ignore cleanup errors
-        return _STAN_MODEL
-except ImportError:
-    _STAN_AVAILABLE = False
-    _STAN_MODEL = None
+def _get_stan_model():
+    global _STAN_MODEL
+    if _STAN_MODEL is None:
+        stan_code = """
+        data {
+            int<lower=1> N;
+            int<lower=1> J;
+            array[N] int<lower=1, upper=J> cluster;
+            vector[N] y;
+            vector[N] treat;
+        }
+        parameters {
+            real alpha;
+            real beta;
+            vector[J] u_raw;
+            real<lower=0> sigma_u;
+            real<lower=0> sigma_e;
+        }
+        transformed parameters {
+            vector[J] u = u_raw * sigma_u;
+        }
+        model {
+            beta ~ normal(0,10);
+            u_raw ~ normal(0,1);
+            sigma_u ~ student_t(3,0,2.5);
+            sigma_e ~ student_t(3,0,2.5);
+            for (n in 1:N)
+                y[n] ~ normal(alpha + beta * treat[n] + u[cluster[n]], sigma_e);
+        }
+        """
+        # Write Stan code to temporary file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.stan', delete=False) as f:
+            f.write(stan_code)
+            stan_file = f.name
+        
+        # Create the Stan model - don't delete file until after compilation
+        _STAN_MODEL = CmdStanModel(stan_file=stan_file)
+        
+        # Clean up the temporary file after compilation
+        try:
+            if os.path.exists(stan_file):
+                os.unlink(stan_file)
+        except OSError:
+            pass  # Ignore cleanup errors
+    return _STAN_MODEL
 
 
 def _fit_pymc_model(df, draws=500, tune=500, chains=4):
@@ -190,14 +187,19 @@ def _fit_variational_bayes(df, n_samples=1000):
     
     # Approximate Hessian numerically (for small problems)
     hess_approx = np.eye(n_params) * 0.1  # Diagonal approximation
-    for i in range(n_params):
-        ei = np.zeros(n_params)
-        ei[i] = eps
-        grad_plus = grad_neg_log_post(result.x + ei)
-        grad_minus = grad_neg_log_post(result.x - ei)
-        hess_approx[i, i] = (grad_plus[i] - grad_minus[i]) / (2 * eps)
+    try:
+        for i in range(n_params):
+            ei = np.zeros(n_params)
+            ei[i] = eps
+            grad_plus = grad_neg_log_post(result.x + ei)
+            grad_minus = grad_neg_log_post(result.x - ei)
+            hess_approx[i, i] = max(0.01, (grad_plus[i] - grad_minus[i]) / (2 * eps))  # Ensure positive
+    except Exception:
+        # If gradient computation fails, use simple diagonal approximation
+        hess_approx = np.eye(n_params) * 0.1
     
     # Sample from approximate posterior
+    cov_approx = None
     try:
         cov_approx = np.linalg.inv(hess_approx)
         # Ensure positive definite
@@ -208,10 +210,10 @@ def _fit_variational_bayes(df, n_samples=1000):
         beta_samples = samples[:, 1] if samples.ndim > 1 else [samples[1]]
         
         return beta_samples, True  # success flag
-    except np.linalg.LinAlgError:
+    except (np.linalg.LinAlgError, ValueError) as e:
         # Fallback: use MAP estimate with uncertainty
         beta_map = result.x[1]
-        beta_se = np.sqrt(max(0.01, cov_approx[1, 1])) if hasattr(cov_approx, '__getitem__') else 0.1
+        beta_se = np.sqrt(max(0.01, cov_approx[1, 1])) if cov_approx is not None else 0.1
         beta_samples = np.random.normal(beta_map, beta_se, n_samples)
         return beta_samples, False  # approximate flag
 
