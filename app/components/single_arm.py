@@ -451,25 +451,25 @@ def calculate_single_arm_continuous(params):
             adjusted_std_dev = std_dev * (1 - correlation**2)**0.5
             power_result = one_sample_t_test_power(
                 n=n,
-                mean=mean,
-                null_mean=null_mean,
+                mean_alt=mean,
+                mean_null=null_mean,
                 std_dev=adjusted_std_dev,
                 alpha=alpha,
-                alternative=alternative
+                sides=2 if alternative == "two-sided" else 1
             )
         else:
             # Standard single arm design
             power_result = one_sample_t_test_power(
                 n=n,
-                mean=mean,
-                null_mean=null_mean,
+                mean_alt=mean,
+                mean_null=null_mean,
                 std_dev=std_dev,
                 alpha=alpha,
-                alternative=alternative
+                sides=2 if alternative == "two-sided" else 1
             )
         
         # Format results
-        result["power"] = round(power_result["power"], 3)
+        result["power"] = round(power_result, 3)
         result["n"] = n
         result["effect_size"] = round((mean - null_mean) / std_dev, 3)
         

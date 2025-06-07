@@ -453,23 +453,165 @@ class UnifiedResultsDisplay:
             except Exception as e:
                 st.error(f"Error generating HTML report: {e}")
     
+    def _generate_cli_command(self, params: Dict[str, Any], design_type: str, outcome_type: str) -> str:
+        """Generate equivalent CLI command for the given parameters."""
+        # Map design types to CLI format
+        design_map = {
+            "Parallel RCT": "parallel",
+            "Single Arm": "single-arm", 
+            "Cluster RCT": "cluster"
+        }
+        
+        # Map outcome types to CLI format
+        outcome_map = {
+            "Binary": "binary",
+            "Continuous": "continuous",
+            "Survival": "survival"
+        }
+        
+        # Map calculation types
+        calc_type = params.get("calculation_type", "Sample Size")
+        calc_map = {
+            "Sample Size": "sample-size",
+            "Power": "power", 
+            "Minimum Detectable Effect": "mde"
+        }
+        
+        design_cli = design_map.get(design_type, design_type.lower().replace(" ", "-"))
+        outcome_cli = outcome_map.get(outcome_type, outcome_type.lower())
+        calc_cli = calc_map.get(calc_type, calc_type.lower().replace(" ", "-"))
+        
+        # Start building command
+        cmd_parts = ["designpower", "calculate", design_cli, outcome_cli, calc_cli]
+        
+        # Add common parameters
+        alpha = params.get("alpha", 0.05)
+        if alpha != 0.05:
+            cmd_parts.extend(["--alpha", str(alpha)])
+            
+        power = params.get("power", 0.8)
+        if power != 0.8 and calc_type in ["Sample Size", "Minimum Detectable Effect"]:
+            cmd_parts.extend(["--power", str(power)])
+        
+        # Add design-specific parameters
+        if design_type == "Parallel RCT":
+            if params.get("n1") is not None:
+                cmd_parts.extend(["--n1", str(params["n1"])])
+            if params.get("n2") is not None:
+                cmd_parts.extend(["--n2", str(params["n2"])])
+        elif design_type == "Single Arm":
+            if params.get("n") is not None:
+                cmd_parts.extend(["--n", str(params["n"])])
+        elif design_type == "Cluster RCT":
+            if params.get("n_clusters") is not None:
+                cmd_parts.extend(["--n-clusters", str(params["n_clusters"])])
+            if params.get("cluster_size") is not None:
+                cmd_parts.extend(["--cluster-size", str(params["cluster_size"])])
+            if params.get("icc") is not None:
+                cmd_parts.extend(["--icc", str(params["icc"])])
+        
+        # Add outcome-specific parameters
+        if outcome_type == "Binary":
+            if params.get("p1") is not None:
+                cmd_parts.extend(["--p1", str(params["p1"])])
+            if params.get("p2") is not None:
+                cmd_parts.extend(["--p2", str(params["p2"])])
+            if params.get("p") is not None:
+                cmd_parts.extend(["--p", str(params["p"])])
+            if params.get("p0") is not None:
+                cmd_parts.extend(["--p0", str(params["p0"])])
+        elif outcome_type == "Continuous":
+            if params.get("mean1") is not None:
+                cmd_parts.extend(["--mean1", str(params["mean1"])])
+            if params.get("mean2") is not None:
+                cmd_parts.extend(["--mean2", str(params["mean2"])])
+            if params.get("mean") is not None:
+                cmd_parts.extend(["--mean", str(params["mean"])])
+            if params.get("null_mean") is not None:
+                cmd_parts.extend(["--null-mean", str(params["null_mean"])])
+            if params.get("std_dev") is not None:
+                cmd_parts.extend(["--std-dev", str(params["std_dev"])])
+        elif outcome_type == "Survival":
+            if params.get("median1") is not None:
+                cmd_parts.extend(["--median1", str(params["median1"])])
+            if params.get("median2") is not None:
+                cmd_parts.extend(["--median2", str(params["median2"])])
+            if params.get("median_survival") is not None:
+                cmd_parts.extend(["--median-survival", str(params["median_survival"])])
+            if params.get("null_median_survival") is not None:
+                cmd_parts.extend(["--null-median-survival", str(params["null_median_survival"])])
+            if params.get("accrual_time") is not None:
+                cmd_parts.extend(["--accrual-time", str(params["accrual_time"])])
+            if params.get("follow_up_time") is not None:
+                cmd_parts.extend(["--follow-up-time", str(params["follow_up_time"])])
+        
+        # Add advanced options
+        method = params.get("method", "analytical")
+        if method != "analytical":
+            cmd_parts.extend(["--method", method])
+            
+        hypothesis = params.get("hypothesis_type", "Superiority")
+        if hypothesis != "Superiority":
+            cmd_parts.extend(["--hypothesis", hypothesis.lower().replace(" ", "-")])
+        
+        if params.get("use_simulation") or method == "simulation":
+            nsim = params.get("nsim", 1000)
+            if nsim != 1000:
+                cmd_parts.extend(["--nsim", str(nsim)])
+            if params.get("seed") is not None:
+                cmd_parts.extend(["--seed", str(params["seed"])])
+        
+        return " ".join(cmd_parts)
+
     def _display_cli_code(self, params: Dict[str, Any], cli_generator: Callable, design_type: str, outcome_type: str):
         """Display CLI code generation."""
-        with st.expander("Reproducible Python CLI Code"):
-            try:
-                cli_code = cli_generator(params)
-                st.code(cli_code, language="python")
-                
-                cli_key_suffix = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()[:8]
-                st.download_button(
-                    label="Download CLI Script (.py)",
-                    data=cli_code,
-                    file_name=f"designpower_{design_type.replace(' ', '_')}_{outcome_type.replace(' ', '_')}_cli_{cli_key_suffix}.py",
-                    mime="text/x-python",
-                    key=f"download_cli_{design_type.replace(' ', '_')}_{outcome_type.replace(' ', '_')}_{cli_key_suffix}"
-                )
-            except Exception as e:
-                st.error(f"Error generating CLI code: {e}")
+        with st.expander("📱 Reproducible Code & CLI Commands"):
+            # Create tabs for different code formats
+            tab1, tab2 = st.tabs(["🐍 Python Script", "⌨️ CLI Command"])
+            
+            with tab1:
+                try:
+                    cli_code = cli_generator(params)
+                    st.code(cli_code, language="python")
+                    
+                    cli_key_suffix = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()[:8]
+                    st.download_button(
+                        label="📥 Download Python Script (.py)",
+                        data=cli_code,
+                        file_name=f"designpower_{design_type.replace(' ', '_')}_{outcome_type.replace(' ', '_')}_script_{cli_key_suffix}.py",
+                        mime="text/x-python",
+                        key=f"download_cli_{design_type.replace(' ', '_')}_{outcome_type.replace(' ', '_')}_{cli_key_suffix}"
+                    )
+                except Exception as e:
+                    st.error(f"Error generating Python script: {e}")
+            
+            with tab2:
+                try:
+                    cli_command = self._generate_cli_command(params, design_type, outcome_type)
+                    
+                    st.markdown("**Command to run in terminal:**")
+                    st.code(cli_command, language="bash")
+                    
+                    st.markdown("**Installation & Setup:**")
+                    setup_instructions = f"""# 1. Install DesignPower CLI
+pip install designpower
+
+# 2. Or if using from source:
+cd /path/to/DesignPower
+source venv/bin/activate
+python cli_v2.py {cli_command.replace('designpower ', '')}
+
+# 3. For more options:
+designpower --help
+designpower calculate --help"""
+                    
+                    st.code(setup_instructions, language="bash")
+                    
+                    # Add copy button functionality
+                    st.markdown("💡 **Tip:** Copy the command above and run it in your terminal for automation and scripting!")
+                    
+                except Exception as e:
+                    st.error(f"Error generating CLI command: {e}")
     
     def _display_generic_results(self, results: Dict[str, Any], params: Dict[str, Any], design_type: str, outcome_type: str, calculation_type: str):
         """Fallback generic results display."""
