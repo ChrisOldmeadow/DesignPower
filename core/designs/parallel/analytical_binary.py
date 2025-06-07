@@ -386,7 +386,8 @@ def sample_size_binary(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, test
     }
 
 def sample_size_binary_non_inferiority(p1, non_inferiority_margin, power=0.8, alpha=0.05, 
-                                     allocation_ratio=1.0, assumed_difference=0.0, direction="lower"):
+                                     allocation_ratio=1.0, assumed_difference=0.0, direction="lower",
+                                     continuity_correction=False):
     """
     Calculate sample size for non-inferiority test with binary outcome.
     
@@ -406,6 +407,8 @@ def sample_size_binary_non_inferiority(p1, non_inferiority_margin, power=0.8, al
         Assumed true difference between proportions (0 = proportions truly equivalent), by default 0.0
     direction : str, optional
         Direction of non-inferiority test ("lower" or "upper"), by default "lower"
+    continuity_correction : bool, optional
+        Whether to apply continuity correction, by default False
     
     Returns
     -------
@@ -433,27 +436,38 @@ def sample_size_binary_non_inferiority(p1, non_inferiority_margin, power=0.8, al
     z_alpha = stats.norm.ppf(1 - alpha)
     z_beta = stats.norm.ppf(power)
     
-    # Calculate variances based on direction
+    # Use simpler pooled variance approach for better accuracy with literature
+    # This matches the standard formulation in Chow & Liu and other references
     if direction == "lower":
         # For lower non-inferiority, we're testing p2 >= p1 - margin
-        var_null = p1 * (1 - p1) + (p1 - non_inferiority_margin) * (1 - (p1 - non_inferiority_margin)) / allocation_ratio
-        var_alt = p1 * (1 - p1) + p2 * (1 - p2) / allocation_ratio
-        effect = p2 - (p1 - non_inferiority_margin)
+        effect = non_inferiority_margin  # Detectable difference under null
     else:  # upper
-        # For upper non-inferiority, we're testing p2 <= p1 + margin
-        var_null = p1 * (1 - p1) + (p1 + non_inferiority_margin) * (1 - (p1 + non_inferiority_margin)) / allocation_ratio
-        var_alt = p1 * (1 - p1) + p2 * (1 - p2) / allocation_ratio
-        effect = (p1 + non_inferiority_margin) - p2
+        # For upper non-inferiority, we're testing p2 <= p1 + margin  
+        effect = non_inferiority_margin  # Detectable difference under null
     
-    # Calculate n1 using the formula
-    numerator = (z_alpha * math.sqrt(var_null) + z_beta * math.sqrt(var_alt))**2
+    # Pooled variance approach (standard in most references)
+    # Assumes equal variance for both groups under null hypothesis
+    var_pooled = p1 * (1 - p1) + p2 * (1 - p2) / allocation_ratio
+    
+    # Calculate n1 using the standard formula
+    numerator = (z_alpha + z_beta)**2 * var_pooled
     denominator = effect**2
     
     # Handle case where denominator is zero
     if denominator == 0:
         raise ValueError("Cannot calculate sample size when effect size is zero")
     
-    n1 = math.ceil(numerator / denominator)
+    n1_basic = numerator / denominator
+    
+    # Apply continuity correction if requested
+    if continuity_correction:
+        # Add continuity correction term
+        correction_term = (z_alpha + z_beta) / (2 * effect)
+        n1_corrected = (numerator + correction_term) / denominator
+        n1 = math.ceil(n1_corrected)
+    else:
+        n1 = math.ceil(n1_basic)
+    
     n2 = math.ceil(n1 * allocation_ratio)
     
     # Return results
@@ -469,6 +483,7 @@ def sample_size_binary_non_inferiority(p1, non_inferiority_margin, power=0.8, al
         "power": power,
         "alpha": alpha,
         "allocation_ratio": allocation_ratio,
+        "continuity_correction": continuity_correction,
         "method": "analytical"
     }
 

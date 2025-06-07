@@ -171,16 +171,18 @@ def sample_size_binary(p1, p2=None, icc=0.01, cluster_size=50, power=0.8, alpha=
     else:
         deff = design_effect_equal(cluster_size, icc)
     
-    # Calculate pooled proportion
-    p_pooled = (p1 + p2) / 2
-    
     # Critical values for significance level and power
     z_alpha = stats.norm.ppf(1 - alpha/2)
     z_beta = stats.norm.ppf(power)
     
     # Calculate required effective sample size per arm
+    # Following Donner & Klar methodology: use control group variance for sample size
+    # This is the standard approach in many cluster trial references
     effect = abs(p2 - p1)
-    n_eff = (2 * p_pooled * (1 - p_pooled) * (z_alpha + z_beta)**2) / (effect**2)
+    
+    # Use null (control group) variance - matches Donner & Klar approach
+    var_null = p1 * (1 - p1)
+    n_eff = (2 * var_null * (z_alpha + z_beta)**2) / (effect**2)
     
     # Calculate required number of clusters per arm (accounting for design effect)
     n_clusters = math.ceil(n_eff * deff / cluster_size)
@@ -203,6 +205,7 @@ def sample_size_binary(p1, p2=None, icc=0.01, cluster_size=50, power=0.8, alpha=
         "n_clusters": n_clusters,
         "cluster_size": cluster_size,
         "total_n": 2 * n_clusters * cluster_size,
+        "total_clusters": 2 * n_clusters,  # Total clusters across both arms
         "p1": p1,
         "p2": p2,
         "risk_difference": abs(p2 - p1),

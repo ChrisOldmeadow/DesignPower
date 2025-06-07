@@ -239,10 +239,15 @@ def sample_size_continuous(mean1, mean2, std_dev, icc, power=0.8, alpha=0.05, cl
     if calculated_n_clusters != float('inf') and calculated_cluster_size != float('inf'):
         total_n = 2 * calculated_n_clusters * calculated_cluster_size
     
+    total_clusters = float('inf')
+    if calculated_n_clusters != float('inf'):
+        total_clusters = 2 * calculated_n_clusters
+    
     results = {
         "n_clusters": calculated_n_clusters,
         "cluster_size": calculated_cluster_size,
         "total_n": total_n,
+        "total_clusters": total_clusters,  # Total clusters across both arms
         "mean1": mean1,
         "mean2": mean2,
         "difference": abs(mean1 - mean2),
