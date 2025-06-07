@@ -545,6 +545,16 @@ class UnifiedResultsDisplay:
             if params.get("follow_up_time") is not None:
                 cmd_parts.extend(["--follow-up-time", str(params["follow_up_time"])])
         
+        # Add allocation ratio if not default
+        allocation_ratio = params.get("allocation_ratio", 1.0)
+        if allocation_ratio != 1.0:
+            cmd_parts.extend(["--allocation-ratio", str(allocation_ratio)])
+        
+        # Add dropout rate if not default
+        dropout_rate = params.get("dropout_rate", 0.1)
+        if dropout_rate != 0.1:
+            cmd_parts.extend(["--dropout-rate", str(dropout_rate)])
+        
         # Add advanced options
         method = params.get("method", "analytical")
         if method != "analytical":
@@ -554,12 +564,30 @@ class UnifiedResultsDisplay:
         if hypothesis != "Superiority":
             cmd_parts.extend(["--hypothesis", hypothesis.lower().replace(" ", "-")])
         
-        if params.get("use_simulation") or method == "simulation":
+        # Add simulation parameters if applicable
+        use_simulation = params.get("use_simulation", False)
+        if use_simulation or method == "simulation":
             nsim = params.get("nsim", 1000)
             if nsim != 1000:
                 cmd_parts.extend(["--nsim", str(nsim)])
             if params.get("seed") is not None:
                 cmd_parts.extend(["--seed", str(params["seed"])])
+        
+        # Add non-inferiority margin if applicable
+        if params.get("nim") is not None:
+            cmd_parts.extend(["--nim", str(params["nim"])])
+        
+        # Add test type for binary outcomes
+        if outcome_type == "Binary" and params.get("test_type") is not None:
+            test_type = params["test_type"]
+            # Map internal test types to CLI parameter names
+            test_type_map = {
+                "normal_approximation": "normal-approximation",
+                "fishers_exact": "fishers-exact",
+                "likelihood_ratio": "likelihood-ratio"
+            }
+            cli_test_type = test_type_map.get(test_type, test_type)
+            cmd_parts.extend(["--test-type", cli_test_type])
         
         return " ".join(cmd_parts)
 
