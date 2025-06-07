@@ -246,8 +246,8 @@ class UnifiedResultsDisplay:
                     st.write(f"{metric.replace('_', ' ').title()}: {results[metric]}")
     
     def _display_parameters_summary(self, params: Dict[str, Any]):
-        """Display input parameters summary."""
-        with st.expander("Input Parameters Summary"):
+        """Display input parameters summary with enhanced visual presentation."""
+        with st.expander("📋 Input Parameters Summary", expanded=False):
             filtered_params = {
                 k: v for k, v in params.items() 
                 if not k.startswith('_') and k not in [
@@ -256,7 +256,179 @@ class UnifiedResultsDisplay:
                     'button_calculate_clicked'
                 ]
             }
-            st.json(filtered_params)
+            
+            if not filtered_params:
+                st.info("No input parameters to display.")
+                return
+            
+            # Create a visually appealing parameters table
+            param_data = []
+            for key, value in filtered_params.items():
+                # Format parameter names to be more readable
+                readable_name = key.replace('_', ' ').title()
+                
+                # Format values appropriately
+                if isinstance(value, bool):
+                    formatted_value = "✅ Yes" if value else "❌ No"
+                elif isinstance(value, float):
+                    if 0 < value < 1:  # Likely a proportion/probability
+                        formatted_value = f"{value:.3f}"
+                    else:
+                        formatted_value = f"{value:.2f}"
+                elif isinstance(value, int):
+                    formatted_value = f"{value:,}"
+                elif isinstance(value, str):
+                    formatted_value = value
+                elif value is None:
+                    formatted_value = "Not specified"
+                else:
+                    formatted_value = str(value)
+                
+                param_data.append({
+                    "Parameter": readable_name,
+                    "Value": formatted_value
+                })
+            
+            # Display as a nicely formatted table
+            if param_data:
+                df_params = pd.DataFrame(param_data)
+                st.dataframe(
+                    df_params,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Parameter": st.column_config.TextColumn(
+                            "Parameter",
+                            width="medium",
+                            help="Input parameter name"
+                        ),
+                        "Value": st.column_config.TextColumn(
+                            "Value",
+                            width="medium", 
+                            help="Parameter value"
+                        )
+                    }
+                )
+                
+                # Add download options
+                st.markdown("---")
+                st.markdown("**📥 Download Options:**")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                # Generate unique key suffix for download buttons
+                params_key_suffix = hashlib.md5(json.dumps(filtered_params, sort_keys=True).encode()).hexdigest()[:8]
+                
+                with col1:
+                    # CSV download
+                    csv_data = df_params.to_csv(index=False)
+                    st.download_button(
+                        label="📊 CSV File",
+                        data=csv_data,
+                        file_name=f"designpower_parameters_{params_key_suffix}.csv",
+                        mime="text/csv",
+                        key=f"download_params_csv_{params_key_suffix}",
+                        help="Download parameters as CSV file"
+                    )
+                
+                with col2:
+                    # JSON download (formatted)
+                    json_data = json.dumps(filtered_params, indent=2, sort_keys=True)
+                    st.download_button(
+                        label="📄 JSON File", 
+                        data=json_data,
+                        file_name=f"designpower_parameters_{params_key_suffix}.json",
+                        mime="application/json",
+                        key=f"download_params_json_{params_key_suffix}",
+                        help="Download parameters as JSON file"
+                    )
+                
+                with col3:
+                    # Text summary download
+                    text_summary = self._generate_text_summary(filtered_params)
+                    st.download_button(
+                        label="📝 Text Summary",
+                        data=text_summary,
+                        file_name=f"designpower_parameters_{params_key_suffix}.txt",
+                        mime="text/plain",
+                        key=f"download_params_txt_{params_key_suffix}",
+                        help="Download parameters as readable text summary"
+                    )
+    
+    def _generate_text_summary(self, params: Dict[str, Any]) -> str:
+        """Generate a human-readable text summary of parameters."""
+        from datetime import datetime
+        
+        summary_lines = [
+            "DesignPower - Input Parameters Summary",
+            "=" * 40,
+            f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "",
+            "ANALYSIS PARAMETERS:",
+            "-" * 20
+        ]
+        
+        # Group parameters by category for better organization
+        design_params = []
+        statistical_params = []
+        simulation_params = []
+        other_params = []
+        
+        for key, value in params.items():
+            readable_name = key.replace('_', ' ').title()
+            
+            # Format value for text display
+            if isinstance(value, bool):
+                formatted_value = "Yes" if value else "No"
+            elif isinstance(value, float):
+                if 0 < value < 1:
+                    formatted_value = f"{value:.3f}"
+                else:
+                    formatted_value = f"{value:.2f}"
+            elif isinstance(value, int):
+                formatted_value = f"{value:,}"
+            elif value is None:
+                formatted_value = "Not specified"
+            else:
+                formatted_value = str(value)
+            
+            param_line = f"{readable_name}: {formatted_value}"
+            
+            # Categorize parameters
+            if any(keyword in key.lower() for keyword in ['design', 'calculation', 'hypothesis', 'method']):
+                design_params.append(param_line)
+            elif any(keyword in key.lower() for keyword in ['alpha', 'power', 'effect', 'mean', 'proportion', 'p1', 'p2', 'std', 'icc', 'cluster']):
+                statistical_params.append(param_line)
+            elif any(keyword in key.lower() for keyword in ['nsim', 'seed', 'simulation']):
+                simulation_params.append(param_line)
+            else:
+                other_params.append(param_line)
+        
+        # Add categorized parameters to summary
+        if design_params:
+            summary_lines.extend(["", "Study Design:", "-" * 13])
+            summary_lines.extend(design_params)
+        
+        if statistical_params:
+            summary_lines.extend(["", "Statistical Parameters:", "-" * 21])
+            summary_lines.extend(statistical_params)
+        
+        if simulation_params:
+            summary_lines.extend(["", "Simulation Parameters:", "-" * 21])
+            summary_lines.extend(simulation_params)
+        
+        if other_params:
+            summary_lines.extend(["", "Other Parameters:", "-" * 17])
+            summary_lines.extend(other_params)
+        
+        summary_lines.extend([
+            "",
+            "=" * 40,
+            "This summary was generated by DesignPower.",
+            "For more information, visit the DesignPower documentation."
+        ])
+        
+        return "\n".join(summary_lines)
     
     def _display_html_report(self, results: Dict[str, Any], params: Dict[str, Any], design_type: str, outcome_type: str):
         """Display HTML report generation."""

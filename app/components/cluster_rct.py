@@ -62,490 +62,343 @@ analysis_method_map_binary_sim = {
 
 
 def generate_cli_code_cluster_continuous(params):
-    """Generates a Python CLI script string for cluster continuous RCTs."""
-    calc_type = params.get("calculation_type", "Sample Size")
-    method = params.get("method", "analytical") # analytical or simulation
-
-    alpha = params.get("alpha", 0.05)
-    power = params.get("power", 0.8)
+    """
+    Generate clean, simple reproducible code for cluster RCT continuous outcome calculations.
     
-    mean1 = params.get("mean1", 0.0)
-    mean2 = params.get("mean2", 1.0)
-    std_dev = params.get("std_dev", 1.0)
-    icc = params.get("icc", 0.05)
-
-    # Parameters for specific calculation types
-    n_clusters_ui = params.get("n_clusters", 10) # Used for Power/MDE and fixed for SS
-    cluster_size_ui = params.get("cluster_size", 50) # Used for Power/MDE and fixed for SS
+    This matches the style in EXAMPLES.md for consistency and simplicity.
+    """
+    # Extract key parameters from UI
+    calc_type = params.get('calculation_type', 'Power')
+    method = params.get('method', 'analytical')
     
-    solve_for_ui = params.get("solve_for_continuous", "Number of Clusters (k)")
-    solve_for_core = 'n_clusters' if "Number of Clusters" in solve_for_ui else 'cluster_size'
-
-    # Simulation specific
-    nsim = params.get("nsim", 1000)
-    seed = params.get("seed", 42)
+    # Core parameters 
+    n_clusters = params.get('n_clusters', 10)
+    cluster_size = params.get('cluster_size', 20)
+    icc = params.get('icc', 0.05)
+    mean1 = params.get('mean1', 3.0)
+    mean2 = params.get('mean2', 3.5)
+    std_dev = params.get('std_dev', 1.2)
+    alpha = params.get('alpha', 0.05)
+    power = params.get('power', 0.8)
     
-    # Simulation analysis method mapping
-    analysis_method_ui = params.get("analysis_method", "T-test on Aggregate Data")
-    analysis_model_map = {
-        "T-test on Aggregate Data": "ttest",
-        "Linear Mixed Model (LMM)": "mixedlm",
-        "GEE": "gee",
-        "Bayesian GLMM": "bayes" # Assuming 'bayes' is the general Bayesian model for continuous
-    }
-    analysis_model_core = analysis_model_map.get(analysis_method_ui, "ttest")
-
-    # LMM specific simulation parameters
-    lmm_use_satterthwaite = params.get("use_satterthwaite", False)
-    lmm_optimization_method_ui = params.get("lmm_method", "Auto")
-    lmm_method_core = lmm_optimization_method_ui.lower() if lmm_optimization_method_ui != "Auto" else "auto"
-    lmm_use_reml = params.get("lmm_reml", True)
-
-    # Sample Size simulation search range
-    min_n_clusters_sim = params.get("min_n_clusters", 2)
-    max_n_clusters_sim = params.get("max_n_clusters", 100)
-    min_cluster_size_sim = params.get("min_cluster_size", 2)
-    max_cluster_size_sim = params.get("max_cluster_size", 500)
-
-    # MDE simulation specific
-    precision_mde_sim = params.get("precision", 0.01)
-    max_iterations_mde_sim = params.get("max_iterations", 100)
-
-    script_template = textwrap.dedent(f"""
-    import argparse
-    import json
-    import sys
-    import os
-    import math
-
-    # Attempt to import core modules
-    try:
-        from core.designs.cluster_rct import analytical_continuous
-        from core.designs.cluster_rct import simulation_continuous
-    except ImportError:
-        sys.stderr.write("Error: Could not import DesignPower's core cluster RCT modules.\n")
-        sys.stderr.write("Please ensure the script is run from the DesignPower project root directory,\n")
-        sys.stderr.write("or that the DesignPower package is installed / 'core' is in PYTHONPATH.\n")
-        sys.exit(1)
-
-    def main():
-        parser = argparse.ArgumentParser(description="Reproducible CLI for Cluster RCT Continuous Outcome - DesignPower")
-        parser.add_argument('--calculation_type', type=str, required=True, choices=['Sample Size', 'Power', 'Minimum Detectable Effect'], default='{calc_type}')
-        parser.add_argument('--method', type=str, required=True, choices=['analytical', 'simulation'], default='{method}')
+    # Simulation-specific parameters
+    nsim = params.get('nsim', 1000)
+    seed = params.get('seed')
+    
+    # Analysis method and Bayesian parameters
+    analysis_model = params.get('analysis_model', 'ttest')
+    
+    # Map to backend method
+    if analysis_model == 'bayes':
+        # Extract Bayesian-specific parameters
+        bayes_backend = params.get('bayes_backend', 'stan')
+        bayes_draws = params.get('bayes_draws', 500)
+        bayes_warmup = params.get('bayes_warmup', 500)
+        bayes_inference_method = params.get('bayes_inference_method', 'credible_interval')
         
-        parser.add_argument('--alpha', type=float, default={alpha})
-        parser.add_argument('--power', type=float, default={power})
+        backend_method = 'bayes'
+        bayes_params = f"""    bayes_backend="{bayes_backend}",
+    bayes_draws={bayes_draws},
+    bayes_warmup={bayes_warmup},
+    bayes_inference_method="{bayes_inference_method}","""
+    else:
+        backend_method = analysis_model
+        bayes_params = ""
+    
+    # Build import statement
+    if method == "analytical":
+        import_line = "from core.designs.cluster_rct.analytical_continuous import"
+        module_prefix = ""
+    else:
+        import_line = "from core.designs.cluster_rct.simulation_continuous import"
+        module_prefix = ""
+    
+    # Build function call based on calculation type
+    if calc_type == "Power":
+        function_name = f"power_continuous{'_sim' if method == 'simulation' else ''}"
         
-        parser.add_argument('--mean1', type=float, default={mean1})
-        parser.add_argument('--mean2', type=float, default={mean2})
-        parser.add_argument('--std_dev', type=float, default={std_dev})
-        parser.add_argument('--icc', type=float, default={icc})
-
-        # For Power/MDE, n_clusters and cluster_size are inputs.
-        # For Sample Size, one is an input (fixed), the other is solved for.
-        parser.add_argument('--n_clusters', type=int, default={n_clusters_ui if calc_type != 'Sample Size' or solve_for_core == 'cluster_size' else None}, help="Number of clusters per arm. Input for Power/MDE, or fixed value if solving for cluster_size in Sample Size.")
-        parser.add_argument('--cluster_size', type=int, default={cluster_size_ui if calc_type != 'Sample Size' or solve_for_core == 'n_clusters' else None}, help="Average cluster size. Input for Power/MDE, or fixed value if solving for n_clusters in Sample Size.")
-        parser.add_argument('--solve_for', type=str, choices=['n_clusters', 'cluster_size'], default='{solve_for_core if calc_type == "Sample Size" else None}', help="Specify for Sample Size calculation: solve for 'n_clusters' or 'cluster_size'.")
-
-        # Simulation specific
-        parser.add_argument('--nsim', type=int, default={nsim})
-        parser.add_argument('--seed', type=int, default={seed})
-        parser.add_argument('--analysis_model', type=str, choices=['ttest', 'mixedlm', 'gee', 'bayes'], default='{analysis_model_core}', help="Analysis model for simulation: ttest, mixedlm, gee, bayes.")
-        parser.add_argument('--lmm_use_satterthwaite', action='store_true', default={lmm_use_satterthwaite})
-        parser.add_argument('--lmm_method', type=str, default='{lmm_method_core}')
-        parser.add_argument('--lmm_reml', action='store_true', default={lmm_use_reml})
-
-        # Sample Size simulation search range
-        parser.add_argument('--min_n_clusters_sim', type=int, default={min_n_clusters_sim})
-        parser.add_argument('--max_n_clusters_sim', type=int, default={max_n_clusters_sim})
-        parser.add_argument('--min_cluster_size_sim', type=int, default={min_cluster_size_sim})
-        parser.add_argument('--max_cluster_size_sim', type=int, default={max_cluster_size_sim})
-
-        # MDE simulation specific
-        parser.add_argument('--precision_mde_sim', type=float, default={precision_mde_sim})
-        parser.add_argument('--max_iterations_mde_sim', type=int, default={max_iterations_mde_sim})
-
-        args = parser.parse_args()
-
-        results = None
-
-        # --- Analytical Calculations --- 
-        if args.method == 'analytical':
-            if args.calculation_type == 'Sample Size':
-                if args.solve_for == 'n_clusters':
-                    if args.cluster_size is None:
-                        sys.stderr.write("Error: --cluster_size must be provided when solving for n_clusters.\n")
-                        sys.exit(1)
-                    results = analytical_continuous.sample_size_continuous(
-                        mean1=args.mean1, mean2=args.mean2, std_dev=args.std_dev, icc=args.icc,
-                        power=args.power, alpha=args.alpha, cluster_size=args.cluster_size, n_clusters_fixed=None
-                    )
-                elif args.solve_for == 'cluster_size':
-                    if args.n_clusters is None:
-                        sys.stderr.write("Error: --n_clusters must be provided when solving for cluster_size.\n")
-                        sys.exit(1)
-                    results = analytical_continuous.sample_size_continuous(
-                        mean1=args.mean1, mean2=args.mean2, std_dev=args.std_dev, icc=args.icc,
-                        power=args.power, alpha=args.alpha, cluster_size=None, n_clusters_fixed=args.n_clusters
-                    )
-                else:
-                    sys.stderr.write("Error: Invalid --solve_for value for Sample Size calculation.\n")
-                    sys.exit(1)
-            elif args.calculation_type == 'Power':
-                if args.n_clusters is None or args.cluster_size is None:
-                    sys.stderr.write("Error: --n_clusters and --cluster_size must be provided for Power calculation.\n")
-                    sys.exit(1)
-                results = analytical_continuous.power_continuous(
-                    n_clusters=args.n_clusters, cluster_size=args.cluster_size, icc=args.icc,
-                    mean1=args.mean1, mean2=args.mean2, std_dev=args.std_dev, alpha=args.alpha
-                )
-            elif args.calculation_type == 'Minimum Detectable Effect':
-                if args.n_clusters is None or args.cluster_size is None:
-                    sys.stderr.write("Error: --n_clusters and --cluster_size must be provided for MDE calculation.\n")
-                    sys.exit(1)
-                results = analytical_continuous.min_detectable_effect_continuous(
-                    n_clusters=args.n_clusters, cluster_size=args.cluster_size, icc=args.icc,
-                    std_dev=args.std_dev, power=args.power, alpha=args.alpha
-                )
-        # --- Simulation Calculations --- 
-        elif args.method == 'simulation':
-            sim_params = dict(
-                mean1=args.mean1, mean2=args.mean2, std_dev=args.std_dev, icc=args.icc,
-                power=args.power, alpha=args.alpha, nsim=args.nsim, seed=args.seed,
-                analysis_model=args.analysis_model,
-                lmm_use_satterthwaite=args.lmm_use_satterthwaite,
-                lmm_method=args.lmm_method,
-                lmm_reml=args.lmm_reml
-            )
-            if args.calculation_type == 'Sample Size':
-                ss_sim_params = sim_params.copy()
-                if args.solve_for == 'n_clusters':
-                    if args.cluster_size is None:
-                        sys.stderr.write("Error: --cluster_size must be provided when solving for n_clusters (simulation).\n")
-                        sys.exit(1)
-                    ss_sim_params.update(dict(
-                        cluster_size=args.cluster_size, n_clusters_fixed=None,
-                        min_n_clusters=args.min_n_clusters_sim, max_n_clusters=args.max_n_clusters_sim,
-                        min_cluster_size=args.min_cluster_size_sim, max_cluster_size=args.max_cluster_size_sim # Pass full range
-                    ))
-                    results = simulation_continuous.sample_size_continuous_sim(**ss_sim_params)
-                elif args.solve_for == 'cluster_size':
-                    if args.n_clusters is None:
-                        sys.stderr.write("Error: --n_clusters must be provided when solving for cluster_size (simulation).\n")
-                        sys.exit(1)
-                    ss_sim_params.update(dict(
-                        cluster_size=None, n_clusters_fixed=args.n_clusters,
-                        min_n_clusters=args.min_n_clusters_sim, max_n_clusters=args.max_n_clusters_sim,
-                        min_cluster_size=args.min_cluster_size_sim, max_cluster_size=args.max_cluster_size_sim
-                    ))
-                    results = simulation_continuous.sample_size_continuous_sim(**ss_sim_params)
-                else:
-                    sys.stderr.write("Error: Invalid --solve_for value for Sample Size simulation.\n")
-                    sys.exit(1)
-            elif args.calculation_type == 'Power':
-                if args.n_clusters is None or args.cluster_size is None:
-                    sys.stderr.write("Error: --n_clusters and --cluster_size must be provided for Power simulation.\n")
-                    sys.exit(1)
-                power_sim_params = sim_params.copy()
-                power_sim_params.update(dict(n_clusters=args.n_clusters, cluster_size=args.cluster_size))
-                results = simulation_continuous.power_continuous_sim(**power_sim_params)
-            elif args.calculation_type == 'Minimum Detectable Effect':
-                if args.n_clusters is None or args.cluster_size is None:
-                    sys.stderr.write("Error: --n_clusters and --cluster_size must be provided for MDE simulation.\n")
-                    sys.exit(1)
-                mde_sim_params = sim_params.copy()
-                mde_sim_params.update(dict(
-                    n_clusters=args.n_clusters, cluster_size=args.cluster_size,
-                    precision=args.precision_mde_sim, max_iterations=args.max_iterations_mde_sim
-                ))
-                results = simulation_continuous.min_detectable_effect_continuous_sim(**mde_sim_params)
-
-        if results:
-            # Convert numpy types to native Python types for JSON serialization
-            def convert_numpy_types(obj):
-                if isinstance(obj, (np.integer, np.int64)):
-                    return int(obj)
-                elif isinstance(obj, (np.floating, np.float64)):
-                    return float(obj)
-                elif isinstance(obj, np.ndarray):
-                    return obj.tolist()
-                elif isinstance(obj, dict):
-                    return {k: convert_numpy_types(v) for k, v in obj.items()}
-                elif isinstance(obj, list):
-                    return [convert_numpy_types(i) for i in obj]
-                return obj
-            results_serializable = convert_numpy_types(results)
-            print(json.dumps(results_serializable, indent=4))
+        # Build parameters for power calculation
+        core_params = f"""n_clusters={n_clusters},
+    cluster_size={cluster_size},
+    icc={icc},
+    mean1={mean1},
+    mean2={mean2},
+    std_dev={std_dev},
+    alpha={alpha}"""
+        
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+            
+            sim_params += f"""
+    analysis_model="{backend_method}","""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+            if bayes_params:
+                all_params += "\n    " + bayes_params.strip()
         else:
-            sys.stderr.write("Error: Could not calculate results.\n")
-            sys.exit(1)
+            all_params = core_params
+            
+        result_display = 'result["power"]'
+        
+    elif calc_type == "Sample Size":
+        function_name = f"sample_size_continuous{'_sim' if method == 'simulation' else ''}"
+        
+        core_params = f"""mean1={mean1},
+    mean2={mean2},
+    std_dev={std_dev},
+    icc={icc},
+    cluster_size={cluster_size},
+    power={power},
+    alpha={alpha}"""
+        
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+                
+            sim_params += f"""
+    analysis_model="{backend_method}","""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+            if bayes_params:
+                all_params += "\n    " + bayes_params.strip()
+        else:
+            all_params = core_params
+            
+        result_display = 'result["n_clusters"]'
+        
+    elif calc_type == "Minimum Detectable Effect":
+        function_name = f"min_detectable_effect_continuous{'_sim' if method == 'simulation' else ''}"
+        
+        core_params = f"""n_clusters={n_clusters},
+    cluster_size={cluster_size},
+    icc={icc},
+    std_dev={std_dev},
+    power={power},
+    alpha={alpha}"""
+        
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+                
+            sim_params += f"""
+    analysis_model="{backend_method}","""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+            if bayes_params:
+                all_params += "\n    " + bayes_params.strip()
+        else:
+            all_params = core_params
+            
+        result_display = 'result["mde"]'
+    
+    # Generate clean, simple code with usage instructions
+    code = f"""# Cluster RCT Continuous Outcome - {calc_type} Analysis
+# Generated by DesignPower
+#
+# HOW TO USE THIS SCRIPT:
+# 1. Save this code to a file with .py extension (e.g., 'my_analysis.py')
+# 2. SETUP REQUIREMENTS:
+#    - Install Python (3.8 or later)
+#    - Download/clone the DesignPower codebase from GitHub
+#    - Install required packages: pip install -r requirements.txt
+# 3. RUN THE SCRIPT:
+#    - Option A: Run from DesignPower project directory: python my_analysis.py
+#    - Option B: Add DesignPower to Python path, then run from anywhere
+#    - Option C: Run in Jupyter/IDE with DesignPower project as working directory
+#
+# The script will print the main result and full details in JSON format
 
-    if __name__ == "__main__":
-        # Need to import numpy for the convert_numpy_types function if it's used with results containing numpy types
-        import numpy as np 
-        main()
-    """)
-    return script_template
+{import_line} {function_name}
 
+# Calculate {calc_type.lower()}
+result = {function_name}(
+    {all_params}
+)
 
+print(f"{calc_type}: {{result['{result_display.split('\"')[1]}']:.3f}}")
+print(f"Design effect: {{result['design_effect']:.2f}}")
+
+# Full results
+import json
+print(json.dumps(result, indent=2))"""
+
+    return code
 
 
 def generate_cli_code_cluster_binary(params):
-    calc_type = params.get('calc_type_bin', 'Power')
-    method = params.get('method_bin', 'analytical') # 'analytical' or 'simulation'
-
-    # Default analysis method for simulation
-    default_analysis_method_sim_ui = params.get('analysis_method_bin_sim', "Design Effect Adjusted Z-test")
-    # analysis_method_map_binary_sim is defined at module level
-    default_analysis_method_sim_backend = analysis_method_map_binary_sim.get(default_analysis_method_sim_ui, "deff_ztest")
-
-    # For MDE, effect_measure_bin determines the output type.
-    default_mde_result_type = params.get('effect_measure_bin', 'risk_difference') # For MDE output type
+    """
+    Generate clean, simple reproducible code for cluster RCT binary outcome calculations.
     
-    # Determine default effect measure and value for p2 derivation if p2 is not provided
-    p2_bin_val = params.get("p2_bin")
-    effect_measure_bin_val = params.get('effect_measure_bin')
-    effect_value_bin_val = params.get('effect_value_bin')
-
-    default_effect_measure_input_val_str = f"'{effect_measure_bin_val}'" if p2_bin_val is None and effect_measure_bin_val is not None else 'None'
-    default_effect_value_input_val_str = str(effect_value_bin_val) if p2_bin_val is None and effect_value_bin_val is not None else 'None'
+    This matches the style in EXAMPLES.md for consistency and simplicity.
+    """
+    # Extract key parameters from UI
+    calc_type = params.get('calc_type', 'Power')
+    method = params.get('method', 'analytical')
     
-    p1_default_val = params.get('p1_bin', 0.1)
-    p2_default_val_str = 'None' if p2_bin_val is None else str(p2_bin_val)
+    # Core parameters 
+    n_clusters = params.get('n_clusters', 10)
+    cluster_size = params.get('cluster_size', 20)
+    icc = params.get('icc', 0.05)
+    p1 = params.get('p1', 0.3)
+    p2 = params.get('p2', 0.5)
+    alpha = params.get('alpha', 0.05)
+    power = params.get('power', 0.8)
     
-    icc_default_val = params.get('icc_bin', 0.01)
-    cluster_size_default_val = params.get('cluster_size_bin', 50)
-    n_clusters_default_val = params.get('n_clusters_bin', 10) # For Power/MDE
-    power_default_val = params.get('power_bin', 0.8) # For SS/MDE
-    alpha_default_val = params.get('alpha_bin', 0.05)
-    cv_cluster_size_default_val = params.get('cv_cluster_size_bin', 0.0)
+    # Simulation-specific parameters
+    nsim = params.get('nsim', 1000)
+    seed = params.get('seed')
     
-    # Simulation specific
-    nsim_default_val = params.get('nsim_bin', 1000)
-    seed_default_val_str = 'None' if params.get('seed_bin') is None else str(params.get('seed_bin'))
+    # Analysis method and Bayesian parameters
+    analysis_method = params.get('analysis_method', 'deff_ztest')
+    analysis_method_ui = params.get('analysis_method_ui', '')
     
-    # SS Sim specific
-    min_n_clusters_ss_default_val = params.get('min_n_clusters_bin_ss', 2)
-    max_n_clusters_ss_default_val = params.get('max_n_clusters_bin_ss', 100)
-    
-    # MDE Sim specific
-    min_effect_mde_default_val = params.get('min_effect_bin_mde', 0.01)
-    max_effect_mde_default_val = params.get('max_effect_bin_mde', 0.5)
-    precision_mde_default_val = params.get('precision_bin_mde', 0.01)
-    max_iterations_mde_default_val = params.get('max_iterations_bin_mde', 10)
-
-    cluster_sizes_list_default_val_str = params.get('cluster_sizes_list_bin_str', '')
-    if not cluster_sizes_list_default_val_str: # Ensure it's 'None' for argparse if empty
-        cluster_sizes_list_default_val_str = 'None'
+    # Map UI analysis method to backend
+    if analysis_method == 'bayes':
+        # Extract Bayesian-specific parameters
+        bayes_backend = params.get('bayes_backend', 'stan')
+        bayes_draws = params.get('bayes_draws', 500)
+        bayes_warmup = params.get('bayes_warmup', 500)
+        bayes_inference_method = params.get('bayes_inference_method', 'credible_interval')
+        
+        backend_method = 'bayes'
+        bayes_params = f"""    bayes_backend="{bayes_backend}",
+    bayes_draws={bayes_draws},
+    bayes_warmup={bayes_warmup},
+    bayes_inference_method="{bayes_inference_method}","""
     else:
-        cluster_sizes_list_default_val_str = f"'{cluster_sizes_list_default_val_str}'"
-
-    script_template = textwrap.dedent(f"""
-    import argparse
-    import json
-    import textwrap
-    import sys
-    import os
-    import numpy as np
-    import math # Added math for potential use in core functions if not already there
-
-    # --- Path Setup --- Start
-    # This setup allows the script to be run from different locations within the project.
-    try:
-        current_script_path = os.path.abspath(__file__)
-        # Assuming script is in 'scripts' or similar, and 'core' is at 'project_root/core'
-        # Adjust os.pardir count based on actual script location relative to project root.
-        # If script is at project_root/scripts/my_script.py, then project_root is two levels up.
-        project_root = os.path.abspath(os.path.join(os.path.dirname(current_script_path), os.pardir, os.pardir))
-        if project_root not in sys.path:
-            sys.path.insert(0, project_root)
+        backend_method = analysis_method
+        bayes_params = ""
+    
+    # Build import statement
+    if method == "analytical":
+        import_line = "from core.designs.cluster_rct.analytical_binary import"
+        module_prefix = ""
+    else:
+        import_line = "from core.designs.cluster_rct.simulation_binary import"
+        module_prefix = ""
+    
+    # Build function call based on calculation type
+    if calc_type == "Power":
+        function_name = f"power_binary{'_sim' if method == 'simulation' else ''}"
         
-        # Attempt to import after path adjustment
-        from core.designs.cluster_rct import analytical_binary as analytical_binary_module
-        from core.designs.cluster_rct import simulation_binary as simulation_binary_module
-        from core.designs.cluster_rct.cluster_utils import convert_effect_measures
-    except ImportError as e_import:
-        # Fallback: Try assuming script is directly in project_root (e.g. for testing)
-        try:
-            project_root_alt = os.path.abspath(os.path.join(os.path.dirname(current_script_path), os.pardir))
-            if project_root_alt not in sys.path:
-                sys.path.insert(0, project_root_alt)
-            from core.designs.cluster_rct import analytical_binary as analytical_binary_module
-            from core.designs.cluster_rct import simulation_binary as simulation_binary_module
-            from core.designs.cluster_rct.cluster_utils import convert_effect_measures
-        except ImportError:
-            print(f"ImportError: {{e_import}}\nFailed to import DesignPower core modules. \n"
-                  f"Attempted project_root: {{project_root}}\nAttempted alt_project_root: {{project_root_alt}}\n"
-                  f"Current sys.path: {{sys.path}}\n"
-                  f"Please ensure the script is placed correctly (e.g., in a 'scripts' folder at the project root) \n"
-                  f"or that the DesignPower package is installed and accessible in your PYTHONPATH.")
-            sys.exit(1)
-    # --- Path Setup --- End
-
-    def parse_cluster_sizes(cs_str):
-        if cs_str is None or cs_str.lower() == 'none' or cs_str == '':
-            return None
-        try:
-            return [int(s.strip()) for s in cs_str.split(',') if s.strip()]
-        except ValueError:
-            raise argparse.ArgumentTypeError("Cluster sizes must be a comma-separated list of integers.")
-
-    class NumpyEncoder(json.JSONEncoder):
-        def default(self, obj):
-            if isinstance(obj, np.integer):
-                return int(obj)
-            elif isinstance(obj, np.floating):
-                return float(obj)
-            elif isinstance(obj, np.ndarray):
-                return obj.tolist()
-            elif isinstance(obj, (np.bool_, bool)):
-                return bool(obj)
-            return super(NumpyEncoder, self).default(obj)
-
-    def main():
-        parser = argparse.ArgumentParser(
-            description="Reproducible CLI for Cluster RCT Binary Outcome - DesignPower",
-            formatter_class=argparse.RawTextHelpFormatter
-        )
+        # Build parameters for power calculation
+        core_params = f"""n_clusters={n_clusters},
+    cluster_size={cluster_size},
+    icc={icc},
+    p1={p1},
+    p2={p2},
+    alpha={alpha}"""
         
-        parser.add_argument('--calculation_type', type=str, required=True, 
-                            choices=['Sample Size', 'Power', 'Minimum Detectable Effect'], 
-                            default='{calc_type}', help="Type of calculation.")
-        parser.add_argument('--method', type=str, required=True, 
-                            choices=['analytical', 'simulation'], 
-                            default='{method}', help="Calculation method.")
-
-        parser.add_argument('--p1', type=float, required=True, default={p1_default_val}, help="Proportion in control group.")
-        parser.add_argument('--p2', type=float, default={p2_default_val_str},
-                            help="Proportion in intervention group. If None, use --effect_measure_input & --effect_value_input.")
-        parser.add_argument('--effect_measure_input', type=str, 
-                            choices=['risk_difference', 'risk_ratio', 'odds_ratio', 'None'],
-                            default={default_effect_measure_input_val_str},
-                            help="Effect measure to define p2 if p2 is None (e.g., 'risk_difference'). Use 'None' if p2 is provided.")
-        parser.add_argument('--effect_value_input', type=float, default={default_effect_value_input_val_str},
-                            help="Value for --effect_measure_input, if p2 is None.")
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+            
+            sim_params += f"""
+    analysis_method="{backend_method}","""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+            if bayes_params:
+                all_params += "\n    " + bayes_params.strip()
+        else:
+            all_params = core_params
+            
+        result_display = 'result["power"]'
         
-        parser.add_argument('--icc', type=float, required=True, default={icc_default_val}, help="Intracluster Correlation Coefficient (ICC).")
-        parser.add_argument('--cluster_size', type=float, default={cluster_size_default_val}, help="Average individuals per cluster (used if --cluster_sizes_list is not provided or for some sim functions).")
-        parser.add_argument('--n_clusters', type=int, default={n_clusters_default_val if calc_type != 'Sample Size' else 'None'},
-                            help="Number of clusters PER ARM (for Power/MDE). Required if not Sample Size calc.")
+    elif calc_type == "Sample Size":
+        function_name = f"sample_size_binary{'_sim' if method == 'simulation' else ''}"
         
-        parser.add_argument('--power', type=float, default={power_default_val if calc_type != 'Power' else 'None'},
-                            help="Desired power (1 - beta) (for Sample Size/MDE). Required if not Power calc.")
-        parser.add_argument('--alpha', type=float, default={alpha_default_val}, help="Significance level (alpha).")
-        parser.add_argument('--cv_cluster_size', type=float, default={cv_cluster_size_default_val},
-                            help="Coefficient of variation of cluster sizes (used if --cluster_sizes_list is not provided).")
-        parser.add_argument('--cluster_sizes_list', type=str, default={cluster_sizes_list_default_val_str},
-                            help="Comma-separated list of cluster sizes (e.g., '20,25,30'). If provided, this is passed to simulation functions. For analytical functions, it's used to derive mean cluster_size and cv_cluster_size.")
-
-        # Simulation specific arguments
-        parser.add_argument('--nsim', type=int, default={nsim_default_val}, help="Number of simulations (for simulation method).")
-        parser.add_argument('--seed', type=int, default={seed_default_val_str}, help="Random seed for simulations (for simulation method).")
-        parser.add_argument('--analysis_method_sim', type=str, 
-                            choices=['deff_ztest', 'aggregate_ttest', 'glmm', 'gee'], 
-                            default='{default_analysis_method_sim_backend}',
-                            help="Analysis method for simulations (deff_ztest, aggregate_ttest, glmm, gee). Only for simulation method.")
+        core_params = f"""p1={p1},
+    p2={p2},
+    icc={icc},
+    cluster_size={cluster_size},
+    power={power},
+    alpha={alpha}"""
         
-        # Sample Size Simulation specific
-        parser.add_argument('--min_n_clusters_ss', type=int, default={min_n_clusters_ss_default_val}, help="Min clusters for Sample Size simulation search.")
-        parser.add_argument('--max_n_clusters_ss', type=int, default={max_n_clusters_ss_default_val}, help="Max clusters for Sample Size simulation search.")
-
-        # MDE specific (analytical and simulation)
-        parser.add_argument('--mde_result_type', type=str, 
-                            choices=['risk_difference', 'risk_ratio', 'odds_ratio'], 
-                            default='{default_mde_result_type}', help="Output type for Minimum Detectable Effect (e.g. 'risk_difference').")
-        # MDE Simulation specific
-        parser.add_argument('--min_effect_mde', type=float, default={min_effect_mde_default_val}, help="Min effect for MDE simulation search.")
-        parser.add_argument('--max_effect_mde', type=float, default={max_effect_mde_default_val}, help="Max effect for MDE simulation search.")
-        parser.add_argument('--precision_mde', type=float, default={precision_mde_default_val}, help="Precision for MDE simulation search.")
-        parser.add_argument('--max_iterations_mde', type=int, default={max_iterations_mde_default_val}, help="Max iterations for MDE simulation search.")
-
-        args = parser.parse_args()
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+                
+            sim_params += f"""
+    analysis_method="{backend_method}","""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+            if bayes_params:
+                all_params += "\n    " + bayes_params.strip()
+        else:
+            all_params = core_params
+            
+        result_display = 'result["n_clusters"]'
         
-        # Process p2 based on inputs
-        p2_to_use = args.p2
-        if args.p2 is None:
-            if args.effect_measure_input and args.effect_measure_input != 'None' and args.effect_value_input is not None:
-                try:
-                    effect_details = convert_effect_measures(p1=args.p1, measure_type=args.effect_measure_input, measure_value=args.effect_value_input)
-                    p2_to_use = effect_details.get('p2')
-                    if p2_to_use is None:
-                         print(f"Error: Could not derive p2 from {{args.effect_measure_input}}='{{args.effect_value_input}}'.")
-                         sys.exit(1)
-                except Exception as e_convert:
-                    print(f"Error deriving p2: {{e_convert}}")
-                    sys.exit(1)
-            elif args.calculation_type != 'Minimum Detectable Effect': # MDE calculates p2 internally
-                print("Error: p2 is required, or --effect_measure_input and --effect_value_input must be provided to derive p2.")
-                sys.exit(1)
-
-        # Process cluster_sizes_list for analytical vs simulation
-        parsed_cluster_sizes = parse_cluster_sizes(args.cluster_sizes_list)
+    elif calc_type == "Minimum Detectable Effect":
+        function_name = f"min_detectable_effect_binary{'_sim' if method == 'simulation' else ''}"
         
-        # For analytical, derive cluster_size and cv_cluster_size from list if provided
-        analytical_cluster_size = args.cluster_size
-        analytical_cv_cluster_size = args.cv_cluster_size
-        if parsed_cluster_sizes and len(parsed_cluster_sizes) > 0:
-            analytical_cluster_size = np.mean(parsed_cluster_sizes)
-            if np.mean(parsed_cluster_sizes) > 0:
-                analytical_cv_cluster_size = np.std(parsed_cluster_sizes) / np.mean(parsed_cluster_sizes)
-            else:
-                analytical_cv_cluster_size = 0.0
-
-        results = {{}}
-        if args.method == 'analytical':
-            common_analytical_params = dict(icc=args.icc, alpha=args.alpha, 
-                                            cluster_size=analytical_cluster_size, 
-                                            cv_cluster_size=analytical_cv_cluster_size,
-                                            cluster_sizes=None) # Analytical functions use derived cv, not the list directly
-
-            if args.calculation_type == 'Sample Size':
-                if p2_to_use is None or args.power is None: sys.exit("Error: p2 (or its components) and power are required for analytical sample size.")
-                results = analytical_binary_module.sample_size_binary(p1=args.p1, p2=p2_to_use, power=args.power, 
-                                                                    **common_analytical_params)
-            elif args.calculation_type == 'Power':
-                if args.n_clusters is None or p2_to_use is None: sys.exit("Error: n_clusters and p2 (or its components) are required for analytical power.")
-                results = analytical_binary_module.power_binary(n_clusters=args.n_clusters, p1=args.p1, p2=p2_to_use,
-                                                              **common_analytical_params)
-            elif args.calculation_type == 'Minimum Detectable Effect':
-                if args.n_clusters is None or args.power is None: sys.exit("Error: n_clusters and power are required for analytical MDE.")
-                results = analytical_binary_module.min_detectable_effect_binary(n_clusters=args.n_clusters, p1=args.p1, power=args.power, 
-                                                                              effect_measure=args.mde_result_type, 
-                                                                              **common_analytical_params)
-        elif args.method == 'simulation':
-            # For simulation, cluster_size is average if list not given, list is passed directly if given
-            sim_cluster_size_param = args.cluster_size if parsed_cluster_sizes is None else None 
-            sim_cv_param = args.cv_cluster_size if parsed_cluster_sizes is None else 0.0 # CV is derived if list is given
-
-            common_sim_params = dict(icc=args.icc, alpha=args.alpha, nsim=args.nsim, seed=args.seed, 
-                                     cluster_size=sim_cluster_size_param, # Average cluster size
-                                     cv_cluster_size=sim_cv_param, # CV of cluster sizes
-                                     cluster_sizes=parsed_cluster_sizes, # Actual list of sizes
-                                     analysis_method=args.analysis_method_sim)
-
-            if args.calculation_type == 'Sample Size':
-                if p2_to_use is None or args.power is None: sys.exit("Error: p2 (or its components) and power are required for simulation sample size.")
-                results = simulation_binary_module.sample_size_binary_sim(p1=args.p1, p2=p2_to_use, power=args.power, 
-                                                                        min_n=args.min_n_clusters_ss, max_n=args.max_n_clusters_ss,
-                                                                        **common_sim_params)
-            elif args.calculation_type == 'Power':
-                if args.n_clusters is None or p2_to_use is None: sys.exit("Error: n_clusters and p2 (or its components) are required for simulation power.")
-                results = simulation_binary_module.power_binary_sim(n_clusters=args.n_clusters, p1=args.p1, p2=p2_to_use, 
-                                                                  **common_sim_params)
-            elif args.calculation_type == 'Minimum Detectable Effect':
-                if args.n_clusters is None or args.power is None: sys.exit("Error: n_clusters and power are required for simulation MDE.")
-                results = simulation_binary_module.min_detectable_effect_binary_sim(n_clusters=args.n_clusters, p1=args.p1, power=args.power, 
-                                                                                  min_effect=args.min_effect_mde, max_effect=args.max_effect_mde,
-                                                                                  precision=args.precision_mde, max_iterations=args.max_iterations_mde,
-                                                                                  effect_measure=args.mde_result_type, 
-                                                                                  **common_sim_params)
+        core_params = f"""n_clusters={n_clusters},
+    cluster_size={cluster_size},
+    icc={icc},
+    p1={p1},
+    power={power},
+    alpha={alpha}"""
         
-        print(json.dumps(results, indent=4, cls=NumpyEncoder))
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+                
+            sim_params += f"""
+    analysis_method="{backend_method}","""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+            if bayes_params:
+                all_params += "\n    " + bayes_params.strip()
+        else:
+            all_params = core_params
+            
+        result_display = 'result["mde"]'
+    
+    # Generate clean, simple code with usage instructions
+    code = f"""# Cluster RCT Binary Outcome - {calc_type} Analysis
+# Generated by DesignPower
+#
+# HOW TO USE THIS SCRIPT:
+# 1. Save this code to a file with .py extension (e.g., 'my_analysis.py')
+# 2. SETUP REQUIREMENTS:
+#    - Install Python (3.8 or later)
+#    - Download/clone the DesignPower codebase from GitHub
+#    - Install required packages: pip install -r requirements.txt
+# 3. RUN THE SCRIPT:
+#    - Option A: Run from DesignPower project directory: python my_analysis.py
+#    - Option B: Add DesignPower to Python path, then run from anywhere
+#    - Option C: Run in Jupyter/IDE with DesignPower project as working directory
+#
+# The script will print the main result and full details in JSON format
 
-    if __name__ == "__main__":
-        main()
-    """)
-    return script_template
+{import_line} {function_name}
+
+# Calculate {calc_type.lower()}
+result = {function_name}(
+    {all_params}
+)
+
+print(f"{calc_type}: {{result['{result_display.split('"')[1]}']:.3f}}")
+print(f"Design effect: {{result['design_effect']:.2f}}")
+
+# Full results
+import json
+print(json.dumps(result, indent=2))"""
+
+    return code
 
 
 # Shared functions
