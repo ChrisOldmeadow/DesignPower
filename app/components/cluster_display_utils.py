@@ -159,3 +159,116 @@ def display_icc_conversion_info(results):
     """)
 
 
+def display_cluster_continuous_results(results, params, calc_type, hypothesis_type):
+    """
+    Display results for Cluster RCT with continuous outcome.
+    
+    Args:
+        results: Dictionary containing calculation results
+        params: Dictionary containing input parameters
+        calc_type: String indicating calculation type (Sample Size, Power, or Minimum Detectable Effect)
+        hypothesis_type: String indicating hypothesis type (Superiority or Non-Inferiority)
+    """
+    if "error" in results:
+        st.error(f"Error in calculation: {results['error']}")
+        return
+    
+    # Display main results based on calculation type
+    if calc_type == "Sample Size":
+        st.markdown("### Sample Size Results")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            n_clusters = results.get("n_clusters", "N/A")
+            st.metric("Clusters per Arm", n_clusters)
+        
+        with col2:
+            cluster_size = results.get("cluster_size", params.get("cluster_size", "N/A"))
+            st.metric("Cluster Size", cluster_size)
+        
+        with col3:
+            total_n = results.get("total_n", "N/A")
+            if total_n == "N/A" and n_clusters != "N/A" and cluster_size != "N/A":
+                total_n = n_clusters * cluster_size * 2  # 2 arms
+            st.metric("Total Sample Size", total_n)
+            
+    elif calc_type == "Power":
+        st.markdown("### Power Results")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            power = results.get("power", "N/A")
+            if isinstance(power, float):
+                st.metric("Power", f"{power:.3f}")
+            else:
+                st.metric("Power", power)
+        
+        with col2:
+            alpha = results.get("alpha", params.get("alpha", "N/A"))
+            st.metric("Significance Level (α)", alpha)
+            
+    elif calc_type == "Minimum Detectable Effect":
+        st.markdown("### Minimum Detectable Effect Results")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            mde = results.get("mde", results.get("min_detectable_effect", "N/A"))
+            if isinstance(mde, float):
+                st.metric("Minimum Detectable Effect", f"{mde:.3f}")
+            else:
+                st.metric("Minimum Detectable Effect", mde)
+        
+        with col2:
+            effect_size = results.get("effect_size", "N/A")
+            if isinstance(effect_size, float):
+                st.metric("Effect Size", f"{effect_size:.3f}")
+            else:
+                st.metric("Effect Size", effect_size)
+    
+    # Display study parameters
+    st.markdown("### Study Parameters")
+    
+    param_cols = st.columns(4)
+    
+    with param_cols[0]:
+        mean1 = results.get("mean1", params.get("mean1", "N/A"))
+        st.metric("Mean Group 1", mean1)
+    
+    with param_cols[1]:
+        mean2 = results.get("mean2", params.get("mean2", "N/A"))
+        st.metric("Mean Group 2", mean2)
+    
+    with param_cols[2]:
+        std_dev = results.get("std_dev", params.get("std_dev", "N/A"))
+        st.metric("Standard Deviation", std_dev)
+    
+    with param_cols[3]:
+        icc = results.get("icc", params.get("icc", "N/A"))
+        if isinstance(icc, float):
+            st.metric("ICC", f"{icc:.3f}")
+        else:
+            st.metric("ICC", icc)
+    
+    # Display design effect if available
+    if "design_effect" in results:
+        st.markdown("### Design Effect")
+        design_effect = results["design_effect"]
+        st.info(f"""
+        **Design Effect: {design_effect:.2f}**
+        
+        The design effect accounts for clustering in the data. A design effect of {design_effect:.2f} 
+        means that {design_effect:.0f}x more participants are needed compared to an individually 
+        randomized trial to achieve the same statistical power.
+        """)
+    
+    # Display additional cluster-specific information
+    display_cluster_variation_info(results)
+    display_icc_conversion_info(results)
+    
+    # Display sensitivity analysis if available
+    display_sensitivity_analysis(results, calc_type)
+
+
