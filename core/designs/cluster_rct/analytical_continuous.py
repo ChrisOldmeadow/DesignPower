@@ -183,17 +183,73 @@ def sample_size_continuous(mean1, mean2, std_dev, icc, power=0.8, alpha=0.05, cl
             raise ValueError("Number of clusters per arm (k) must be an integer and at least 2.")
         calculated_n_clusters = n_clusters_fixed
         
+        # Method 2: Direct algebraic solution for fixed k
+        # From: k×m = n_eff × [1 + (m-1)×ICC]
+        # Solve: m = n_eff × (1 - ICC) / (k - n_eff × ICC)
         denominator = calculated_n_clusters - (n_eff * icc)
         
-        if denominator <= 1e-9: # Using a small epsilon to avoid issues with floating point precision near zero
-            calculated_cluster_size = float('inf')
+        if denominator <= 1e-9:
+            # When algebraic solution fails, try Method 1: Iterative approach
             warning_message = (
-                f"Cannot achieve target power with {calculated_n_clusters} clusters per arm and ICC={icc}. "
-                f"Required cluster size is excessively large or infinite. "
-                f"Consider increasing k, alpha, or decreasing power/ICC."
+                f"Direct algebraic solution failed for {calculated_n_clusters} clusters per arm and ICC={icc}. "
+                f"Attempting iterative solution..."
             )
-            final_deff = float('inf')
+            
+            # Method 1: Iterative calculation starting with reasonable initial guess
+            m_guess = max(10, n_eff / calculated_n_clusters)  # Initial guess
+            converged = False
+            max_iterations = 50
+            tolerance = 0.01
+            max_cluster_size = 10000  # Practical upper limit
+            
+            for iteration in range(max_iterations):
+                # Calculate design effect with current guess
+                deff_guess = 1 + (m_guess - 1) * icc
+                
+                # Calculate total N needed per arm
+                total_n_needed = n_eff * deff_guess
+                
+                # Update cluster size estimate
+                m_new = total_n_needed / calculated_n_clusters
+                
+                # Check for divergence or impractical cluster sizes
+                if m_new > max_cluster_size:
+                    converged = False
+                    break
+                
+                # Check convergence
+                if abs(m_new - m_guess) < tolerance:
+                    converged = True
+                    break
+                
+                # Check for oscillation (if change is very small, consider converged)
+                if iteration > 5 and abs(m_new - m_guess) / max(m_new, m_guess) < tolerance:
+                    converged = True
+                    break
+                    
+                m_guess = m_new
+            
+            if converged:
+                calculated_cluster_size = math.ceil(m_guess)
+                final_deff = 1 + (calculated_cluster_size - 1) * icc
+                warning_message = (
+                    f"Iterative solution converged after {iteration + 1} iterations. "
+                    f"Note: With only {calculated_n_clusters} clusters per arm and ICC={icc}, "
+                    f"large cluster sizes ({calculated_cluster_size}) are required."
+                )
+            else:
+                calculated_cluster_size = float('inf')
+                # Provide more specific guidance based on the fundamental limitation
+                max_feasible_icc = calculated_n_clusters / n_eff
+                warning_message = (
+                    f"Cannot achieve target power with {calculated_n_clusters} clusters per arm and ICC={icc}. "
+                    f"For {calculated_n_clusters} clusters, maximum feasible ICC ≈ {max_feasible_icc:.3f}. "
+                    f"Consider: (1) increasing clusters (k ≥ {math.ceil(n_eff * icc) + 2}), "
+                    f"(2) decreasing ICC (< {max_feasible_icc:.3f}), or (3) relaxing power requirements."
+                )
+                final_deff = float('inf')
         else:
+            # Method 2: Direct algebraic solution works
             cluster_size_float = (n_eff * (1 - icc)) / denominator
             calculated_cluster_size = math.ceil(cluster_size_float)
             if calculated_cluster_size < 2:
