@@ -635,20 +635,207 @@ def render_binary_advanced_options():
             )
 
         st.markdown("#### Analysis Model")
-        model_options_binary = {
+        # Check availability of Bayesian backends
+        try:
+            import cmdstanpy
+            stan_available = True
+        except ImportError:
+            stan_available = False
+            
+        try:
+            import pymc
+            pymc_available = True
+        except ImportError:
+            pymc_available = False
+        
+        model_options_binary = [
+            "Design Effect Adjusted Z-test",
+            "T-test on Aggregate Data", 
+            "GLMM (Individual-Level)",
+            "GEE (Individual-Level)"
+        ]
+        
+        # Add Bayesian options based on availability
+        if stan_available:
+            model_options_binary.append("Bayesian (Stan)")
+        else:
+            model_options_binary.append("Bayesian (Stan) - Not Available")
+            
+        if pymc_available:
+            model_options_binary.append("Bayesian (PyMC)")
+        else:
+            model_options_binary.append("Bayesian (PyMC) - Not Available")
+            
+        # Approximate Bayesian methods (lightweight, always available with scipy)
+        model_options_binary.append("Bayesian (Variational) - Fast")
+        model_options_binary.append("Bayesian (ABC) - Lightweight")
+        
+        # Smart suggestions based on environment
+        is_constrained = _detect_resource_constraints()
+        if is_constrained:
+            st.info(
+                "🌐 **Resource-Constrained Environment Detected**\\n\\n"
+                "For optimal performance in this environment, consider:\\n"
+                "• **Bayesian (ABC) - Lightweight** for basic Bayesian inference\\n"
+                "• **Bayesian (Variational) - Fast** for faster approximate inference\\n"
+                "• **Design Effect Adjusted Z-test** for fastest non-Bayesian analysis\\n\\n"
+                "Full MCMC methods (Stan/PyMC) may be slow or unavailable."
+            )
+        elif not stan_available and not pymc_available:
+            st.info(
+                "💡 **Bayesian Analysis Available**\\n\\n"
+                "Stan/PyMC not detected, but approximate Bayesian methods are available:\\n"
+                "• **Bayesian (Variational) - Fast** for quick approximate inference\\n"
+                "• **Bayesian (ABC) - Lightweight** for simulation-based inference"
+            )
+        
+        selected_model_display_binary = st.selectbox(
+            "Statistical Model Used to Analyse Each Simulated Trial",
+            options=model_options_binary,
+            index=0, # Default to Z-test
+            key="cluster_binary_model_select",
+            help="Select the statistical analysis model to be used in the simulation. \n- 'Design Effect Adjusted Z-test': Uses a z-test adjusted for clustering. \n- 'T-test on Aggregate Data': Performs a t-test on cluster-level summaries. \n- 'GLMM (Individual-Level)': Uses a Generalized Linear Mixed Model (requires individual data simulation). \n- 'GEE (Individual-Level)': Uses Generalized Estimating Equations (requires individual data simulation). \n- 'Bayesian' options: Hierarchical Bayesian models with multiple backends and inference methods."
+        )
+        
+        # Show installation message if Bayesian is selected but not available
+        if "Bayesian (Stan)" in selected_model_display_binary and not stan_available:
+            st.error(
+                "📦 **Stan backend requires additional installation**\\n\\n"
+                "To use Stan for Bayesian analysis, please install cmdstanpy:\\n"
+                "```bash\\n"
+                "pip install cmdstanpy\\n"
+                "```\\n"
+                "The calculation will fall back to Design Effect Z-test if you proceed."
+            )
+        elif "Bayesian (PyMC)" in selected_model_display_binary and not pymc_available:
+            st.error(
+                "📦 **PyMC backend requires additional installation**\\n\\n"
+                "To use PyMC for Bayesian analysis, please install pymc:\\n"
+                "```bash\\n"
+                "pip install pymc\\n"
+                "```\\n"
+                "The calculation will fall back to variational approximation if you proceed."
+            )
+        elif "Variational" in selected_model_display_binary:
+            st.info(
+                "⚡ **Fast Variational Bayes**\\n\\n"
+                "Uses Laplace approximation for fast approximate Bayesian inference on logit scale. "
+                "Results are approximate but much faster than full MCMC. "
+                "Good for initial exploration or resource-constrained environments."
+            )
+        elif "ABC" in selected_model_display_binary:
+            st.info(
+                "🎯 **Approximate Bayesian Computation**\\n\\n"
+                "Uses simulation-based approximate inference for binary outcomes. Very lightweight and "
+                "suitable for low-resource servers. Results are approximate but "
+                "provide valid uncertainty quantification."
+            )
+        
+        model_map_binary = {
             "Design Effect Adjusted Z-test": "deff_ztest",
             "T-test on Aggregate Data": "aggregate_ttest",
             "GLMM (Individual-Level)": "glmm",
-            "GEE (Individual-Level)": "gee"
+            "GEE (Individual-Level)": "gee",
+            "Bayesian (Stan)": "bayes",
+            "Bayesian (Stan) - Not Available": "bayes",  # Will fall back automatically
+            "Bayesian (PyMC)": "bayes",
+            "Bayesian (PyMC) - Not Available": "bayes",  # Will fall back automatically
+            "Bayesian (Variational) - Fast": "bayes",
+            "Bayesian (ABC) - Lightweight": "bayes",
         }
-        selected_model_display_binary = st.selectbox(
-            "Statistical Model Used to Analyse Each Simulated Trial",
-            options=list(model_options_binary.keys()),
-            index=0, # Default to Z-test
-            key="cluster_binary_model_select",
-            help="Select the statistical analysis model to be used in the simulation. \n- 'Design Effect Adjusted Z-test': Uses a z-test adjusted for clustering. \n- 'T-test on Aggregate Data': Performs a t-test on cluster-level summaries. \n- 'GLMM (Individual-Level)': Uses a Generalized Linear Mixed Model (requires individual data simulation). \n- 'GEE (Individual-Level)': Uses Generalized Estimating Equations (requires individual data simulation)."
-        )
-        advanced_params["analysis_method"] = model_options_binary[selected_model_display_binary]
+        advanced_params["analysis_method"] = model_map_binary[selected_model_display_binary]
+        advanced_params["analysis_method_ui"] = selected_model_display_binary  # Keep original UI selection for backend detection
+        
+        # Set Bayesian backend based on selection
+        if "Bayesian (PyMC)" in selected_model_display_binary:
+            advanced_params["bayes_backend"] = "pymc"
+        elif "Variational" in selected_model_display_binary:
+            advanced_params["bayes_backend"] = "variational"
+        elif "ABC" in selected_model_display_binary:
+            advanced_params["bayes_backend"] = "abc"
+        else:
+            advanced_params["bayes_backend"] = "stan"  # Default to Stan
+        
+        # Add Bayesian-specific options
+        if advanced_params["analysis_method"] == "bayes":
+            colb1, colb2 = st.columns(2)
+            with colb1:
+                advanced_params["bayes_draws"] = st.number_input(
+                    "Posterior draws",
+                    min_value=100,
+                    max_value=5000,
+                    value=500,
+                    step=100,
+                    key="cluster_binary_bayes_draws",
+                )
+            with colb2:
+                advanced_params["bayes_warmup"] = st.number_input(
+                    "Warm-up iterations",
+                    min_value=100,
+                    max_value=5000,
+                    value=500,
+                    step=100,
+                    key="cluster_binary_bayes_warmup",
+                )
+            
+            # Show backend information and resource implications
+            backend = advanced_params["bayes_backend"]
+            if backend == "pymc":
+                backend_name = "PyMC"
+                sampling_type = "MCMC (NUTS)"
+                resource_note = "Full MCMC - High accuracy, moderate resource use"
+            elif backend == "stan":
+                backend_name = "Stan"
+                sampling_type = "MCMC (NUTS)"
+                resource_note = "Full MCMC - High accuracy, moderate resource use"
+            elif backend == "variational":
+                backend_name = "Variational Bayes"
+                sampling_type = "Laplace Approximation"
+                resource_note = "⚡ Fast approximation - Low resource use, good for exploration"
+            elif backend == "abc":
+                backend_name = "ABC"
+                sampling_type = "Simulation-based"
+                resource_note = "🌐 Lightweight - Very low resource use, suitable for web deployment"
+            else:
+                backend_name = backend
+                sampling_type = "Unknown"
+                resource_note = ""
+            
+            st.info(f"🔧 **Bayesian Backend**: {backend_name} ({sampling_type})\\n\\n{resource_note}")
+            
+            # Show limitations for approximate methods
+            if backend in ["variational", "abc"]:
+                st.warning(
+                    "⚠️ **Approximate Method Limitations**:\\n"
+                    "• Results are approximate, not exact posterior samples\\n"
+                    "• May underestimate uncertainty in some cases\\n"
+                    "• Best used for initial exploration or resource-limited environments\\n"
+                    "• For final analyses, consider full MCMC when possible"
+                )
+            
+            # Bayesian inference method selection
+            st.markdown("**Bayesian Inference Method**")
+            inference_options = {
+                "Credible Interval": "credible_interval",
+                "Posterior Probability": "posterior_probability", 
+                "ROPE (Region of Practical Equivalence)": "rope"
+            }
+            selected_inference = st.selectbox(
+                "Method for determining statistical significance",
+                options=list(inference_options.keys()),
+                index=0,
+                key="cluster_binary_bayes_inference",
+                help=f"""Choose how to determine statistical significance (using {backend_name} backend):
+                • **Credible Interval**: 95% credible interval excludes zero (most standard)
+                • **Posterior Probability**: >97.5% probability effect is in favorable direction
+                • **ROPE**: <5% probability effect is in Region of Practical Equivalence around zero
+                
+                **Available Backends**:
+                • Stan/PyMC: Full MCMC with NUTS sampler (high accuracy)
+                • Variational: Fast Laplace approximation (good for exploration)
+                • ABC: Lightweight simulation-based inference (web-friendly)"""
+            )
+            advanced_params["bayes_inference_method"] = inference_options[selected_inference]
 
     # ICC Sensitivity Analysis section without using an expander
     st.markdown("#### ICC Sensitivity Analysis")
@@ -1570,7 +1757,7 @@ def calculate_cluster_binary(params):
             original_icc = icc
         
         # Map UI analysis_method to backend keyword for simulations
-        ui_analysis_method = params.get("analysis_method", "Design Effect Adjusted Z-test")
+        ui_analysis_method = params.get("analysis_method_ui", params.get("analysis_method", "Design Effect Adjusted Z-test"))
         if ui_analysis_method == "Design Effect Adjusted Z-test":
             backend_analysis_method = "deff_ztest"
         elif ui_analysis_method == "T-test on Aggregate Data":
@@ -1579,8 +1766,33 @@ def calculate_cluster_binary(params):
             backend_analysis_method = "glmm"
         elif ui_analysis_method == "GEE (Individual-Level)":
             backend_analysis_method = "gee"
+        elif ui_analysis_method in [
+            "Bayesian (Stan)",
+            "Bayesian (Stan) - Not Available",
+            "Bayesian (PyMC)",
+            "Bayesian (PyMC) - Not Available",
+            "Bayesian (Variational) - Fast",
+            "Bayesian (ABC) - Lightweight"
+        ]:
+            backend_analysis_method = "bayes"
         else:
             backend_analysis_method = "deff_ztest"  # Default fallback
+        
+        # Extract Bayesian parameters if using Bayesian analysis
+        bayes_backend = "stan"  # Default
+        bayes_draws = params.get("bayes_draws", 500)
+        bayes_warmup = params.get("bayes_warmup", 500)
+        bayes_inference_method = params.get("bayes_inference_method", "credible_interval")
+        
+        # Map UI Bayesian method to backend
+        if "Bayesian (PyMC)" in ui_analysis_method:
+            bayes_backend = "pymc"
+        elif "Variational" in ui_analysis_method:
+            bayes_backend = "variational"
+        elif "ABC" in ui_analysis_method:
+            bayes_backend = "abc"
+        elif "Bayesian (Stan)" in ui_analysis_method:
+            bayes_backend = "stan"
         
         # Call appropriate function based on calculation type and method
         if calc_type == "Sample Size":
@@ -1606,7 +1818,11 @@ def calculate_cluster_binary(params):
                     nsim=params.get("nsim", 1000),
                     seed=params.get("seed", 42),
                     cv_cluster_size=cv_cluster_size,
-                    analysis_method=backend_analysis_method
+                    analysis_method=backend_analysis_method,
+                    bayes_backend=bayes_backend,
+                    bayes_draws=bayes_draws,
+                    bayes_warmup=bayes_warmup,
+                    bayes_inference_method=bayes_inference_method
                 )
             
             # Run sensitivity analysis if requested
@@ -1633,7 +1849,11 @@ def calculate_cluster_binary(params):
                             nsim=params.get("nsim", 1000),
                             seed=params.get("seed", 42),
                             cv_cluster_size=cv_cluster_size,
-                            analysis_method=backend_analysis_method
+                            analysis_method=backend_analysis_method,
+                            bayes_backend=bayes_backend,
+                            bayes_draws=bayes_draws,
+                            bayes_warmup=bayes_warmup,
+                            bayes_inference_method=bayes_inference_method
                         )
                     sensitivity_results.append({
                         "icc": test_icc,
@@ -1664,7 +1884,11 @@ def calculate_cluster_binary(params):
                     nsim=params.get("nsim", 1000),
                     seed=params.get("seed", 42),
                     cv_cluster_size=cv_cluster_size,
-                    analysis_method=backend_analysis_method
+                    analysis_method=backend_analysis_method,
+                    bayes_backend=bayes_backend,
+                    bayes_draws=bayes_draws,
+                    bayes_warmup=bayes_warmup,
+                    bayes_inference_method=bayes_inference_method
                 )
             
             # Run sensitivity analysis if requested
@@ -1691,7 +1915,11 @@ def calculate_cluster_binary(params):
                             nsim=params.get("nsim", 1000),
                             seed=params.get("seed", 42),
                             cv_cluster_size=cv_cluster_size,
-                            analysis_method=backend_analysis_method
+                            analysis_method=backend_analysis_method,
+                            bayes_backend=bayes_backend,
+                            bayes_draws=bayes_draws,
+                            bayes_warmup=bayes_warmup,
+                            bayes_inference_method=bayes_inference_method
                         )
                     sensitivity_results.append({
                         "icc": test_icc,
@@ -1723,7 +1951,11 @@ def calculate_cluster_binary(params):
                     seed=params.get("seed", 42),
                     cv_cluster_size=cv_cluster_size,
                     effect_measure=effect_measure,
-                    analysis_method=backend_analysis_method
+                    analysis_method=backend_analysis_method,
+                    bayes_backend=bayes_backend,
+                    bayes_draws=bayes_draws,
+                    bayes_warmup=bayes_warmup,
+                    bayes_inference_method=bayes_inference_method
                 )
             
             # Run sensitivity analysis if requested
@@ -1752,7 +1984,11 @@ def calculate_cluster_binary(params):
                             seed=params.get("seed", 42),
                             cv_cluster_size=cv_cluster_size,
                             effect_measure=effect_measure,
-                            analysis_method=backend_analysis_method
+                            analysis_method=backend_analysis_method,
+                            bayes_backend=bayes_backend,
+                            bayes_draws=bayes_draws,
+                            bayes_warmup=bayes_warmup,
+                            bayes_inference_method=bayes_inference_method
                         )
                     sensitivity_results.append({
                         "icc": test_icc,
