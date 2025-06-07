@@ -1,0 +1,428 @@
+def generate_cli_code_parallel_binary(params):
+    """
+    Generate clean, simple reproducible code for parallel RCT binary outcome calculations.
+    
+    This matches the style in EXAMPLES.md for consistency and simplicity.
+    """
+    # Extract key parameters from UI
+    calc_type = params.get('calculation_type', 'Power')
+    hypothesis_type = params.get('hypothesis_type', 'Superiority')
+    method = params.get('method', 'analytical')
+    
+    # Core parameters 
+    n1 = params.get('n1', 100)
+    n2 = params.get('n2', 100)
+    p1 = params.get('p1', 0.3)
+    p2 = params.get('p2', 0.5)
+    alpha = params.get('alpha', 0.05)
+    power = params.get('power', 0.8)
+    allocation_ratio = params.get('allocation_ratio', 1.0)
+    
+    # Simulation-specific parameters
+    nsim = params.get('nsim', 1000)
+    seed = params.get('seed')
+    test_type = params.get('test_type', 'normal_approximation')
+    
+    # Non-inferiority specific
+    non_inferiority_margin = params.get('non_inferiority_margin', 0.05)
+    assumed_difference_ni = params.get('assumed_difference_ni', 0.0)
+    non_inferiority_direction = params.get('non_inferiority_direction', 'higher')
+    
+    # Build import statement and function name
+    import_line = "from core.designs.parallel import"
+    
+    # Build function call based on calculation type and hypothesis
+    if calc_type == "Power":
+        if hypothesis_type == "Superiority":
+            function_name = f"power_binary{'_sim' if method == 'simulation' else ''}"
+            core_params = f"""n1={n1},
+    n2={n2},
+    p1={p1},
+    p2={p2},
+    alpha={alpha}"""
+        else:  # Non-Inferiority
+            function_name = f"power_binary_non_inferiority{'_sim' if method == 'simulation' else ''}"
+            core_params = f"""n1={n1},
+    n2={n2},
+    p1={p1},
+    non_inferiority_margin={non_inferiority_margin},
+    alpha={alpha},
+    assumed_difference={assumed_difference_ni},
+    direction="{non_inferiority_direction}",
+    allocation_ratio={allocation_ratio}"""
+        
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+            sim_params += f"""
+    test_type="{test_type}","""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+        else:
+            all_params = core_params
+        
+        result_display = 'result["power"]'
+        
+    elif calc_type == "Sample Size":
+        if hypothesis_type == "Superiority":
+            function_name = f"sample_size_binary{'_sim' if method == 'simulation' else ''}"
+            core_params = f"""p1={p1},
+    p2={p2},
+    power={power},
+    alpha={alpha},
+    allocation_ratio={allocation_ratio}"""
+        else:  # Non-Inferiority
+            function_name = f"sample_size_binary_non_inferiority{'_sim' if method == 'simulation' else ''}"
+            core_params = f"""p1={p1},
+    non_inferiority_margin={non_inferiority_margin},
+    power={power},
+    alpha={alpha},
+    allocation_ratio={allocation_ratio},
+    assumed_difference={assumed_difference_ni},
+    direction="{non_inferiority_direction}" """
+        
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+            sim_params += f"""
+    test_type="{test_type}","""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+        else:
+            all_params = core_params
+            
+        result_display = 'result["total_sample_size"]'
+        
+    elif calc_type == "Minimum Detectable Effect":
+        if hypothesis_type == "Superiority":
+            function_name = f"min_detectable_effect_binary{'_sim' if method == 'simulation' else ''}"
+            core_params = f"""n1={n1},
+    n2={n2},
+    p1={p1},
+    power={power},
+    alpha={alpha}"""
+        else:  # Non-Inferiority
+            function_name = f"min_detectable_binary_non_inferiority_margin{'_sim' if method == 'simulation' else ''}"
+            core_params = f"""n1={n1},
+    n2={n2},
+    p1={p1},
+    power={power},
+    alpha={alpha},
+    assumed_difference={assumed_difference_ni},
+    direction="{non_inferiority_direction}" """
+        
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+            sim_params += f"""
+    test_type="{test_type}","""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+        else:
+            all_params = core_params
+            
+        if hypothesis_type == "Superiority":
+            result_display = 'result["minimum_detectable_p2"]'
+        else:
+            result_display = 'result["minimum_detectable_margin"]'
+    
+    # Generate clean, simple code
+    code = f"""# Parallel RCT Binary Outcome - {calc_type} Analysis ({hypothesis_type})
+# Generated by DesignPower
+
+{import_line} {function_name}
+
+# Calculate {calc_type.lower()}
+result = {function_name}(
+    {all_params}
+)
+
+print(f"{calc_type}: {{result['{result_display.split('\"')[1]}']:.3f}}")
+
+# Full results
+import json
+print(json.dumps(result, indent=2))"""
+
+    return code
+
+
+def generate_cli_code_parallel_continuous(params):
+    """
+    Generate clean, simple reproducible code for parallel RCT continuous outcome calculations.
+    
+    This matches the style in EXAMPLES.md for consistency and simplicity.
+    """
+    # Extract key parameters from UI
+    calc_type = params.get('calculation_type', 'Power')
+    hypothesis_type = params.get('hypothesis_type', 'Superiority')
+    method = params.get('method', 'analytical')
+    
+    # Core parameters 
+    n1 = params.get('n1', 100)
+    n2 = params.get('n2', 100)
+    mean1 = params.get('mean1', 10.0)
+    mean2 = params.get('mean2', 12.0)
+    std_dev = params.get('std_dev', 5.0)
+    alpha = params.get('alpha', 0.05)
+    power = params.get('power', 0.8)
+    allocation_ratio = params.get('allocation_ratio', 1.0)
+    
+    # Simulation-specific parameters
+    nsim = params.get('nsim', 1000)
+    seed = params.get('seed')
+    
+    # Non-inferiority specific
+    non_inferiority_margin = params.get('non_inferiority_margin', 1.0)
+    assumed_difference_ni = params.get('assumed_difference_ni', 0.0)
+    non_inferiority_direction = params.get('non_inferiority_direction', 'higher')
+    
+    # Build import statement
+    import_line = "from core.designs.parallel import"
+    
+    # Build function call based on calculation type and hypothesis
+    if calc_type == "Power":
+        if hypothesis_type == "Superiority":
+            function_name = f"power_continuous{'_sim' if method == 'simulation' else ''}"
+            core_params = f"""n1={n1},
+    n2={n2},
+    mean1={mean1},
+    mean2={mean2},
+    std_dev={std_dev},
+    alpha={alpha}"""
+        else:  # Non-Inferiority
+            function_name = f"power_continuous_non_inferiority{'_sim' if method == 'simulation' else ''}"
+            core_params = f"""n1={n1},
+    n2={n2},
+    mean1={mean1},
+    std_dev={std_dev},
+    non_inferiority_margin={non_inferiority_margin},
+    alpha={alpha},
+    assumed_difference={assumed_difference_ni},
+    direction="{non_inferiority_direction}",
+    allocation_ratio={allocation_ratio}"""
+        
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+        else:
+            all_params = core_params
+        
+        result_display = 'result["power"]'
+        
+    elif calc_type == "Sample Size":
+        if hypothesis_type == "Superiority":
+            function_name = f"sample_size_continuous{'_sim' if method == 'simulation' else ''}"
+            core_params = f"""mean1={mean1},
+    mean2={mean2},
+    std_dev={std_dev},
+    power={power},
+    alpha={alpha},
+    allocation_ratio={allocation_ratio}"""
+        else:  # Non-Inferiority
+            function_name = f"sample_size_continuous_non_inferiority{'_sim' if method == 'simulation' else ''}"
+            core_params = f"""mean1={mean1},
+    std_dev={std_dev},
+    non_inferiority_margin={non_inferiority_margin},
+    power={power},
+    alpha={alpha},
+    allocation_ratio={allocation_ratio},
+    assumed_difference={assumed_difference_ni},
+    direction="{non_inferiority_direction}" """
+        
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+        else:
+            all_params = core_params
+            
+        result_display = 'result["total_sample_size"]'
+        
+    elif calc_type == "Minimum Detectable Effect":
+        if hypothesis_type == "Superiority":
+            function_name = f"min_detectable_effect_continuous{'_sim' if method == 'simulation' else ''}"
+            core_params = f"""n1={n1},
+    n2={n2},
+    std_dev={std_dev},
+    power={power},
+    alpha={alpha}"""
+        else:  # Non-Inferiority
+            function_name = f"min_detectable_continuous_non_inferiority_margin{'_sim' if method == 'simulation' else ''}"
+            core_params = f"""n1={n1},
+    n2={n2},
+    mean1={mean1},
+    std_dev={std_dev},
+    power={power},
+    alpha={alpha},
+    assumed_difference={assumed_difference_ni},
+    direction="{non_inferiority_direction}" """
+        
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+        else:
+            all_params = core_params
+            
+        if hypothesis_type == "Superiority":
+            result_display = 'result["minimum_detectable_effect"]'
+        else:
+            result_display = 'result["minimum_detectable_margin"]'
+    
+    # Generate clean, simple code
+    code = f"""# Parallel RCT Continuous Outcome - {calc_type} Analysis ({hypothesis_type})
+# Generated by DesignPower
+
+{import_line} {function_name}
+
+# Calculate {calc_type.lower()}
+result = {function_name}(
+    {all_params}
+)
+
+print(f"{calc_type}: {{result['{result_display.split('\"')[1]}']:.3f}}")
+print(f"Effect size: {{result.get('effect_size', 'N/A'):.3f}}")
+
+# Full results
+import json
+print(json.dumps(result, indent=2))"""
+
+    return code
+
+
+def generate_cli_code_parallel_survival(params):
+    """
+    Generate clean, simple reproducible code for parallel RCT survival outcome calculations.
+    
+    This matches the style in EXAMPLES.md for consistency and simplicity.
+    """
+    # Extract key parameters from UI
+    calc_type = params.get('calculation_type', 'Power')
+    hypothesis_type = params.get('hypothesis_type', 'Superiority')
+    method = params.get('method', 'analytical')
+    
+    # Core parameters 
+    n1 = params.get('n1', 150)
+    n2 = params.get('n2', 150)
+    median1 = params.get('median1', 12.0)
+    median2 = params.get('median2', 18.0)
+    enrollment_period = params.get('enrollment_period', 12.0)
+    follow_up_period = params.get('follow_up_period', 12.0)
+    dropout_rate = params.get('dropout_rate', 0.1)
+    alpha = params.get('alpha', 0.05)
+    power = params.get('power', 0.8)
+    allocation_ratio = params.get('allocation_ratio', 1.0)
+    
+    # Simulation-specific parameters
+    nsim = params.get('nsim', 500)
+    seed = params.get('seed')
+    
+    # Build import statement
+    import_line = "from core.designs.parallel import"
+    
+    # Build function call based on calculation type
+    if calc_type == "Power":
+        function_name = f"power_survival{'_sim' if method == 'simulation' else ''}"
+        core_params = f"""n1={n1},
+    n2={n2},
+    median1={median1},
+    median2={median2},
+    enrollment_period={enrollment_period},
+    follow_up_period={follow_up_period},
+    dropout_rate={dropout_rate},
+    alpha={alpha}"""
+        
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+        else:
+            all_params = core_params
+        
+        result_display = 'result["power"]'
+        
+    elif calc_type == "Sample Size":
+        function_name = f"sample_size_survival{'_sim' if method == 'simulation' else ''}"
+        core_params = f"""median1={median1},
+    median2={median2},
+    enrollment_period={enrollment_period},
+    follow_up_period={follow_up_period},
+    dropout_rate={dropout_rate},
+    power={power},
+    alpha={alpha},
+    allocation_ratio={allocation_ratio}"""
+        
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+        else:
+            all_params = core_params
+            
+        result_display = 'result["total_sample_size"]'
+        
+    elif calc_type == "Minimum Detectable Effect":
+        function_name = f"min_detectable_effect_survival{'_sim' if method == 'simulation' else ''}"
+        core_params = f"""n1={n1},
+    n2={n2},
+    median1={median1},
+    enrollment_period={enrollment_period},
+    follow_up_period={follow_up_period},
+    dropout_rate={dropout_rate},
+    power={power},
+    alpha={alpha}"""
+        
+        if method == "simulation":
+            sim_params = f"""nsim={nsim},"""
+            if seed is not None:
+                sim_params += f"""
+    seed={seed},"""
+            
+            all_params = core_params + ",\n    " + sim_params.strip()
+        else:
+            all_params = core_params
+            
+        result_display = 'result["minimum_detectable_median"]'
+    
+    # Generate clean, simple code
+    code = f"""# Parallel RCT Survival Outcome - {calc_type} Analysis ({hypothesis_type})
+# Generated by DesignPower
+
+{import_line} {function_name}
+
+# Calculate {calc_type.lower()}
+result = {function_name}(
+    {all_params}
+)
+
+print(f"{calc_type}: {{result['{result_display.split('\"')[1]}']:.3f}}")
+print(f"Hazard ratio: {{result.get('hazard_ratio', 'N/A'):.3f}}")
+print(f"Expected events: {{result.get('total_events', 'N/A'):.0f}}")
+
+# Full results
+import json
+print(json.dumps(result, indent=2))"""
+
+    return code
