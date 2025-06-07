@@ -60,15 +60,15 @@ def run_quick_validation():
         {
             "name": "Fleiss Binary Sample Size",
             "function": "sample_size_binary",
-            "params": {"p1": 0.65, "p2": 0.85, "power": 0.8, "alpha": 0.05},
-            "expected": {"total_sample_size": 62},
-            "tolerance": 0.1
+            "params": {"p1": 0.20, "p2": 0.40, "power": 0.8, "alpha": 0.05, "correction": True},
+            "expected": {"total_sample_size": 186},
+            "tolerance": 0.05
         },
         {
             "name": "Cohen Continuous Medium Effect",
             "function": "sample_size_continuous", 
-            "params": {"mean1": 0.0, "mean2": 0.5, "std_dev": 1.0, "power": 0.8, "alpha": 0.05},
-            "expected": {"total_sample_size": 64},
+            "params": {"mean1": 0.0, "mean2": 0.5, "sd1": 1.0, "power": 0.8, "alpha": 0.05},
+            "expected": {"total_sample_size": 128},
             "tolerance": 0.1
         }
     ]

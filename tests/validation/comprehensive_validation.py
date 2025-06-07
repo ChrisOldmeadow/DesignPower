@@ -211,7 +211,7 @@ class ComprehensiveValidator:
                     "p2": 0.40,
                     "power": 0.8,
                     "alpha": 0.05,
-                    "continuity_correction": False
+                    "continuity_correction": True
                 },
                 expected_results={
                     "sample_size_per_group": 93,
@@ -220,7 +220,7 @@ class ComprehensiveValidator:
                 tolerance=0.10,  # Normal approximation varies
                 assumptions=[
                     "Normal approximation to binomial",
-                    "No continuity correction",
+                    "With continuity correction",
                     "Equal sample sizes",
                     "Two-sided test"
                 ],
@@ -596,15 +596,17 @@ class ComprehensiveValidator:
     
     def _validate_parallel_continuous(self, benchmark: ValidationBenchmark) -> Dict[str, Any]:
         """Validate parallel continuous outcome."""
-        from core.designs.parallel.analytical import sample_size_continuous
+        from core.designs.parallel.analytical_continuous import sample_size_continuous
         
         params = benchmark.parameters
         if "effect_size_d" in params:
-            # Cohen's d to actual parameters
+            # Cohen's d to actual parameters  
             d = params["effect_size_d"]
+            # Convert Cohen's d to mean difference with standardized variance
             result = sample_size_continuous(
-                delta=d,  # Using effect size directly
-                std_dev=1.0,  # Standardized
+                mean1=0.0,      # Standardized baseline
+                mean2=d,        # Effect size as mean difference
+                sd1=1.0,        # Standardized variance
                 power=params.get("power", 0.8),
                 alpha=params.get("alpha", 0.05)
             )
@@ -649,12 +651,17 @@ class ComprehensiveValidator:
             return self._validate_non_inferiority_binary(benchmark)
         else:
             # Standard superiority test
-            from core.designs.parallel import sample_size_binary
+            from core.designs.parallel.analytical_binary import sample_size_binary
+            
+            # Check if this is the Fleiss benchmark that needs continuity correction
+            is_fleiss = params.get("continuity_correction", False)
+            
             result = sample_size_binary(
                 p1=params["p1"],
                 p2=params["p2"],
                 power=params.get("power", 0.8),
-                alpha=params.get("alpha", 0.05)
+                alpha=params.get("alpha", 0.05),
+                correction=is_fleiss
             )
             return result
     
