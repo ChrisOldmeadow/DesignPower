@@ -450,6 +450,50 @@ def simulate_continuous_trial(
         if return_details:
             return t_stat, p_value, {"converged": True, "model": "ttest"}
         return t_stat, p_value
+        
+    elif analysis_model == "permutation":
+        # Exact permutation test - recommended for very small clusters (5-10 per arm)
+        from .permutation_tests import cluster_permutation_test
+        
+        # Aggregate to cluster means
+        cluster_means = df.groupby(['cluster', 'treatment'], observed=True)['y'].mean().reset_index()
+        control_means = cluster_means[cluster_means['treatment'] == 0]['y'].values
+        interv_means = cluster_means[cluster_means['treatment'] == 1]['y'].values
+        
+        # Prepare data for permutation test
+        perm_data = {
+            'control_clusters': control_means,
+            'treatment_clusters': interv_means
+        }
+        
+        # Determine number of permutations based on cluster size
+        total_clusters = len(control_means) + len(interv_means)
+        if total_clusters <= 12:
+            n_perms = 'exact'  # Use exact permutation for very small trials
+        elif total_clusters <= 20:
+            n_perms = 10000    # High precision for small trials
+        else:
+            n_perms = 5000     # Standard precision for larger trials
+        
+        perm_result = cluster_permutation_test(
+            data=perm_data,
+            test_statistic='t_statistic',  # Use t-statistic for compatibility
+            n_permutations=n_perms,
+            alternative='two-sided'
+        )
+        
+        t_stat = perm_result['observed_statistic']
+        p_value = perm_result['p_value']
+        
+        if return_details:
+            return t_stat, p_value, {
+                "converged": True, 
+                "model": "permutation",
+                "permutation_method": perm_result['method'],
+                "n_permutations": perm_result['n_permutations_used'],
+                "confidence_interval": perm_result['confidence_interval']
+            }
+        return t_stat, p_value
 
     if analysis_model == "mixedlm":
         fit_status = "fit_error_ttest_fallback" # Default status if all else fails

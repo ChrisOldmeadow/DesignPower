@@ -583,6 +583,80 @@ def _analyze_binary_agg_ttest(df):
         return {'p_value': 1.0, 'fit_status': f'error_agg_ttest_{type(e).__name__}'}
 
 
+def _analyze_binary_permutation(df):
+    """
+    Analyzes a single simulated binary trial using exact permutation test.
+    
+    This function performs cluster randomization inference (CRI) providing exact
+    p-values without distributional assumptions. Recommended for very small 
+    cluster trials (5-15 clusters per arm).
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with columns: 'outcome' (0/1), 'treatment' (0/1), 'cluster_id'.
+        
+    Returns
+    -------
+    dict
+        {'p_value': float, 'fit_status': str, 'permutation_details': dict}
+    """
+    try:
+        from .permutation_tests import cluster_permutation_test
+        
+        # Calculate cluster-level success rates
+        cluster_summary = df.groupby(['cluster_id', 'treatment'])['outcome'].agg(['mean', 'count']).reset_index()
+        cluster_summary.columns = ['cluster_id', 'treatment', 'success_rate', 'cluster_size']
+        
+        # Check for adequate cluster sizes and outcomes
+        if len(cluster_summary) < 6:
+            return {'p_value': 1.0, 'fit_status': 'data_error_too_few_clusters_for_permutation'}
+        
+        # Separate by treatment group
+        control_data = cluster_summary[cluster_summary['treatment'] == 0]
+        treatment_data = cluster_summary[cluster_summary['treatment'] == 1]
+        
+        if len(control_data) == 0 or len(treatment_data) == 0:
+            return {'p_value': 1.0, 'fit_status': 'data_error_missing_treatment_group'}
+        
+        # Prepare data for permutation test
+        perm_data = {
+            'control_clusters': control_data['success_rate'].values,
+            'treatment_clusters': treatment_data['success_rate'].values
+        }
+        
+        # Determine number of permutations based on total cluster size
+        total_clusters = len(control_data) + len(treatment_data)
+        if total_clusters <= 12:
+            n_perms = 'exact'  # Use exact permutation for very small trials
+        elif total_clusters <= 20:
+            n_perms = 10000    # High precision for small trials
+        else:
+            n_perms = 5000     # Standard precision for larger trials
+        
+        # Perform permutation test
+        perm_result = cluster_permutation_test(
+            data=perm_data,
+            test_statistic='mean_difference',  # Use mean difference for binary outcomes
+            n_permutations=n_perms,
+            alternative='two-sided'
+        )
+        
+        return {
+            'p_value': perm_result['p_value'],
+            'fit_status': 'success',
+            'permutation_details': {
+                'method': perm_result['method'],
+                'n_permutations': perm_result['n_permutations_used'],
+                'observed_effect': perm_result['observed_statistic'],
+                'confidence_interval': perm_result['confidence_interval']
+            }
+        }
+        
+    except Exception as e:
+        return {'p_value': 1.0, 'fit_status': f'error_permutation_{type(e).__name__}'}
+
+
 def _analyze_binary_glmm(df):
     """
     Analyzes a single simulated binary trial using a Generalized Linear Mixed Model (GLMM).
@@ -916,7 +990,7 @@ def power_binary_sim(n_clusters, cluster_size, icc, p1, p2=None, nsim=1000, alph
         Value of the effect measure. Used with effect_measure if p2 is None.
     analysis_method : str, optional
         The statistical method to use for analysis in each simulation.
-        Options: "deff_ztest", "aggregate_ttest", "glmm", "gee", "bayes". 
+        Options: "deff_ztest", "aggregate_ttest", "permutation", "glmm", "gee", "bayes". 
         Default is "deff_ztest".
     bayes_backend : str, optional
         Bayesian backend to use when analysis_method="bayes".
@@ -977,6 +1051,8 @@ def power_binary_sim(n_clusters, cluster_size, icc, p1, p2=None, nsim=1000, alph
             analysis_result = _analyze_binary_deff_ztest(df_trial, icc_for_deff)
         elif analysis_method == "aggregate_ttest":
             analysis_result = _analyze_binary_agg_ttest(df_trial)
+        elif analysis_method == "permutation":
+            analysis_result = _analyze_binary_permutation(df_trial)
         elif analysis_method == "glmm":
             analysis_result = _analyze_binary_glmm(df_trial)
         elif analysis_method == "gee":

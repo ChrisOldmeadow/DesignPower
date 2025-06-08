@@ -11,6 +11,9 @@ How many clusters per arm do you have?
 │  ├─ Primary: analysis_model="ttest"
 │  │   ✓ Gold standard for very small clusters
 │  │   ✓ Robust, simple, literature-backed
+│  ├─ Exact: analysis_model="permutation"
+│  │   ✓ Exact inference without distributional assumptions
+│  │   ✓ Recommended when ≤10 clusters per arm
 │  └─ Alternative: analysis_model="bayes", bayes_backend="stan"
 │     ✓ Use for convergence issues or informative priors
 │
@@ -44,6 +47,15 @@ analysis_model="ttest"
 # ✓ No additional parameters needed
 # ✓ Automatic fallback for convergence issues
 # ✓ Handles any ICC value robustly
+```
+
+### Exact Permutation Tests (Very Small: 5-10 clusters/arm)
+```python
+analysis_model="permutation"
+# ✓ Exact inference without distributional assumptions
+# ✓ Automatic exact vs Monte Carlo selection
+# ✓ Confidence intervals via permutation
+# ✓ Handles any outcome distribution
 ```
 
 ### Bias-Corrected GEE (Small: 9-15 clusters/arm)
@@ -137,6 +149,7 @@ bayes_backend="stan"
 | Method | Clusters/Arm | Pros | Cons | When to Use |
 |--------|--------------|------|------|-------------|
 | **ttest** | 5-8 | Gold standard, robust | Less efficient | Very small clusters |
+| **permutation** | 5-10 | Exact inference, no assumptions | Computationally intensive | Very small clusters, non-normal data |
 | **GEE + bias correction** | 9-15 | Efficient, robust correlation | Requires ≥9 clusters | Small clusters |
 | **Mixed models + Satterthwaite** | 16-30 | Standard approach, flexible | Distributional assumptions | Medium clusters |
 | **Standard mixed models** | 30+ | Maximum efficiency | Large-sample theory | Large clusters |

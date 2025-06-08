@@ -55,6 +55,29 @@ result = simulate_cluster_binary(params)
 - Warning acknowledges small cluster limitation
 - Method automatically robust to convergence issues
 
+### 🎯 Permutation Test Alternative (Exact Inference)
+```python
+# For exact inference without distributional assumptions
+params_permutation = params.copy()
+params_permutation.update({
+    'analysis_model': 'permutation',  # Exact permutation test
+})
+
+result_permutation = simulate_cluster_binary(params_permutation)
+```
+
+**Why use permutation tests?**
+1. **Exact inference**: No distributional assumptions required
+2. **Very small clusters**: Ideal for ≤10 clusters per arm
+3. **Non-normal outcomes**: Robust to any outcome distribution
+4. **Conservative**: Provides exact Type I error control
+
+**Expected Results:**
+- Exact p-values (not asymptotic approximations)
+- Confidence intervals via permutation
+- Robust to outliers and non-normality
+- Slightly more conservative than t-test
+
 ---
 
 ## Example 2: Small Cluster Trial (School-Based Intervention)
@@ -449,6 +472,11 @@ if 'fallback_method' in result:
 - **5-8 clusters/arm**: `analysis_model="ttest"`
 - **9-15 clusters/arm**: `analysis_model="gee"` + `use_bias_correction=True`
 - **16+ clusters/arm**: `analysis_model="mixedlm"` + `use_satterthwaite=True`
+
+**Exact Methods (Distribution-free scenarios):**
+- **5-10 clusters/arm**: `analysis_model="permutation"`
+- **Non-normal outcomes**: `analysis_model="permutation"`
+- **Conservative inference**: `analysis_model="permutation"`
 
 **Bayesian (Complex/challenging scenarios):**
 - **5-8 clusters/arm**: `analysis_model="bayes"` + `bayes_backend="stan"`
