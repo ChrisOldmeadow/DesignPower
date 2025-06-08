@@ -409,24 +409,30 @@ def _calculate_permutation_pvalue(
     permutation_stats: np.ndarray,
     alternative: str
 ) -> float:
-    """Calculate permutation p-value."""
+    """Calculate permutation p-value.
+    
+    Following best practices, we add 1 to both numerator and denominator
+    to include the observed statistic in the reference distribution.
+    This prevents p-values of exactly 0 and is more conservative.
+    """
     
     n_perms = len(permutation_stats)
     
     if alternative == 'two-sided':
         # Two-sided: count permutations as or more extreme than observed
         more_extreme = np.sum(np.abs(permutation_stats) >= np.abs(observed_stat))
-        p_value = more_extreme / n_perms
+        # Add 1 to numerator (for observed) and denominator (total including observed)
+        p_value = (more_extreme + 1) / (n_perms + 1)
         
     elif alternative == 'greater':
         # One-sided: treatment > control
         more_extreme = np.sum(permutation_stats >= observed_stat)
-        p_value = more_extreme / n_perms
+        p_value = (more_extreme + 1) / (n_perms + 1)
         
     elif alternative == 'less':
         # One-sided: treatment < control
         more_extreme = np.sum(permutation_stats <= observed_stat)
-        p_value = more_extreme / n_perms
+        p_value = (more_extreme + 1) / (n_perms + 1)
         
     else:
         raise ValueError(f"Unknown alternative: {alternative}")

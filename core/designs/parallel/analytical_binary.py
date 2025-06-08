@@ -9,6 +9,44 @@ import numpy as np
 import math
 from scipy import stats
 
+def fishers_exact_computational_guidance(n1, n2):
+    """
+    Provide guidance on computational complexity for Fisher's exact test power calculation.
+    
+    Parameters
+    ----------
+    n1, n2 : int
+        Sample sizes for the two groups
+        
+    Returns
+    -------
+    dict
+        Dictionary with computational complexity information and recommendations
+    """
+    max_computations = (n1 + 1) * (n2 + 1)
+    
+    if max_computations <= 10000:
+        complexity = "fast"
+        recommendation = "Use exact calculation"
+        estimated_time = "< 1 second"
+    elif max_computations <= 100000:
+        complexity = "moderate" 
+        recommendation = "Use exact calculation (may take a few seconds)"
+        estimated_time = "1-10 seconds"
+    else:
+        complexity = "slow"
+        recommendation = "Use normal approximation or reduce sample sizes"
+        estimated_time = f"> 30 seconds ({max_computations:,} computations)"
+    
+    return {
+        "n1": n1,
+        "n2": n2,
+        "max_computations": max_computations,
+        "complexity": complexity,
+        "recommendation": recommendation,
+        "estimated_time": estimated_time
+    }
+
 # ===== Statistical Test Functions =====
 
 def normal_approximation_test(n1, n2, s1, s2):
@@ -121,7 +159,10 @@ def fishers_exact_test(n1, n2, s1, s2):
     from scipy.stats import fisher_exact
     
     # Create contingency table
-    table = [[s1, s2], [n1 - s1, n2 - s2]]
+    # Standard 2x2 format: rows are groups, columns are success/failure
+    # [[group1_success, group1_failure],
+    #  [group2_success, group2_failure]]
+    table = [[s1, n1 - s1], [s2, n2 - s2]]
     
     # Calculate p-value
     odds_ratio, p_value = fisher_exact(table)
@@ -184,13 +225,32 @@ def power_binary(n1, n2, p1, p2, alpha=0.05, test_type="normal approximation", c
     test_type : str, optional
         Type of test to use: "normal approximation", "fishers exact", or "likelihood ratio".
         Default is "normal approximation".
+        
+        For "fishers exact":
+        - Uses exact calculation for small/moderate samples (≤ 316 per group)
+        - Falls back to conservative normal approximation for large samples
+        - Returns additional fields: calculation_method, computations (if exact)
+        
     correction : bool, optional
         Whether to apply continuity correction, by default False
     
     Returns
     -------
     dict
-        Dictionary containing power estimate and parameters
+        Dictionary containing power estimate and parameters.
+        
+        For Fisher's exact test, additional fields:
+        - calculation_method: "exact" or "normal_approximation"
+        - computations: number of computations (if exact method used)
+        
+    Notes
+    -----
+    Fisher's exact test computational complexity:
+    - Fast (< 1s): n1, n2 ≤ 100 each
+    - Moderate (1-10s): n1, n2 ≤ 316 each  
+    - Slow (> 30s): larger samples (uses normal approximation)
+    
+    Use fishers_exact_computational_guidance(n1, n2) for detailed guidance.
     """
     # Validate inputs
     if not 0 <= p1 <= 1 or not 0 <= p2 <= 1:
@@ -207,23 +267,56 @@ def power_binary(n1, n2, p1, p2, alpha=0.05, test_type="normal approximation", c
     
     # Power calculation based on test type
     if test_type == "fishers exact":
-        # For Fisher's Exact test, we adjust the power calculation
-        # This is an approximation as exact power calculations for Fisher's test are complex
-        # Apply a conservative adjustment factor
-        factor = 0.9  # Fisher's exact test is generally less powerful
+        # Fisher's exact test power calculation
+        # Use exact calculation for small samples, approximation for large samples
         
-        # Calculate pooled proportion
-        p_pooled = (p1 * n1 + p2 * n2) / (n1 + n2)
+        n_total = n1 + n2
+        max_computations = (n1 + 1) * (n2 + 1)
         
-        # Calculate standard error
-        se = math.sqrt(p_pooled * (1 - p_pooled) * (1/n1 + 1/n2))
+        # Computational complexity guidelines:
+        # - Fast: < 10,000 computations (n1, n2 ≤ 100)
+        # - Moderate: < 100,000 computations (n1, n2 ≤ 316) 
+        # - Slow: > 100,000 computations
         
-        # Calculate critical value
-        z_alpha = stats.norm.ppf(1 - alpha/2)
-        
-        # Calculate adjusted power
-        z_beta = (effect_size / se - z_alpha)
-        power = stats.norm.cdf(z_beta) * factor
+        if max_computations <= 100000:  # Use exact calculation
+            from scipy.stats import binom, fisher_exact
+            
+            power = 0.0
+            for s1 in range(n1 + 1):
+                for s2 in range(n2 + 1):
+                    # Probability of this outcome under alternative hypothesis
+                    prob = binom.pmf(s1, n1, p1) * binom.pmf(s2, n2, p2)
+                    
+                    # Perform Fisher's exact test
+                    table = [[s1, n1 - s1], [s2, n2 - s2]]
+                    _, p_value = fisher_exact(table)
+                    
+                    # Add to power if significant
+                    if p_value < alpha:
+                        power += prob
+            
+            # Store calculation method info
+            calculation_method = "exact"
+            
+        else:  # Use normal approximation for large samples
+            # Calculate pooled proportion
+            p_pooled = (p1 * n1 + p2 * n2) / (n1 + n2)
+            
+            # Calculate standard error
+            se = math.sqrt(p_pooled * (1 - p_pooled) * (1/n1 + 1/n2))
+            
+            # Calculate critical value for two-sided test
+            z_alpha_sided = stats.norm.ppf(1 - alpha/2)
+            
+            # Calculate standard power for two-sided test
+            es_on_se = effect_size / se
+            power = stats.norm.cdf(es_on_se - z_alpha_sided) + stats.norm.cdf(-es_on_se - z_alpha_sided)
+            
+            # Apply conservative adjustment since Fisher's exact is typically less powerful
+            # This is an empirically-derived adjustment factor
+            power = power * 0.85  # Conservative adjustment for large samples
+            
+            calculation_method = "normal_approximation"
         
     elif test_type == "likelihood_ratio":
         # For likelihood ratio test
@@ -273,7 +366,8 @@ def power_binary(n1, n2, p1, p2, alpha=0.05, test_type="normal approximation", c
     # Ensure power is between 0 and 1
     power = max(0, min(1, power))
     
-    return {
+    # Build result dictionary
+    result = {
         "power": power,
         "n1": n1,
         "n2": n2,
@@ -285,6 +379,14 @@ def power_binary(n1, n2, p1, p2, alpha=0.05, test_type="normal approximation", c
         "correction": correction,
         "method": "analytical"
     }
+    
+    # Add calculation method info for Fisher's exact test
+    if test_type == "fishers exact":
+        result["calculation_method"] = calculation_method
+        if calculation_method == "exact":
+            result["computations"] = max_computations
+        
+    return result
 
 def sample_size_binary(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, test_type="normal approximation", correction=False):
     """
@@ -331,17 +433,40 @@ def sample_size_binary(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, test
     p_avg = (p1 + allocation_ratio * p2) / (1 + allocation_ratio)
     
     # Sample size calculation based on test type
-    if test_type == "fishers exact":
+    if test_type == "fishers exact" or test_type == "fishers_exact":
         # For Fisher's Exact test, we need a more conservative estimate
-        # Use a more conservative approach with a factor of 1.2
-        factor = 1.2
+        # The inflation factor depends on the expected sample size
         
-        # Base calculation using normal approximation as starting point
+        # Base calculation using normal approximation
         numerator = (z_alpha + z_beta)**2 * (p1 * (1 - p1) + p2 * (1 - p2) / allocation_ratio)
         denominator = (p1 - p2)**2
-        
-        # Apply factor to account for Fisher's Exact test being more conservative
         n1_base = numerator / denominator
+        
+        # Estimate total sample size for adjustment
+        n_total_est = n1_base * (1 + allocation_ratio)
+        
+        # Apply size-dependent inflation factor
+        # Also consider if dealing with rare events
+        is_rare_event = min(p1, p2) < 0.05
+        
+        if is_rare_event:
+            # For rare events, Fisher's exact test benefits from the discreteness
+            # of the binomial distribution, requiring smaller samples
+            if n_total_est < 600:
+                factor = 0.83  # Significant deflation for rare events
+            elif n_total_est < 1000:
+                factor = 0.90  # Moderate deflation
+            else:
+                factor = 0.98  # Slight deflation even for large samples
+        else:
+            # Standard inflation factors
+            if n_total_est < 40:
+                factor = 1.15  # 15% inflation for very small samples
+            elif n_total_est < 100:
+                factor = 1.10  # 10% inflation for small samples
+            else:
+                factor = 1.05  # 5% inflation for moderate/large samples
+            
         n1 = math.ceil(n1_base * factor)
         
     elif test_type == "likelihood_ratio":

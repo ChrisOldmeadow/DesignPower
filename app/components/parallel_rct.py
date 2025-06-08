@@ -1342,7 +1342,7 @@ def calculate_parallel_binary(params):
             mapped_test_type = test_name_mapping.get(test_type.lower(), "normal approximation")
             
             # Get correction directly from params (set by the checkbox in render_binary_advanced_options)
-            has_correction = params.get("correction", "None") != "None"
+            has_correction = params.get("correction", False)
             
             # Debug output
             print(f"UI test type: {test_type}, Mapped to: {mapped_test_type}, Correction: {has_correction}")
@@ -1602,7 +1602,7 @@ def calculate_parallel_survival(params):
         result["median_survival2_derived"] = median2_for_calc
 
     if calculation_type == "Sample Size":
-        if method == "Analytical":
+        if method == "analytical":
             if hypothesis_type == "Non-Inferiority":
                 sample_size_result = analytical_survival.sample_size_survival_non_inferiority(
                     median1=median_survival1,
@@ -1627,7 +1627,7 @@ def calculate_parallel_survival(params):
                     allocation_ratio=allocation_ratio,
                     sides=sides 
                 )
-        elif method == "Simulation":
+        elif method == "simulation":
             if hypothesis_type == "Non-Inferiority":                   
                 sample_size_result = simulation_survival.sample_size_survival_non_inferiority_sim(
                     median1=median_survival1,
@@ -1674,7 +1674,7 @@ def calculate_parallel_survival(params):
         n2 = params.get("n2", 50)
         result["n1_param"] = n1 
         result["n2_param"] = n2
-        if method == "Analytical":
+        if method == "analytical":
             if hypothesis_type == "Non-Inferiority":
                 power_result_dict = analytical_survival.power_survival_non_inferiority(
                     n1=n1, n2=n2,
@@ -1697,7 +1697,7 @@ def calculate_parallel_survival(params):
                     alpha=alpha,
                     sides=sides
                 )
-        elif method == "Simulation":
+        elif method == "simulation":
             if hypothesis_type == "Non-Inferiority":
                 power_result_dict = simulation_survival.power_survival_non_inferiority_sim(
                     n1=n1, n2=n2,
@@ -1742,7 +1742,7 @@ def calculate_parallel_survival(params):
         result["n1_param"] = n1
         result["n2_param"] = n2
         
-        if method == "Analytical":
+        if method == "analytical":
             mde_result_dict = analytical_survival.min_detectable_effect_survival(
                 n1=n1, n2=n2,
                 median1=median_survival1,
@@ -1753,7 +1753,7 @@ def calculate_parallel_survival(params):
                 alpha=alpha,
                 sides=sides 
             )
-        elif method == "Simulation":
+        elif method == "simulation":
             # For NI MDE, we'd ideally call a specific NI MDE simulation if it existed.
             # Since it doesn't, we fall back to superiority MDE simulation.
             if hypothesis_type == "Non-Inferiority":

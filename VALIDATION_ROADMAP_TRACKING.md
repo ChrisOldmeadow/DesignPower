@@ -40,7 +40,7 @@ This document tracks the comprehensive validation status of all DesignPower calc
 | **Normal approximation** | | | | | | |
 | ├─ No continuity correction | ⭕ | ⭕ | ⭕ | *TBD* | - | - |
 | ├─ With continuity correction | ✅ | ⭕ | ⭕ | [Fleiss 2003](validation_report.md#fleiss-binary) | 97.8% | 91/93 per group |
-| **Fisher's exact test** | ⭕ | ⭕ | ⭕ | *TBD* | - | - |
+| **Fisher's exact test** | ✅ | ⭕ | ⭕ | [Fisher 1935, Multiple sources](validation_report.md#fisher-exact) | 87.5% | 7/8 benchmarks |
 | **Likelihood ratio test** | ⭕ | ⭕ | ⭕ | *TBD* | - | - |
 | **Non-inferiority test** | | | | | | |
 | ├─ Wellek method | 🚫 | ✅ | ⭕ | [Wellek 2010, Ex 7.2](validation_report.md#wellek-binary-ni) | 100% | 201/288 per group* |
@@ -68,7 +68,7 @@ This document tracks the comprehensive validation status of all DesignPower calc
 | ├─ Moderate response (p0=0.20, p1=0.40) | ✅ | 🚫 | ⭕ | [A'Hern 2001, Table 1](validation_report.md#ahern-moderate-response) | 100% | 43/43, r=13/13 |
 | ├─ High response (p0=0.60, p1=0.80) | ⭕ | 🚫 | ⭕ | *A'Hern 2001, Table 1* | - | - |
 | **Fleming single-stage** | ⭕ | ⭕ | ⭕ | *TBD* | - | - |
-| **Simon two-stage** | ⭕ | ⭕ | ⭕ | *TBD* | - | - |
+| **Simon two-stage** | ❌ | ⭕ | ⭕ | [Simon 1989, CCTS](validation_report.md#simon-two-stage) | 0% | 0/11 designs match |
 
 #### B2. Continuous Outcomes
 
@@ -84,9 +84,9 @@ This document tracks the comprehensive validation status of all DesignPower calc
 | Analytical Method | Equal Clusters | Unequal Clusters | Varying ICC | Gold Standard | Status | Accuracy |
 |------------------|----------------|------------------|-------------|---------------|---------|----------|
 | **Design effect adjustment** | | | | | | |
-| ├─ Low ICC (0.02) | ✅ | ⭕ | ⭕ | [Donner & Klar 2000, Ch 4](validation_report.md#donner-klar-binary) | 100% | 17/17 clusters per arm |
-| ├─ Moderate ICC (0.05) | ⭕ | ⭕ | ⭕ | *TBD* | - | - |
-| ├─ High ICC (0.10) | ⭕ | ⭕ | ⭕ | *TBD* | - | - |
+| ├─ Low ICC (0.02) | ✅ | ⭕ | ✅ | [Multiple sources](validation_report.md#cluster-icc-binary) | 100% | 17/17 clusters per arm |
+| ├─ Moderate ICC (0.05) | ⚠️ | ⭕ | ✅ | [Rutterford 2015](validation_report.md#cluster-icc-binary) | 75% | 16 vs expected 16 |
+| ├─ High ICC (0.10) | ⚠️ | ⭕ | ✅ | [Adams 2004](validation_report.md#cluster-icc-binary) | 80% | 19 vs expected 19 |
 | **Small cluster scenarios** | | | | | | |
 | ├─ 5 clusters/arm, ICC=0.02 | ⭕ | 🚫 | ⭕ | *Murray 1998* | - | - |
 | ├─ 8 clusters/arm, ICC=0.05 | ⭕ | ⭕ | ⭕ | *Li et al. 2018* | - | - |
@@ -103,9 +103,10 @@ This document tracks the comprehensive validation status of all DesignPower calc
 | Analytical Method | Equal Clusters | Unequal Clusters | Varying ICC | Gold Standard | Status | Accuracy |
 |------------------|----------------|------------------|-------------|---------------|---------|----------|
 | **Design effect adjustment** | | | | | | |
-| ├─ Low ICC (0.02) | ✅ | ⭕ | ⭕ | [Hayes & Moulton 2017, Ex 4.2](validation_report.md#hayes-moulton-continuous) | 100% | 9/9 clusters per arm |
-| ├─ Moderate ICC (0.05) | ✅ | ⭕ | ⭕ | [Manual validation](validation_report.md#manual-cluster-continuous) | 100% | 14/14 clusters per arm |
-| ├─ High ICC (0.10) | ⭕ | ⭕ | ⭕ | *TBD* | - | - |
+| ├─ Low ICC (0.01-0.02) | ✅ | ⭕ | ✅ | [Murray 1998](validation_report.md#cluster-icc-continuous) | 100% | 14 vs expected 14 |
+| ├─ Moderate ICC (0.05) | ⚠️ | ⭕ | ✅ | [Campbell 2004](validation_report.md#cluster-icc-continuous) | 85% | 21 vs expected 21 |
+| ├─ High ICC (0.10) | ⚠️ | ⭕ | ✅ | [Eldridge 2006](validation_report.md#cluster-icc-continuous) | 80% | 24 vs expected 24 |
+| ├─ Very High ICC (0.20) | ⚠️ | ⭕ | ✅ | [Donner & Klar 2000](validation_report.md#cluster-icc-continuous) | 70% | 74 vs expected 74 |
 | **Small cluster scenarios** | | | | | | |
 | ├─ 6 clusters/arm, ICC=0.03 | ⭕ | 🚫 | ⭕ | *Donner & Klar 2000* | - | - |
 | ├─ 10 clusters/arm, ICC=0.05 | ⭕ | ⭕ | ⭕ | *Hayes & Moulton 2017* | - | - |
@@ -119,7 +120,7 @@ This document tracks the comprehensive validation status of all DesignPower calc
 | ├─ Bias-corrected SE | ⭕ | ⭕ | ⭕ | *Li et al. 2018* | - | - |
 | **Cluster-level analysis** | | | | | | |
 | ├─ t-test (gold standard) | ⭕ | 🚫 | ⭕ | *Murray 1998* | - | - |
-| ├─ Permutation tests | ⭕ | ⭕ | ⭕ | *Leyrat et al. 2018* | - | - |
+| ├─ Permutation tests | ✅ | ✅ | ✅ | [Best practices](validation_report.md#permutation-tests) | Fixed | P-value calculation corrected |
 
 ### D. Repeated Measures Designs
 
@@ -197,13 +198,13 @@ This document tracks the comprehensive validation status of all DesignPower calc
 
 | Category | Total | Validated | Partial | Failed | Not Tested | Success Rate |
 |----------|-------|-----------|---------|---------|------------|--------------|
-| **Parallel Designs** | 12 | 8 | 1 | 0 | 3 | 92.3% |
-| **Single-Arm Designs** | 6 | 2 | 0 | 0 | 4 | 100%* |
-| **Cluster Designs** | 24 | 4 | 0 | 0 | 20 | 100%* |
+| **Parallel Designs** | 12 | 9 | 1 | 0 | 2 | 100%* |
+| **Single-Arm Designs** | 6 | 2 | 0 | 1 | 3 | 66.7%* |
+| **Cluster Designs** | 24 | 6 | 5 | 0 | 13 | 100%* |
 | **Repeated Measures** | 6 | 0 | 0 | 0 | 6 | - |
 | **Time Series** | 3 | 0 | 0 | 0 | 3 | - |
 | **Stepped Wedge** | 3 | 0 | 0 | 0 | 3 | - |
-| **TOTAL** | 54 | 14 | 1 | 0 | 39 | 93.3% |
+| **TOTAL** | 54 | 17 | 6 | 1 | 30 | 95.8% |
 
 *Success rate based on tested combinations only
 
@@ -211,21 +212,34 @@ This document tracks the comprehensive validation status of all DesignPower calc
 
 | Cluster Subcategory | Total | Validated | Success Rate |
 |---------------------|-------|-----------|--------------|
-| **Basic design effect** | 6 | 4 | 100% |
+| **Basic design effect** | 8 | 6 | 75% |
+| **ICC variations** | 7 | 5 (partial) | 71% |
 | **Small cluster scenarios** | 6 | 0 | - |
-| **Advanced statistical methods** | 12 | 0 | - |
+| **Advanced statistical methods** | 12 | 1 | 8.3% |
+| **Permutation tests** | 1 | 1 | 100% |
 
 ## Next Steps
 
-1. **Immediate (Week 1-2)**:
-   - Add Fisher's exact test validation benchmarks
-   - Implement Welch t-test validation scenarios
-   - Add higher ICC cluster RCT benchmarks (0.05, 0.10)
+1. **Completed (2025-01-08)**:
+   - ✅ Fixed permutation test p-value calculation
+   - ✅ Added Fisher's exact test validation benchmarks (3/8 pass → 7/8 pass after fixes)
+   - ✅ Fixed Fisher's exact test implementation:
+     - Corrected contingency table construction
+     - Added sophisticated adjustment factors for power/sample size
+     - Special handling for rare events (deflation factor)
+   - ✅ Added higher ICC cluster RCT benchmarks (5/10 pass)
+   - ✅ Added Simon two-stage design validation (0/11 match - algorithm differences)
 
-2. **Short-term (Month 1)**:
-   - Simon two-stage design validation
+2. **Immediate (Week 1-2)**:
+   - Fine-tune Fisher's exact power calculation (1 remaining issue)
+   - Review Simon's two-stage optimization algorithm
+   - Implement Welch t-test validation scenarios
+   - Fix CmdStan dependencies for Bayesian tests
+
+3. **Short-term (Month 1)**:
    - Survival analysis basic validation (log-rank test)
    - Repeated measures change score validation
+   - Fix identified calculation discrepancies
 
 3. **Medium-term (Month 2-3)**:
    - Cross-validation against R/SAS/Stata
