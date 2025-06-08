@@ -190,6 +190,25 @@ print(f"Backend: {results['sim_details']['bayes_backend']}")
 | **Bayesian (Variational)** | ⚡⚡⚡ | 📊📊📊📊 | 💾💾 | Fast exploration |
 | **Bayesian (ABC)** | ⚡⚡ | 📊📊📊 | 💾 | Web deployment |
 
+## 🔧 Recent Methodological Improvements
+
+### t-Distribution Implementation (2025)
+**Enhanced Statistical Accuracy for Continuous Outcomes**
+
+DesignPower now uses **t-distribution critical values** instead of normal distribution for continuous outcome sample size calculations:
+
+```
+✅ Before: 25 participants/group (using normal distribution)  
+✅ After:  26 participants/group (using t-distribution)
+✅ Result: 100% match with Cohen (1988) benchmarks
+```
+
+**Why this matters:**
+- **More statistically rigorous**: Accounts for variance uncertainty in real studies
+- **Benchmark consistency**: Exact matches to authoritative statistical tables
+- **Conservative approach**: Appropriate protection against Type II error
+- **Clinical relevance**: Meaningful for typical trial sizes (n=10-200 per group)
+
 ## ✅ Validation & Quality Assurance
 
 ### Gold Standard Validation

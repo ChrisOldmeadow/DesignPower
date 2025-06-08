@@ -1294,7 +1294,7 @@ def calculate_parallel_continuous(params):
 def calculate_parallel_binary(params):
     """Calculate results for Parallel RCT with binary outcomes."""
     # Get calculation method and hypothesis type from params
-    method = params.get("method", "analytical")  
+    method = params.get("method", "analytical").lower()  # Convert to lowercase
     hypothesis_type = params.get("hypothesis_type", "Superiority")  
 
     # Extract parameters with default values
@@ -1531,7 +1531,7 @@ def calculate_parallel_survival(params):
     # Extract parameters with default values
     calculation_type = params.get("calculation_type", "Sample Size")
     hypothesis_type = params.get("hypothesis_type", "Superiority")
-    method = params.get("method", "Analytical")
+    method = params.get("method", "Analytical").lower()
 
     alpha = params.get("alpha", 0.05)
     power = params.get("power", 0.8)

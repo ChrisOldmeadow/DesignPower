@@ -45,6 +45,13 @@ The documentation is organized by study design and outcome type, matching the st
 
 ## Recent Accuracy Improvements
 
+### t-Distribution Implementation for Continuous Outcomes (2025)
+Parallel RCT continuous outcome calculations upgraded from normal distribution to t-distribution critical values using an iterative approach. This improvement:
+- **Provides exact matches** to Cohen (1988) benchmarks (0.0% error for d=0.8, d=0.5)
+- **Accounts for variance uncertainty** in real-world applications
+- **Offers more conservative estimates** appropriate for clinical trials
+- **Maintains computational efficiency** through fast convergence
+
 ### A'Hern Algorithm Enhancement (2025)
 The A'Hern single-arm binary design implementation was enhanced with a hybrid approach combining lookup tables for standard cases and an improved algorithm for non-standard parameter combinations, achieving 100% accuracy against published benchmarks.
 

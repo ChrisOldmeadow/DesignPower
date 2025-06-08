@@ -55,19 +55,43 @@ def sample_size_continuous(mean1, mean2, sd1, sd2=None, power=0.8, alpha=0.05,
     # Calculate effect size (Cohen's d)
     effect_size = abs(mean1 - mean2) / np.sqrt((sd1**2 + sd2**2) / 2)
     
-    # Get critical values
-    z_alpha = stats.norm.ppf(1 - alpha/2)
-    z_beta = stats.norm.ppf(power)
+    # Use iterative approach with t-distribution for more accurate results
+    # when variance is unknown (which is always the case in practice)
+    z_beta = stats.norm.ppf(power)  # Power calculation still uses normal
     
-    # Calculate n1 using the formula
-    numerator = (z_alpha + z_beta)**2 * (sd1**2 + sd2**2 / allocation_ratio)
+    # Start with normal approximation for initial guess
+    z_alpha = stats.norm.ppf(1 - alpha/2)
+    numerator_initial = (z_alpha + z_beta)**2 * (sd1**2 + sd2**2 / allocation_ratio)
     denominator = (mean1 - mean2)**2
     
     # Handle case where denominator is zero
     if denominator == 0:
         raise ValueError("Cannot calculate sample size when means are equal")
     
-    n1 = math.ceil(numerator / denominator)
+    n_estimate = numerator_initial / denominator
+    
+    # Iteratively refine using t-distribution
+    max_iter = 50
+    tol = 1e-6
+    
+    for i in range(max_iter):
+        # Calculate degrees of freedom for two-sample t-test
+        n2_current = n_estimate * allocation_ratio
+        df = n_estimate + n2_current - 2
+        
+        # Get t critical value
+        t_alpha = stats.t.ppf(1 - alpha/2, df)
+        
+        # Recalculate sample size
+        numerator_t = (t_alpha + z_beta)**2 * (sd1**2 + sd2**2 / allocation_ratio)
+        n_new = numerator_t / denominator
+        
+        # Check convergence
+        if abs(n_new - n_estimate) < tol:
+            break
+        n_estimate = n_new
+    
+    n1 = math.ceil(n_estimate)
     n2 = math.ceil(n1 * allocation_ratio)
     
     # Return results
