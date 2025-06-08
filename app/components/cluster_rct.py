@@ -81,14 +81,19 @@ def generate_cli_code_cluster_continuous(params):
     alpha = params.get('alpha', 0.05)
     power = params.get('power', 0.8)
     
+    # Cluster size variation
+    cv_cluster_size = params.get('cv_cluster_size', 0.0)
+    
     # Simulation-specific parameters
     nsim = params.get('nsim', 1000)
     seed = params.get('seed')
     
-    # Analysis method and Bayesian parameters
+    # Analysis method and model-specific parameters
     analysis_model = params.get('analysis_model', 'ttest')
     
-    # Map to backend method
+    # Extract model-specific parameters
+    model_params = ""
+    
     if analysis_model == 'bayes':
         # Extract Bayesian-specific parameters
         bayes_backend = params.get('bayes_backend', 'stan')
@@ -97,16 +102,39 @@ def generate_cli_code_cluster_continuous(params):
         bayes_inference_method = params.get('bayes_inference_method', 'credible_interval')
         
         backend_method = 'bayes'
-        bayes_params = f"""    bayes_backend="{bayes_backend}",
+        model_params = f"""    bayes_backend="{bayes_backend}",
     bayes_draws={bayes_draws},
     bayes_warmup={bayes_warmup},
     bayes_inference_method="{bayes_inference_method}","""
+    elif analysis_model == 'mixedlm':
+        # Extract LMM-specific parameters
+        use_satterthwaite = params.get('use_satterthwaite', False)
+        lmm_method = params.get('lmm_method', 'auto')
+        lmm_reml = params.get('lmm_reml', True)
+        lmm_cov_penalty_weight = params.get('lmm_cov_penalty_weight', 0.0)
+        
+        backend_method = 'mixedlm'
+        model_params = f"""    use_satterthwaite={use_satterthwaite},
+    lmm_method="{lmm_method}",
+    lmm_reml={lmm_reml},"""
+        if lmm_cov_penalty_weight > 0:
+            model_params += f"""
+    lmm_cov_penalty_weight={lmm_cov_penalty_weight},"""
+    elif analysis_model == 'gee':
+        # Extract GEE-specific parameters
+        use_bias_correction = params.get('use_bias_correction', False)
+        
+        backend_method = 'gee'
+        model_params = f"""    use_bias_correction={use_bias_correction},"""
     else:
         backend_method = analysis_model
-        bayes_params = ""
+        model_params = ""
     
     # Build import statement
     if method == "analytical":
+        import_line = "from core.designs.cluster_rct.analytical_continuous import"
+        module_prefix = ""
+    elif method == "permutation":
         import_line = "from core.designs.cluster_rct.analytical_continuous import"
         module_prefix = ""
     else:
@@ -115,7 +143,10 @@ def generate_cli_code_cluster_continuous(params):
     
     # Build function call based on calculation type
     if calc_type == "Power":
-        function_name = f"power_continuous{'_sim' if method == 'simulation' else ''}"
+        if method == "permutation":
+            function_name = "power_continuous_permutation"
+        else:
+            function_name = f"power_continuous{'_sim' if method == 'simulation' else ''}"
         
         # Build parameters for power calculation
         core_params = f"""n_clusters={n_clusters},
@@ -136,15 +167,18 @@ def generate_cli_code_cluster_continuous(params):
     analysis_model="{backend_method}","""
             
             all_params = core_params + ",\n    " + sim_params.strip()
-            if bayes_params:
-                all_params += "\n    " + bayes_params.strip()
+            if model_params:
+                all_params += "\n    " + model_params.strip()
         else:
             all_params = core_params
             
         result_display = 'result["power"]'
         
     elif calc_type == "Sample Size":
-        function_name = f"sample_size_continuous{'_sim' if method == 'simulation' else ''}"
+        if method == "permutation":
+            function_name = "sample_size_continuous_permutation"
+        else:
+            function_name = f"sample_size_continuous{'_sim' if method == 'simulation' else ''}"
         
         core_params = f"""mean1={mean1},
     mean2={mean2},
@@ -164,15 +198,18 @@ def generate_cli_code_cluster_continuous(params):
     analysis_model="{backend_method}","""
             
             all_params = core_params + ",\n    " + sim_params.strip()
-            if bayes_params:
-                all_params += "\n    " + bayes_params.strip()
+            if model_params:
+                all_params += "\n    " + model_params.strip()
         else:
             all_params = core_params
             
         result_display = 'result["n_clusters"]'
         
     elif calc_type == "Minimum Detectable Effect":
-        function_name = f"min_detectable_effect_continuous{'_sim' if method == 'simulation' else ''}"
+        if method == "permutation":
+            function_name = "min_detectable_effect_continuous_permutation"
+        else:
+            function_name = f"min_detectable_effect_continuous{'_sim' if method == 'simulation' else ''}"
         
         core_params = f"""n_clusters={n_clusters},
     cluster_size={cluster_size},
@@ -191,8 +228,8 @@ def generate_cli_code_cluster_continuous(params):
     analysis_model="{backend_method}","""
             
             all_params = core_params + ",\n    " + sim_params.strip()
-            if bayes_params:
-                all_params += "\n    " + bayes_params.strip()
+            if model_params:
+                all_params += "\n    " + model_params.strip()
         else:
             all_params = core_params
             
@@ -251,13 +288,23 @@ def generate_cli_code_cluster_binary(params):
     alpha = params.get('alpha', 0.05)
     power = params.get('power', 0.8)
     
+    # Cluster size variation
+    cv_cluster_size = params.get('cv_cluster_size', 0.0)
+    
+    # Effect measure and ICC scale (for binary)
+    effect_measure = params.get('effect_measure', 'risk_difference')
+    icc_scale = params.get('icc_scale', 'Linear')
+    
     # Simulation-specific parameters
     nsim = params.get('nsim', 1000)
     seed = params.get('seed')
     
-    # Analysis method and Bayesian parameters
+    # Analysis method and model-specific parameters
     analysis_method = params.get('analysis_method', 'deff_ztest')
     analysis_method_ui = params.get('analysis_method_ui', '')
+    
+    # Extract model-specific parameters
+    model_params = ""
     
     # Map UI analysis method to backend
     if analysis_method == 'bayes':
@@ -268,16 +315,27 @@ def generate_cli_code_cluster_binary(params):
         bayes_inference_method = params.get('bayes_inference_method', 'credible_interval')
         
         backend_method = 'bayes'
-        bayes_params = f"""    bayes_backend="{bayes_backend}",
+        model_params = f"""    bayes_backend="{bayes_backend}",
     bayes_draws={bayes_draws},
     bayes_warmup={bayes_warmup},
     bayes_inference_method="{bayes_inference_method}","""
+    elif analysis_method == 'glmm':
+        # GLMM doesn't have additional parameters in the current implementation
+        backend_method = 'glmm'
+        model_params = ""
+    elif analysis_method == 'gee':
+        # GEE doesn't have bias correction for binary outcomes in current implementation
+        backend_method = 'gee'
+        model_params = ""
     else:
         backend_method = analysis_method
-        bayes_params = ""
+        model_params = ""
     
     # Build import statement
     if method == "analytical":
+        import_line = "from core.designs.cluster_rct.analytical_binary import"
+        module_prefix = ""
+    elif method == "permutation":
         import_line = "from core.designs.cluster_rct.analytical_binary import"
         module_prefix = ""
     else:
@@ -286,7 +344,10 @@ def generate_cli_code_cluster_binary(params):
     
     # Build function call based on calculation type
     if calc_type == "Power":
-        function_name = f"power_binary{'_sim' if method == 'simulation' else ''}"
+        if method == "permutation":
+            function_name = "power_binary_permutation"
+        else:
+            function_name = f"power_binary{'_sim' if method == 'simulation' else ''}"
         
         # Build parameters for power calculation
         core_params = f"""n_clusters={n_clusters},
@@ -296,6 +357,10 @@ def generate_cli_code_cluster_binary(params):
     p2={p2},
     alpha={alpha}"""
         
+        # Add optional parameters if non-default
+        if cv_cluster_size > 0:
+            core_params += f",\n    cv_cluster_size={cv_cluster_size}"
+        
         if method == "simulation":
             sim_params = f"""nsim={nsim},"""
             if seed is not None:
@@ -306,15 +371,18 @@ def generate_cli_code_cluster_binary(params):
     analysis_method="{backend_method}","""
             
             all_params = core_params + ",\n    " + sim_params.strip()
-            if bayes_params:
-                all_params += "\n    " + bayes_params.strip()
+            if model_params:
+                all_params += "\n    " + model_params.strip()
         else:
             all_params = core_params
             
         result_display = 'result["power"]'
         
     elif calc_type == "Sample Size":
-        function_name = f"sample_size_binary{'_sim' if method == 'simulation' else ''}"
+        if method == "permutation":
+            function_name = "sample_size_binary_permutation"
+        else:
+            function_name = f"sample_size_binary{'_sim' if method == 'simulation' else ''}"
         
         core_params = f"""p1={p1},
     p2={p2},
@@ -323,6 +391,10 @@ def generate_cli_code_cluster_binary(params):
     power={power},
     alpha={alpha}"""
         
+        # Add optional parameters if non-default
+        if cv_cluster_size > 0:
+            core_params += f",\n    cv_cluster_size={cv_cluster_size}"
+        
         if method == "simulation":
             sim_params = f"""nsim={nsim},"""
             if seed is not None:
@@ -333,15 +405,18 @@ def generate_cli_code_cluster_binary(params):
     analysis_method="{backend_method}","""
             
             all_params = core_params + ",\n    " + sim_params.strip()
-            if bayes_params:
-                all_params += "\n    " + bayes_params.strip()
+            if model_params:
+                all_params += "\n    " + model_params.strip()
         else:
             all_params = core_params
             
         result_display = 'result["n_clusters"]'
         
     elif calc_type == "Minimum Detectable Effect":
-        function_name = f"min_detectable_effect_binary{'_sim' if method == 'simulation' else ''}"
+        if method == "permutation":
+            function_name = "min_detectable_effect_binary_permutation"
+        else:
+            function_name = f"min_detectable_effect_binary{'_sim' if method == 'simulation' else ''}"
         
         core_params = f"""n_clusters={n_clusters},
     cluster_size={cluster_size},
@@ -350,6 +425,12 @@ def generate_cli_code_cluster_binary(params):
     power={power},
     alpha={alpha}"""
         
+        # Add optional parameters if non-default
+        if cv_cluster_size > 0:
+            core_params += f",\n    cv_cluster_size={cv_cluster_size}"
+        if effect_measure != 'risk_difference':
+            core_params += f",\n    effect_measure='{effect_measure}'"
+        
         if method == "simulation":
             sim_params = f"""nsim={nsim},"""
             if seed is not None:
@@ -360,8 +441,8 @@ def generate_cli_code_cluster_binary(params):
     analysis_method="{backend_method}","""
             
             all_params = core_params + ",\n    " + sim_params.strip()
-            if bayes_params:
-                all_params += "\n    " + bayes_params.strip()
+            if model_params:
+                all_params += "\n    " + model_params.strip()
         else:
             all_params = core_params
             
@@ -414,14 +495,20 @@ def render_binary_advanced_options():
     # Method selection (analytical vs simulation)
     advanced_params["method"] = st.radio(
         "Calculation Method",
-        ["Analytical", "Simulation"],
+        ["Analytical", "Permutation Test", "Simulation"],
         index=0,
         key="cluster_binary_method_radio",
-        horizontal=True
+        horizontal=True,
+        help="Analytical: Fast closed-form calculations. Permutation Test: Exact inference without distributional assumptions (ideal for small clusters). Simulation: Monte Carlo simulation with various analysis models."
     )
     
-    # Convert to lowercase for function calls
-    advanced_params["method"] = advanced_params["method"].lower()
+    # Convert to method identifier for function calls
+    method_map = {
+        "analytical": "analytical",
+        "permutation test": "permutation",
+        "simulation": "simulation"
+    }
+    advanced_params["method"] = method_map.get(advanced_params["method"].lower(), "analytical")
     
     # Cluster Size Variation tab
     st.markdown("#### Cluster Size Variation")
@@ -503,7 +590,7 @@ def render_binary_advanced_options():
         
         model_options_binary = [
             "Design Effect Adjusted Z-test",
-            "T-test on Aggregate Data", 
+            "T-test on Aggregate Data",
             "GLMM (Individual-Level)",
             "GEE (Individual-Level)"
         ]
@@ -741,14 +828,20 @@ def render_continuous_advanced_options():
     # Method selection (analytical vs simulation)
     advanced_params["method"] = st.radio(
         "Calculation Method",
-        ["Analytical", "Simulation"],
+        ["Analytical", "Permutation Test", "Simulation"],
         index=0,
         key="cluster_continuous_method_radio",
-        horizontal=True
+        horizontal=True,
+        help="Analytical: Fast closed-form calculations. Permutation Test: Exact inference without distributional assumptions (ideal for small clusters). Simulation: Monte Carlo simulation with various analysis models."
     )
     
-    # Convert to lowercase for function calls
-    advanced_params["method"] = advanced_params["method"].lower()
+    # Convert to method identifier for function calls
+    method_map = {
+        "analytical": "analytical",
+        "permutation test": "permutation",
+        "simulation": "simulation"
+    }
+    advanced_params["method"] = method_map.get(advanced_params["method"].lower(), "analytical")
     
     # Simulation-specific options
     if advanced_params["method"] == "simulation":
@@ -835,7 +928,7 @@ def render_continuous_advanced_options():
             model_options,
             index=0,
             key="cluster_continuous_model_select",
-            help="Choose the analysis model applied to each simulated dataset. The simple two-sample t-test analyses individual-level data ignoring clustering but with design-effect adjustment. Mixed models explicitly model random cluster intercepts and can provide more power when cluster counts are moderate to large. GEE provides marginal (population-averaged) inference and is robust to some model misspecification, but small-sample bias can be an issue."
+            help="Choose the analysis model applied to each simulated dataset. The simple two-sample t-test analyses cluster-level data. Mixed models explicitly model random cluster intercepts and can provide more power when cluster counts are moderate to large. GEE provides marginal (population-averaged) inference and is robust to some model misspecification, but small-sample bias can be an issue."
         )
         
         # Show installation message if Bayesian is selected but not available
@@ -1397,7 +1490,34 @@ def calculate_cluster_continuous(params):
                         power=params["power"],
                         alpha=params["alpha"]
                     )
+            elif method == "permutation":
+                if params.get("determine_ss_param") == "Number of Clusters (k)":
+                    results = analytical_continuous.sample_size_continuous_permutation(
+                        mean1=params["mean1"],
+                        mean2=params["mean2"],
+                        std_dev=params["std_dev"],
+                        icc=params["icc"],
+                        cluster_size=params["cluster_size_input_for_k_calc"],
+                        power=params["power"],
+                        alpha=params["alpha"]
+                    )
+                elif params.get("determine_ss_param") == "Average Cluster Size (m)":
+                    results = analytical_continuous.sample_size_continuous_permutation(
+                        mean1=params["mean1"],
+                        mean2=params["mean2"],
+                        std_dev=params["std_dev"],
+                        icc=params["icc"],
+                        cluster_size=None,
+                        n_clusters_fixed=params["n_clusters_input_for_m_calc"],
+                        power=params["power"],
+                        alpha=params["alpha"]
+                    )
             else:  # simulation
+                progress_bar = st.progress(0.0)
+                
+                def _update_progress(i, total):
+                    progress_bar.progress(i / total)
+                
                 if params.get("determine_ss_param") == "Number of Clusters (k)":
                     results = simulation_continuous.sample_size_continuous_sim(
                         mean1=params["mean1"],
@@ -1418,6 +1538,7 @@ def calculate_cluster_continuous(params):
                         lmm_method=params.get("lmm_method", "auto"),
                         lmm_reml=params.get("lmm_reml", True),
                         lmm_cov_penalty_weight=params.get("lmm_cov_penalty_weight", 0.0),
+                        progress_callback=_update_progress
                     )
                 elif params.get("determine_ss_param") == "Average Cluster Size (m)":
                     results = simulation_continuous.sample_size_continuous_sim(
@@ -1440,7 +1561,9 @@ def calculate_cluster_continuous(params):
                         lmm_method=params.get("lmm_method", "auto"),
                         lmm_reml=params.get("lmm_reml", True),
                         lmm_cov_penalty_weight=params.get("lmm_cov_penalty_weight", 0.0),
+                        progress_callback=_update_progress
                     )
+                progress_bar.empty()
         
         elif calc_type == "Power":
             if method == "analytical":
@@ -1453,6 +1576,23 @@ def calculate_cluster_continuous(params):
                     std_dev=params["std_dev"],
                     alpha=params["alpha"]
                 )
+            elif method == "permutation":
+                progress_bar = st.progress(0.0)
+                
+                def _update_progress(i, total):
+                    progress_bar.progress(i / total)
+                
+                results = analytical_continuous.power_continuous_permutation(
+                    n_clusters=params["n_clusters"],
+                    cluster_size=params["cluster_size"],
+                    icc=params["icc"],
+                    mean1=params["mean1"],
+                    mean2=params["mean2"],
+                    std_dev=params["std_dev"],
+                    alpha=params["alpha"],
+                    progress_callback=_update_progress
+                )
+                progress_bar.empty()
             else:  # simulation
                 progress_bar = st.progress(0.0)
                 
@@ -1486,6 +1626,15 @@ def calculate_cluster_continuous(params):
         elif calc_type == "Minimum Detectable Effect":
             if method == "analytical":
                 results = analytical_continuous.min_detectable_effect_continuous(
+                    n_clusters=params["n_clusters"],
+                    cluster_size=params["cluster_size"],
+                    icc=params["icc"],
+                    std_dev=params["std_dev"],
+                    power=params["power"],
+                    alpha=params["alpha"]
+                )
+            elif method == "permutation":
+                results = analytical_continuous.min_detectable_effect_continuous_permutation(
                     n_clusters=params["n_clusters"],
                     cluster_size=params["cluster_size"],
                     icc=params["icc"],
@@ -1660,7 +1809,22 @@ def calculate_cluster_binary(params):
                     cv_cluster_size=cv_cluster_size,
                     effect_measure=None  # Not needed here since p2 is provided
                 )
+            elif method == "permutation":
+                results = analytical_binary.sample_size_binary_permutation(
+                    p1=params["p1"],
+                    p2=params["p2"],
+                    icc=icc,
+                    cluster_size=params["cluster_size"],
+                    power=params["power"],
+                    alpha=params["alpha"],
+                    cv_cluster_size=cv_cluster_size
+                )
             else:  # simulation
+                progress_bar = st.progress(0.0)
+                
+                def _update_progress(i, total):
+                    progress_bar.progress(i / total)
+                
                 results = simulation_binary.sample_size_binary_sim(
                     p1=params["p1"],
                     p2=params["p2"],
@@ -1675,8 +1839,10 @@ def calculate_cluster_binary(params):
                     bayes_backend=bayes_backend,
                     bayes_draws=bayes_draws,
                     bayes_warmup=bayes_warmup,
-                    bayes_inference_method=bayes_inference_method
+                    bayes_inference_method=bayes_inference_method,
+                    progress_callback=_update_progress
                 )
+                progress_bar.empty()
             
             # Run sensitivity analysis if requested
             if run_sensitivity:
@@ -1726,7 +1892,29 @@ def calculate_cluster_binary(params):
                     alpha=params["alpha"],
                     cv_cluster_size=cv_cluster_size
                 )
+            elif method == "permutation":
+                progress_bar = st.progress(0.0)
+                
+                def _update_progress(i, total):
+                    progress_bar.progress(i / total)
+                
+                results = analytical_binary.power_binary_permutation(
+                    n_clusters=params["n_clusters"],
+                    cluster_size=params["cluster_size"],
+                    icc=icc,
+                    p1=params["p1"],
+                    p2=params["p2"],
+                    alpha=params["alpha"],
+                    cv_cluster_size=cv_cluster_size,
+                    progress_callback=_update_progress
+                )
+                progress_bar.empty()
             else:  # simulation
+                progress_bar = st.progress(0.0)
+                
+                def _update_progress(i, total):
+                    progress_bar.progress(i / total)
+                
                 results = simulation_binary.power_binary_sim(
                     n_clusters=params["n_clusters"],
                     cluster_size=params["cluster_size"],
@@ -1741,8 +1929,10 @@ def calculate_cluster_binary(params):
                     bayes_backend=bayes_backend,
                     bayes_draws=bayes_draws,
                     bayes_warmup=bayes_warmup,
-                    bayes_inference_method=bayes_inference_method
+                    bayes_inference_method=bayes_inference_method,
+                    progress_callback=_update_progress
                 )
+                progress_bar.empty()
             
             # Run sensitivity analysis if requested
             if run_sensitivity:
@@ -1792,7 +1982,23 @@ def calculate_cluster_binary(params):
                     cv_cluster_size=cv_cluster_size,
                     effect_measure=effect_measure
                 )
+            elif method == "permutation":
+                results = analytical_binary.min_detectable_effect_binary_permutation(
+                    n_clusters=params["n_clusters"],
+                    cluster_size=params["cluster_size"],
+                    icc=icc,
+                    p1=params["p1"],
+                    power=params["power"],
+                    alpha=params["alpha"],
+                    cv_cluster_size=cv_cluster_size,
+                    effect_measure=effect_measure
+                )
             else:  # simulation
+                progress_bar = st.progress(0.0)
+                
+                def _update_progress(i, total):
+                    progress_bar.progress(i / total)
+                
                 results = simulation_binary.min_detectable_effect_binary_sim(
                     n_clusters=params["n_clusters"],
                     cluster_size=params["cluster_size"],
@@ -1808,8 +2014,10 @@ def calculate_cluster_binary(params):
                     bayes_backend=bayes_backend,
                     bayes_draws=bayes_draws,
                     bayes_warmup=bayes_warmup,
-                    bayes_inference_method=bayes_inference_method
+                    bayes_inference_method=bayes_inference_method,
+                    progress_callback=_update_progress
                 )
+                progress_bar.empty()
             
             # Run sensitivity analysis if requested
             if run_sensitivity:

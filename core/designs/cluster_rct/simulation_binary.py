@@ -956,7 +956,7 @@ def _analyze_binary_bayes(df, bayes_backend="stan", bayes_draws=500, bayes_warmu
         return result
 
 
-def power_binary_sim(n_clusters, cluster_size, icc, p1, p2=None, nsim=1000, alpha=0.05, seed=None, cv_cluster_size=0, cluster_sizes=None, effect_measure=None, effect_value=None, analysis_method="deff_ztest", bayes_backend="stan", bayes_draws=500, bayes_warmup=500, bayes_inference_method="credible_interval"):
+def power_binary_sim(n_clusters, cluster_size, icc, p1, p2=None, nsim=1000, alpha=0.05, seed=None, cv_cluster_size=0, cluster_sizes=None, effect_measure=None, effect_value=None, analysis_method="deff_ztest", bayes_backend="stan", bayes_draws=500, bayes_warmup=500, bayes_inference_method="credible_interval", progress_callback=None):
     """
     Simulate a cluster RCT with binary outcome and estimate power.
     
@@ -1002,6 +1002,8 @@ def power_binary_sim(n_clusters, cluster_size, icc, p1, p2=None, nsim=1000, alph
     bayes_inference_method : str, optional
         Method for Bayesian significance testing. Options: "credible_interval", 
         "posterior_probability", "rope". Default is "credible_interval".
+    progress_callback : function, optional
+        A function to call with progress updates during simulation.
     
     Returns
     -------
@@ -1035,7 +1037,12 @@ def power_binary_sim(n_clusters, cluster_size, icc, p1, p2=None, nsim=1000, alph
     if n_clusters < 2 :
         warnings.warn("Number of clusters per arm is less than 2. Results may be unreliable.", UserWarning)
 
-    for _ in tqdm(range(nsim), desc=f"Simulating trials ({analysis_method}) for power (binary)"):
+    if progress_callback is None:
+        iterator = tqdm(range(nsim), desc=f"Simulating trials ({analysis_method}) for power (binary)")
+    else:
+        iterator = range(nsim)
+    
+    for i in iterator:
         df_trial = simulate_binary_trial(
             n_clusters=n_clusters, 
             cluster_size=cluster_size, 
@@ -1095,6 +1102,10 @@ def power_binary_sim(n_clusters, cluster_size, icc, p1, p2=None, nsim=1000, alph
         
         if fit_status in acceptable_statuses_for_power and p_val < alpha:
             significant_results += 1
+        
+        # Update progress if callback provided
+        if progress_callback and ((i + 1) % max(1, nsim // 100) == 0 or (i + 1) == nsim):
+            progress_callback(i + 1, nsim)
             
     num_valid_sims_for_power = sum(count for status, count in fit_statuses.items() if status in acceptable_statuses_for_power)
 
@@ -1125,7 +1136,7 @@ def sample_size_binary_sim(p1, p2=None, icc=0.01, cluster_size=50,
                             effect_measure=None, effect_value=None,
                             analysis_method="deff_ztest", bayes_backend="stan", 
                             bayes_draws=500, bayes_warmup=500, 
-                            bayes_inference_method="credible_interval"):
+                            bayes_inference_method="credible_interval", progress_callback=None):
     """
     Find required sample size for a cluster RCT with binary outcome using simulation.
     
@@ -1161,6 +1172,8 @@ def sample_size_binary_sim(p1, p2=None, icc=0.01, cluster_size=50,
         Used with effect_value if p2 is None.
     effect_value : float, optional
         Value of the effect measure. Used with effect_measure if p2 is None.
+    progress_callback : function, optional
+        A function to call with progress updates during simulation.
     
     Returns
     -------
@@ -1235,7 +1248,12 @@ def sample_size_binary_sim(p1, p2=None, icc=0.01, cluster_size=50,
     
     print(f"Starting binary search with n_clusters between {low} and {high}")
     
+    # Create progress bar for binary search
+    search_iterations = int(np.log2(high - low + 1)) + 1  # Approximate max iterations for binary search
+    pbar = tqdm(total=search_iterations, desc="Binary search for sample size (binary sim)", disable=search_iterations < 5)
+    
     while low <= high:
+        pbar.update(1)
         mid = (low + high) // 2
         print(f"Testing n_clusters = {mid}...")
         
@@ -1254,7 +1272,8 @@ def sample_size_binary_sim(p1, p2=None, icc=0.01, cluster_size=50,
             bayes_backend=bayes_backend,
             bayes_draws=bayes_draws,
             bayes_warmup=bayes_warmup,
-            bayes_inference_method=bayes_inference_method
+            bayes_inference_method=bayes_inference_method,
+            progress_callback=progress_callback
         )
         
         empirical_power = sim_results["power"]
@@ -1267,6 +1286,8 @@ def sample_size_binary_sim(p1, p2=None, icc=0.01, cluster_size=50,
         else:
             # This n_clusters is insufficient, try larger
             low = mid + 1
+    
+    pbar.close()
     
     # Get final power for the optimal n_clusters
     final_results = power_binary_sim(analysis_method=analysis_method, 
@@ -1283,7 +1304,8 @@ def sample_size_binary_sim(p1, p2=None, icc=0.01, cluster_size=50,
         bayes_backend=bayes_backend,
         bayes_draws=bayes_draws,
         bayes_warmup=bayes_warmup,
-        bayes_inference_method=bayes_inference_method
+        bayes_inference_method=bayes_inference_method,
+        progress_callback=progress_callback
     )
     
     # Calculate additional metrics
@@ -1337,7 +1359,7 @@ def min_detectable_effect_binary_sim(n_clusters, cluster_size, icc, p1,
                                       effect_measure='risk_difference',
                                       analysis_method="deff_ztest", bayes_backend="stan", 
                                       bayes_draws=500, bayes_warmup=500, 
-                                      bayes_inference_method="credible_interval"):
+                                      bayes_inference_method="credible_interval", progress_callback=None):
     """
     Calculate minimum detectable effect for a cluster RCT with binary outcome using simulation.
     
@@ -1374,6 +1396,8 @@ def min_detectable_effect_binary_sim(n_clusters, cluster_size, icc, p1,
     effect_measure : str, optional
         Type of effect measure to return: 'risk_difference', 'risk_ratio', or 'odds_ratio'.
         Default is 'risk_difference'
+    progress_callback : function, optional
+        A function to call with progress updates during simulation.
     
     Returns
     -------
@@ -1428,7 +1452,11 @@ def min_detectable_effect_binary_sim(n_clusters, cluster_size, icc, p1,
     iteration = 0
     min_adequate_effect = high
     
+    # Create progress bar for binary search
+    pbar = tqdm(total=max_iterations, desc="Binary search for MDE (binary sim)", disable=max_iterations < 5)
+    
     while iteration < max_iterations and high - low > precision:
+        pbar.update(1)
         mid = (low + high) / 2
         print(f"Iteration {iteration + 1}: Testing effect size = {mid:.4f}...")
         
@@ -1453,7 +1481,8 @@ def min_detectable_effect_binary_sim(n_clusters, cluster_size, icc, p1,
             bayes_backend=bayes_backend,
             bayes_draws=bayes_draws,
             bayes_warmup=bayes_warmup,
-            bayes_inference_method=bayes_inference_method
+            bayes_inference_method=bayes_inference_method,
+            progress_callback=progress_callback
         )
         
         empirical_power = sim_results["power"]
@@ -1468,6 +1497,8 @@ def min_detectable_effect_binary_sim(n_clusters, cluster_size, icc, p1,
             low = mid
         
         iteration += 1
+    
+    pbar.close()
     
     # Use the minimum effect size that meets the power requirement
     final_effect = min_adequate_effect
@@ -1488,7 +1519,8 @@ def min_detectable_effect_binary_sim(n_clusters, cluster_size, icc, p1,
         bayes_backend=bayes_backend,
         bayes_draws=bayes_draws,
         bayes_warmup=bayes_warmup,
-        bayes_inference_method=bayes_inference_method
+        bayes_inference_method=bayes_inference_method,
+        progress_callback=progress_callback
     )
     
     # Extract the empirical power from final simulation

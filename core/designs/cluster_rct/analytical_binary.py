@@ -14,6 +14,7 @@ Features include:
 import math
 import numpy as np
 from scipy import stats
+from tqdm import tqdm
 from .cluster_utils import (design_effect_equal, design_effect_unequal, 
                            validate_cluster_parameters, convert_effect_measures)
 
@@ -450,5 +451,327 @@ def min_detectable_effect_binary(n_clusters, cluster_size, icc, p1, power=0.8, a
         cv_cluster_size=cv_cluster_size
     )["power"]
     results["achieved_power"] = achieved_power
+    
+    return results
+
+
+# ===========================
+# Permutation Test Functions  
+# ===========================
+
+def power_binary_permutation(n_clusters, cluster_size, icc, p1, p2, alpha=0.05, cv_cluster_size=0.0, n_simulations=1000, progress_callback=None):
+    """
+    Calculate power for a cluster RCT using permutation tests (exact inference).
+    
+    This provides exact p-values without distributional assumptions, ideal for 
+    small cluster trials (5-15 clusters per arm).
+    
+    Parameters
+    ----------
+    n_clusters : int
+        Number of clusters per arm
+    cluster_size : int
+        Average number of individuals per cluster
+    icc : float
+        Intracluster correlation coefficient
+    p1 : float
+        Proportion in control group
+    p2 : float
+        Proportion in intervention group
+    alpha : float, optional
+        Significance level, by default 0.05
+    cv_cluster_size : float, optional
+        Coefficient of variation for cluster sizes, by default 0.0
+    n_simulations : int, optional
+        Number of simulations to estimate power, by default 1000
+    progress_callback : function, optional
+        A function to call with progress updates during simulation.
+        
+    Returns
+    -------
+    dict
+        Dictionary containing power estimate and study details
+    """
+    from .permutation_tests import cluster_permutation_test_binary
+    
+    # Calculate design effect
+    deff = 1 + (cluster_size - 1) * icc
+    
+    np.random.seed(42)  # For reproducibility
+    
+    significant_count = 0
+    
+    if progress_callback is None:
+        iterator = tqdm(range(n_simulations), desc="Running permutation power simulations (binary)", disable=n_simulations < 100)
+    else:
+        iterator = range(n_simulations)
+    
+    for i in iterator:
+        # Generate cluster-level proportions for beta-binomial model
+        if icc <= 0:
+            # No clustering effect
+            control_props = np.full(n_clusters, p1)
+            treatment_props = np.full(n_clusters, p2)
+        else:
+            # Control arm
+            if p1 == 0.0:
+                control_props = np.zeros(n_clusters)
+            elif p1 == 1.0:
+                control_props = np.ones(n_clusters)
+            else:
+                alpha1 = p1 * (1.0 - icc) / icc
+                beta1 = (1.0 - p1) * (1.0 - icc) / icc
+                control_props = np.random.beta(alpha1, beta1, n_clusters)
+            
+            # Treatment arm
+            if p2 == 0.0:
+                treatment_props = np.zeros(n_clusters)
+            elif p2 == 1.0:
+                treatment_props = np.ones(n_clusters)
+            else:
+                alpha2 = p2 * (1.0 - icc) / icc
+                beta2 = (1.0 - p2) * (1.0 - icc) / icc
+                treatment_props = np.random.beta(alpha2, beta2, n_clusters)
+        
+        # Perform permutation test
+        result = cluster_permutation_test_binary(
+            control_clusters=control_props,
+            treatment_clusters=treatment_props,
+            n_permutations='auto',  # Automatically choose exact or Monte Carlo
+            confidence_level=1-alpha
+        )
+        
+        if result['p_value'] < alpha:
+            significant_count += 1
+        
+        # Update progress if callback provided
+        if progress_callback and ((i + 1) % max(1, n_simulations // 100) == 0 or (i + 1) == n_simulations):
+            progress_callback(i + 1, n_simulations)
+    
+    power = significant_count / n_simulations
+    
+    # Format results
+    results = {
+        "power": power,
+        "n_clusters": n_clusters,
+        "cluster_size": cluster_size,
+        "total_n": 2 * n_clusters * cluster_size,
+        "icc": icc,
+        "p1": p1,
+        "p2": p2,
+        "risk_difference": abs(p2 - p1),
+        "risk_ratio": p2 / p1 if p1 > 0 else float('inf'),
+        "odds_ratio": (p2 / (1 - p2)) / (p1 / (1 - p1)) if p1 < 1 and p2 < 1 else float('inf'),
+        "design_effect": deff,
+        "effective_n": n_clusters * cluster_size / deff,
+        "alpha": alpha,
+        "cv_cluster_size": cv_cluster_size,
+        "method": "permutation_test",
+        "n_simulations": n_simulations
+    }
+    
+    return results
+
+
+def sample_size_binary_permutation(p1, p2, icc, cluster_size, power=0.8, alpha=0.05, cv_cluster_size=0.0, max_clusters=100):
+    """
+    Calculate required sample size for binary cluster RCT using permutation test power estimation.
+    
+    Parameters
+    ----------
+    p1 : float
+        Proportion in control group
+    p2 : float
+        Proportion in intervention group
+    icc : float
+        Intracluster correlation coefficient
+    cluster_size : int
+        Average cluster size
+    power : float, optional
+        Target power, by default 0.8
+    alpha : float, optional
+        Significance level, by default 0.05
+    cv_cluster_size : float, optional
+        Coefficient of variation for cluster sizes, by default 0.0
+    max_clusters : int, optional
+        Maximum clusters to search, by default 100
+        
+    Returns
+    -------
+    dict
+        Dictionary containing required sample size and study details
+    """
+    # Solve for number of clusters
+    for n_clusters in tqdm(range(2, max_clusters + 1), desc="Searching optimal cluster count (permutation)", disable=max_clusters < 20):
+        result = power_binary_permutation(
+            n_clusters=n_clusters,
+            cluster_size=cluster_size,
+            icc=icc,
+            p1=p1,
+            p2=p2,
+            alpha=alpha,
+            cv_cluster_size=cv_cluster_size,
+            n_simulations=500  # Reduced for sample size search
+        )
+        
+        if result["power"] >= power:
+            result.update({
+                "target_power": power,
+                "achieved_power": result["power"],
+                "method": "permutation_test_sample_size"
+            })
+            return result
+    
+    # If no solution found within max_clusters
+    return {
+        "n_clusters": max_clusters,
+        "cluster_size": cluster_size,
+        "total_n": 2 * max_clusters * cluster_size,
+        "power": result["power"],
+        "target_power": power,
+        "warning": f"Target power not achieved within {max_clusters} clusters per arm",
+        "method": "permutation_test_sample_size"
+    }
+
+
+def min_detectable_effect_binary_permutation(n_clusters, cluster_size, icc, p1, power=0.8, alpha=0.05, 
+                                           cv_cluster_size=0.0, effect_measure='risk_difference',
+                                           precision=0.01, max_iterations=20):
+    """
+    Calculate minimum detectable effect for binary cluster RCT using permutation tests.
+    
+    Parameters
+    ----------
+    n_clusters : int
+        Number of clusters per arm
+    cluster_size : int
+        Average number of individuals per cluster
+    icc : float
+        Intracluster correlation coefficient
+    p1 : float
+        Proportion in control group
+    power : float, optional
+        Target power, by default 0.8
+    alpha : float, optional
+        Significance level, by default 0.05
+    cv_cluster_size : float, optional
+        Coefficient of variation for cluster sizes, by default 0.0
+    effect_measure : str, optional
+        Type of effect measure to return ('risk_difference', 'risk_ratio', 'odds_ratio'), by default 'risk_difference'
+    precision : float, optional
+        Precision for effect size search, by default 0.01
+    max_iterations : int, optional
+        Maximum search iterations, by default 20
+        
+    Returns
+    -------
+    dict
+        Dictionary containing minimum detectable effect and study details
+    """
+    # Get analytical estimate as starting point
+    analytical_result = min_detectable_effect_binary(
+        n_clusters=n_clusters,
+        cluster_size=cluster_size,
+        icc=icc,
+        p1=p1,
+        power=power,
+        alpha=alpha,
+        cv_cluster_size=cv_cluster_size,
+        effect_measure=effect_measure
+    )
+    
+    # Binary search for minimum detectable effect (in risk difference)
+    low = 0.01  # Very small effect
+    high = min(analytical_result.get("risk_difference", 0.2) * 2, 1.0 - p1)  # Upper bound
+    
+    iteration = 0
+    best_effect = high
+    
+    # Create progress bar for binary search
+    pbar = tqdm(total=max_iterations, desc="Binary search for MDE (permutation)", disable=max_iterations < 5)
+    
+    while iteration < max_iterations and (high - low) > precision:
+        pbar.update(1)
+        mid = (low + high) / 2
+        p2_test = p1 + mid  # Test this risk difference
+        
+        if p2_test > 0.99:  # Avoid boundary
+            high = mid
+            continue
+        
+        # Test power with this effect size
+        result = power_binary_permutation(
+            n_clusters=n_clusters,
+            cluster_size=cluster_size,
+            icc=icc,
+            p1=p1,
+            p2=p2_test,
+            alpha=alpha,
+            cv_cluster_size=cv_cluster_size,
+            n_simulations=500  # Reduced for search
+        )
+        
+        if result["power"] >= power:
+            # Effect is large enough, try smaller
+            best_effect = mid
+            high = mid
+        else:
+            # Effect too small, try larger
+            low = mid
+        
+        iteration += 1
+    
+    pbar.close()
+    
+    # Get final power estimate with best effect
+    p2_final = p1 + best_effect
+    final_result = power_binary_permutation(
+        n_clusters=n_clusters,
+        cluster_size=cluster_size,
+        icc=icc,
+        p1=p1,
+        p2=p2_final,
+        alpha=alpha,
+        cv_cluster_size=cv_cluster_size,
+        n_simulations=1000  # Full precision for final result
+    )
+    
+    # Calculate effect measures
+    risk_difference = best_effect
+    risk_ratio = p2_final / p1 if p1 > 0 else float('inf')
+    odds_ratio = (p2_final / (1 - p2_final)) / (p1 / (1 - p1)) if p1 < 1 and p2_final < 1 else float('inf')
+    
+    # Determine primary MDE based on effect_measure
+    if effect_measure == 'risk_difference':
+        mde_primary = risk_difference
+    elif effect_measure == 'risk_ratio':
+        mde_primary = risk_ratio
+    elif effect_measure == 'odds_ratio':
+        mde_primary = odds_ratio
+    else:
+        mde_primary = risk_difference
+        effect_measure = 'risk_difference'
+    
+    # Format results
+    results = {
+        "mde": mde_primary,
+        "effect_measure": effect_measure,
+        "p1": p1,
+        "p2": p2_final,
+        "risk_difference": risk_difference,
+        "risk_ratio": risk_ratio,
+        "odds_ratio": odds_ratio,
+        "n_clusters": n_clusters,
+        "cluster_size": cluster_size,
+        "total_n": 2 * n_clusters * cluster_size,
+        "icc": icc,
+        "design_effect": 1 + (cluster_size - 1) * icc,
+        "cv_cluster_size": cv_cluster_size,
+        "alpha": alpha,
+        "target_power": power,
+        "achieved_power": final_result["power"],
+        "method": "permutation_test_mde",
+        "iterations": iteration
+    }
     
     return results

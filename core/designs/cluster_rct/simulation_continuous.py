@@ -1150,6 +1150,10 @@ def sample_size_continuous_sim(
         current_low_k, current_high_k = low_k, high_k
         iterations_k = 0
         max_iterations_k = 30 # Max iterations for k search
+        
+        # Create progress bar for binary search
+        pbar_k = tqdm(total=max_iterations_k, desc="Binary search for cluster count (continuous sim)", disable=max_iterations_k < 5)
+        
         while current_low_k <= current_high_k:
             if iterations_k >= max_iterations_k:
                 warning_message = (
@@ -1159,6 +1163,7 @@ def sample_size_continuous_sim(
                 print(f"Warning: {warning_message}")
                 break
             iterations_k += 1
+            pbar_k.update(1)
             mid_k = (current_low_k + current_high_k) // 2
             if mid_k < min_n_clusters: mid_k = min_n_clusters # Ensure mid_k is not below min
             if mid_k == 0: # Avoid n_clusters = 0
@@ -1185,6 +1190,8 @@ def sample_size_continuous_sim(
             else:
                 current_low_k = mid_k + 1
         
+        pbar_k.close()
+        
         if min_adequate_k > max_n_clusters and min_adequate_k == high_k + 1: # Initial value not updated
              # This means power was not achieved even at high_k. Use high_k for final sim to report achieved power.
             final_n_clusters_result = max_n_clusters 
@@ -1209,6 +1216,10 @@ def sample_size_continuous_sim(
         current_low_m, current_high_m = low_m, high_m
         iterations_m = 0
         max_iterations_m = 30 # Max iterations for m search
+        
+        # Create progress bar for binary search
+        pbar_m = tqdm(total=max_iterations_m, desc="Binary search for cluster size (continuous sim)", disable=max_iterations_m < 5)
+        
         while current_low_m <= current_high_m:
             if iterations_m >= max_iterations_m:
                 warning_message = (
@@ -1218,6 +1229,7 @@ def sample_size_continuous_sim(
                 print(f"Warning: {warning_message}")
                 break
             iterations_m += 1
+            pbar_m.update(1)
             mid_m = (current_low_m + current_high_m) // 2
             if mid_m < min_cluster_size: mid_m = min_cluster_size
             if mid_m == 0: # Avoid cluster_size = 0
@@ -1243,6 +1255,8 @@ def sample_size_continuous_sim(
                 current_high_m = mid_m - 1
             else:
                 current_low_m = mid_m + 1
+        
+        pbar_m.close()
         
         if min_adequate_m > max_cluster_size and min_adequate_m == high_m + 1:
             final_cluster_size_result = max_cluster_size
@@ -1361,7 +1375,11 @@ def min_detectable_effect_continuous_sim(
     iteration = 0
     min_adequate_effect = high
     
+    # Create progress bar for binary search
+    pbar = tqdm(total=max_iterations, desc="Binary search for MDE (continuous sim)", disable=max_iterations < 5)
+    
     while iteration < max_iterations and high - low > precision:
+        pbar.update(1)
         mid = (low + high) / 2
         print(f"Iteration {iteration + 1}: Testing effect size = {mid:.4f}...")
         
@@ -1402,6 +1420,8 @@ def min_detectable_effect_continuous_sim(
             low = mid
         
         iteration += 1
+    
+    pbar.close()
     
     # Use the minimum effect size that meets the power requirement
     final_effect = min_adequate_effect

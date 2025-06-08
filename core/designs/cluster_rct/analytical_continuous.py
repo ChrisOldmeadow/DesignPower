@@ -8,6 +8,7 @@ with continuous outcomes using analytical formulas.
 import math
 import numpy as np
 from scipy import stats
+from tqdm import tqdm
 
 
 def power_continuous(n_clusters, cluster_size, icc, mean1, mean2, std_dev, alpha=0.05):
@@ -376,6 +377,331 @@ def min_detectable_effect_continuous(n_clusters, cluster_size, icc, std_dev, pow
         "effective_n": n_eff,
         "alpha": alpha,
         "power": power
+    }
+    
+    return results
+
+
+# ===========================
+# Permutation Test Functions  
+# ===========================
+
+def power_continuous_permutation(n_clusters, cluster_size, icc, mean1, mean2, std_dev, alpha=0.05, n_simulations=1000, progress_callback=None):
+    """
+    Calculate power for a cluster RCT using permutation tests (exact inference).
+    
+    This provides exact p-values without distributional assumptions, ideal for 
+    small cluster trials (5-15 clusters per arm).
+    
+    Parameters
+    ----------
+    n_clusters : int
+        Number of clusters per arm
+    cluster_size : int
+        Average number of individuals per cluster
+    icc : float
+        Intracluster correlation coefficient
+    mean1 : float
+        Mean outcome in control group
+    mean2 : float
+        Mean outcome in intervention group  
+    std_dev : float
+        Pooled standard deviation of the outcome
+    alpha : float, optional
+        Significance level, by default 0.05
+    n_simulations : int, optional
+        Number of simulations to estimate power, by default 1000
+    progress_callback : function, optional
+        A function to call with progress updates during simulation.
+        
+    Returns
+    -------
+    dict
+        Dictionary containing power estimate and study details
+    """
+    from .permutation_tests import cluster_permutation_test
+    
+    # Calculate design effect
+    deff = 1 + (cluster_size - 1) * icc
+    
+    # Generate cluster-level means for permutation test
+    # Simulate cluster-level data with the specified effect
+    var_between = icc * std_dev**2
+    var_within = (1 - icc) * std_dev**2
+    cluster_sd = np.sqrt(var_between + var_within / cluster_size)
+    
+    np.random.seed(42)  # For reproducibility
+    
+    significant_count = 0
+    
+    if progress_callback is None:
+        iterator = tqdm(range(n_simulations), desc="Running permutation power simulations (continuous)", disable=n_simulations < 100)
+    else:
+        iterator = range(n_simulations)
+    
+    for i in iterator:
+        # Generate cluster means
+        control_clusters = np.random.normal(mean1, cluster_sd, n_clusters)
+        treatment_clusters = np.random.normal(mean2, cluster_sd, n_clusters)
+        
+        # Perform permutation test
+        perm_data = {
+            'control_clusters': control_clusters,
+            'treatment_clusters': treatment_clusters
+        }
+        
+        # Determine permutation strategy based on cluster count
+        total_clusters = 2 * n_clusters
+        if total_clusters <= 12:
+            n_perms = 'exact'
+        elif total_clusters <= 20:
+            n_perms = 10000
+        else:
+            n_perms = 5000
+        
+        result = cluster_permutation_test(
+            data=perm_data,
+            test_statistic='t_statistic',
+            n_permutations=n_perms,
+            alternative='two-sided'
+        )
+        
+        if result['p_value'] < alpha:
+            significant_count += 1
+        
+        # Update progress if callback provided
+        if progress_callback and ((i + 1) % max(1, n_simulations // 100) == 0 or (i + 1) == n_simulations):
+            progress_callback(i + 1, n_simulations)
+    
+    power = significant_count / n_simulations
+    
+    # Format results
+    results = {
+        "power": power,
+        "n_clusters": n_clusters,
+        "cluster_size": cluster_size,
+        "total_n": 2 * n_clusters * cluster_size,
+        "icc": icc,
+        "mean1": mean1,
+        "mean2": mean2,
+        "difference": abs(mean1 - mean2),
+        "std_dev": std_dev,
+        "design_effect": deff,
+        "effective_n": n_clusters * cluster_size / deff,
+        "alpha": alpha,
+        "method": "permutation_test",
+        "n_simulations": n_simulations
+    }
+    
+    return results
+
+
+def sample_size_continuous_permutation(mean1, mean2, std_dev, icc, power=0.8, alpha=0.05, 
+                                      cluster_size=None, n_clusters_fixed=None, max_clusters=100):
+    """
+    Calculate required sample size for cluster RCT using permutation test power estimation.
+    
+    Parameters
+    ----------
+    mean1 : float
+        Mean outcome in control group
+    mean2 : float  
+        Mean outcome in intervention group
+    std_dev : float
+        Pooled standard deviation
+    icc : float
+        Intracluster correlation coefficient
+    power : float, optional
+        Target power, by default 0.8
+    alpha : float, optional
+        Significance level, by default 0.05
+    cluster_size : int, optional
+        Fixed cluster size (to solve for number of clusters)
+    n_clusters_fixed : int, optional  
+        Fixed number of clusters per arm (to solve for cluster size)
+    max_clusters : int, optional
+        Maximum clusters to search, by default 100
+        
+    Returns
+    -------
+    dict
+        Dictionary containing required sample size and study details
+    """
+    if cluster_size is not None:
+        # Solve for number of clusters
+        for n_clusters in tqdm(range(2, max_clusters + 1), desc="Searching optimal cluster count (permutation)", disable=max_clusters < 20):
+            result = power_continuous_permutation(
+                n_clusters=n_clusters,
+                cluster_size=cluster_size,
+                icc=icc,
+                mean1=mean1,
+                mean2=mean2,
+                std_dev=std_dev,
+                alpha=alpha,
+                n_simulations=500  # Reduced for sample size search
+            )
+            
+            if result["power"] >= power:
+                result.update({
+                    "target_power": power,
+                    "achieved_power": result["power"],
+                    "method": "permutation_test_sample_size"
+                })
+                return result
+        
+        # If no solution found within max_clusters
+        return {
+            "n_clusters": max_clusters,
+            "cluster_size": cluster_size,
+            "total_n": 2 * max_clusters * cluster_size,
+            "power": result["power"],
+            "target_power": power,
+            "warning": f"Target power not achieved within {max_clusters} clusters per arm",
+            "method": "permutation_test_sample_size"
+        }
+    
+    elif n_clusters_fixed is not None:
+        # Solve for cluster size
+        for cs in tqdm(range(2, 1000), desc="Searching optimal cluster size (permutation)", disable=1000 < 100):
+            result = power_continuous_permutation(
+                n_clusters=n_clusters_fixed,
+                cluster_size=cs,
+                icc=icc,
+                mean1=mean1,
+                mean2=mean2,
+                std_dev=std_dev,
+                alpha=alpha,
+                n_simulations=500
+            )
+            
+            if result["power"] >= power:
+                result.update({
+                    "target_power": power,
+                    "achieved_power": result["power"],
+                    "method": "permutation_test_sample_size"
+                })
+                return result
+        
+        # If no solution found
+        return {
+            "n_clusters": n_clusters_fixed,
+            "cluster_size": 1000,
+            "total_n": 2 * n_clusters_fixed * 1000,
+            "power": result["power"],
+            "target_power": power,
+            "warning": "Target power not achieved within reasonable cluster sizes",
+            "method": "permutation_test_sample_size"
+        }
+    
+    else:
+        raise ValueError("Either cluster_size or n_clusters_fixed must be specified")
+
+
+def min_detectable_effect_continuous_permutation(n_clusters, cluster_size, icc, std_dev, 
+                                                power=0.8, alpha=0.05, precision=0.01, max_iterations=20):
+    """
+    Calculate minimum detectable effect for cluster RCT using permutation tests.
+    
+    Parameters
+    ----------
+    n_clusters : int
+        Number of clusters per arm
+    cluster_size : int
+        Average number of individuals per cluster
+    icc : float
+        Intracluster correlation coefficient
+    std_dev : float
+        Pooled standard deviation
+    power : float, optional
+        Target power, by default 0.8
+    alpha : float, optional
+        Significance level, by default 0.05
+    precision : float, optional
+        Precision for effect size search, by default 0.01
+    max_iterations : int, optional
+        Maximum search iterations, by default 20
+        
+    Returns
+    -------
+    dict
+        Dictionary containing minimum detectable effect and study details
+    """
+    # Get analytical estimate as starting point
+    analytical_result = min_detectable_effect_continuous(
+        n_clusters=n_clusters,
+        cluster_size=cluster_size,
+        icc=icc,
+        std_dev=std_dev,
+        power=power,
+        alpha=alpha
+    )
+    
+    # Binary search for minimum detectable effect
+    low = 0.01 * std_dev  # Very small effect
+    high = analytical_result["mde"] * 2  # Start with 2x analytical estimate
+    
+    iteration = 0
+    best_effect = high
+    
+    # Create progress bar for binary search
+    pbar = tqdm(total=max_iterations, desc="Binary search for MDE (permutation)", disable=max_iterations < 5)
+    
+    while iteration < max_iterations and (high - low) > precision:
+        pbar.update(1)
+        mid = (low + high) / 2
+        
+        # Test power with this effect size
+        result = power_continuous_permutation(
+            n_clusters=n_clusters,
+            cluster_size=cluster_size,
+            icc=icc,
+            mean1=0.0,  # Baseline
+            mean2=mid,  # Effect size
+            std_dev=std_dev,
+            alpha=alpha,
+            n_simulations=500  # Reduced for search
+        )
+        
+        if result["power"] >= power:
+            # Effect is large enough, try smaller
+            best_effect = mid
+            high = mid
+        else:
+            # Effect too small, try larger
+            low = mid
+        
+        iteration += 1
+    
+    pbar.close()
+    
+    # Get final power estimate with best effect
+    final_result = power_continuous_permutation(
+        n_clusters=n_clusters,
+        cluster_size=cluster_size,
+        icc=icc,
+        mean1=0.0,
+        mean2=best_effect,
+        std_dev=std_dev,
+        alpha=alpha,
+        n_simulations=1000  # Full precision for final result
+    )
+    
+    # Format results
+    results = {
+        "mde": best_effect,
+        "standardized_mde": best_effect / std_dev,
+        "n_clusters": n_clusters,
+        "cluster_size": cluster_size,
+        "total_n": 2 * n_clusters * cluster_size,
+        "icc": icc,
+        "std_dev": std_dev,
+        "design_effect": 1 + (cluster_size - 1) * icc,
+        "effective_n": n_clusters * cluster_size / (1 + (cluster_size - 1) * icc),
+        "alpha": alpha,
+        "target_power": power,
+        "achieved_power": final_result["power"],
+        "method": "permutation_test_mde",
+        "iterations": iteration
     }
     
     return results
