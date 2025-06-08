@@ -55,41 +55,30 @@ def sample_size_continuous(mean1, mean2, sd1, sd2=None, power=0.8, alpha=0.05,
     # Calculate effect size (Cohen's d)
     effect_size = abs(mean1 - mean2) / np.sqrt((sd1**2 + sd2**2) / 2)
     
-    # Use iterative approach with t-distribution for more accurate results
+    # Use t-distribution approach with one-step refinement for more accurate results
     # when variance is unknown (which is always the case in practice)
     z_beta = stats.norm.ppf(power)  # Power calculation still uses normal
-    
-    # Start with normal approximation for initial guess
     z_alpha = stats.norm.ppf(1 - alpha/2)
-    numerator_initial = (z_alpha + z_beta)**2 * (sd1**2 + sd2**2 / allocation_ratio)
-    denominator = (mean1 - mean2)**2
     
     # Handle case where denominator is zero
+    denominator = (mean1 - mean2)**2
     if denominator == 0:
         raise ValueError("Cannot calculate sample size when means are equal")
     
-    n_estimate = numerator_initial / denominator
+    # Step 1: Initial estimate using normal approximation
+    numerator_normal = (z_alpha + z_beta)**2 * (sd1**2 + sd2**2 / allocation_ratio)
+    n_normal = numerator_normal / denominator
     
-    # Iteratively refine using t-distribution
-    max_iter = 50
-    tol = 1e-6
+    # Step 2: Estimate degrees of freedom and refine with t-distribution
+    # For two-sample t-test: df = n1 + n2 - 2 = n1(1 + allocation_ratio) - 2
+    df_estimate = n_normal * (1 + allocation_ratio) - 2
     
-    for i in range(max_iter):
-        # Calculate degrees of freedom for two-sample t-test
-        n2_current = n_estimate * allocation_ratio
-        df = n_estimate + n2_current - 2
-        
-        # Get t critical value
-        t_alpha = stats.t.ppf(1 - alpha/2, df)
-        
-        # Recalculate sample size
-        numerator_t = (t_alpha + z_beta)**2 * (sd1**2 + sd2**2 / allocation_ratio)
-        n_new = numerator_t / denominator
-        
-        # Check convergence
-        if abs(n_new - n_estimate) < tol:
-            break
-        n_estimate = n_new
+    # Get t critical value with estimated df
+    t_alpha = stats.t.ppf(1 - alpha/2, df_estimate)
+    
+    # Recalculate sample size using t critical value
+    numerator_t = (t_alpha + z_beta)**2 * (sd1**2 + sd2**2 / allocation_ratio)
+    n_estimate = numerator_t / denominator
     
     n1 = math.ceil(n_estimate)
     n2 = math.ceil(n1 * allocation_ratio)

@@ -195,19 +195,26 @@ print(f"Backend: {results['sim_details']['bayes_backend']}")
 ### t-Distribution Implementation (2025)
 **Enhanced Statistical Accuracy for Continuous Outcomes**
 
-DesignPower now uses **t-distribution critical values** instead of normal distribution for continuous outcome sample size calculations:
+DesignPower now uses **t-distribution critical values** with proper degrees of freedom for continuous outcome sample size calculations:
 
 ```
-✅ Before: 25 participants/group (using normal distribution)  
-✅ After:  26 participants/group (using t-distribution)
+✅ Before: 25 participants/group (normal distribution, df=∞)  
+✅ After:  26 participants/group (t-distribution, df=2n-2)
+✅ Method: Two-step refinement (standard practice)
 ✅ Result: 100% match with Cohen (1988) benchmarks
 ```
 
+**Implementation approach:**
+1. **Calculate initial estimate** using normal approximation
+2. **Estimate degrees of freedom** from preliminary sample size  
+3. **Refine calculation** using appropriate t-distribution critical value
+4. **Balance accuracy and simplicity** - no complex iteration needed
+
 **Why this matters:**
-- **More statistically rigorous**: Accounts for variance uncertainty in real studies
-- **Benchmark consistency**: Exact matches to authoritative statistical tables
-- **Conservative approach**: Appropriate protection against Type II error
-- **Clinical relevance**: Meaningful for typical trial sizes (n=10-200 per group)
+- **Statistically appropriate**: Uses correct sampling distribution when variance is unknown
+- **Benchmark consistency**: Exact matches to Cohen's authoritative tables
+- **Standard practice**: Follows established statistical methodology
+- **Practical accuracy**: Meaningful improvements for typical clinical trial sizes
 
 ## ✅ Validation & Quality Assurance
 

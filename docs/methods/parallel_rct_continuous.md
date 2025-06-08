@@ -25,18 +25,23 @@ Where:
 - $t_{df,1-\alpha/2}$ = critical value from the t-distribution with $df = 2n-2$ degrees of freedom
 - $z_{1-\beta}$ = critical value from the standard normal distribution corresponding to the desired power
 
-#### Implementation: Iterative t-Distribution Method
+#### Implementation: Two-Step Refinement Method
 
-Since the degrees of freedom depend on the sample size being calculated, DesignPower uses an iterative approach:
+Since the degrees of freedom depend on the sample size being calculated, DesignPower uses a practical two-step approach that balances accuracy with computational simplicity:
 
-1. **Initial Estimate**: Start with normal approximation: $n_0 = \frac{2\sigma^2(z_{1-\alpha/2} + z_{1-\beta})^2}{\Delta^2}$
+1. **Initial Estimate**: Calculate preliminary sample size using normal approximation:
+   $$n_0 = \frac{2\sigma^2(z_{1-\alpha/2} + z_{1-\beta})^2}{\Delta^2}$$
 
-2. **Iterative Refinement**: For $i = 1, 2, ..., $ until convergence:
-   - Calculate $df_i = 2n_{i-1} - 2$
-   - Update $n_i = \frac{2\sigma^2(t_{df_i,1-\alpha/2} + z_{1-\beta})^2}{\Delta^2}$
-   - Continue until $|n_i - n_{i-1}| < \epsilon$ (typically $\epsilon = 10^{-6}$)
+2. **Degrees of Freedom Estimation**: Estimate the degrees of freedom from the preliminary sample size:
+   $$df_{est} = n_0(1 + r) - 2$$
+   where $r$ is the allocation ratio ($n_2/n_1$)
 
-3. **Final Result**: $n = \lceil n_{final} \rceil$ (rounded up to next integer)
+3. **Refined Calculation**: Recalculate sample size using t-distribution critical value:
+   $$n_{final} = \frac{2\sigma^2(t_{df_{est},1-\alpha/2} + z_{1-\beta})^2}{\Delta^2}$$
+
+4. **Final Result**: $n = \lceil n_{final} \rceil$ (rounded up to next integer)
+
+This approach provides nearly identical results to full iterative methods while being computationally simpler and more aligned with standard statistical practice.
 
 #### Why t-Distribution is More Accurate
 
