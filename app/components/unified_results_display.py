@@ -454,7 +454,8 @@ class UnifiedResultsDisplay:
                 st.error(f"Error generating HTML report: {e}")
     
     def _generate_cli_command(self, params: Dict[str, Any], design_type: str, outcome_type: str) -> str:
-        """Generate equivalent CLI command for the given parameters."""
+        """Generate equivalent CLI command using systematic parameter mapping."""
+        
         # Map design types to CLI format
         design_map = {
             "Parallel RCT": "parallel",
@@ -482,112 +483,148 @@ class UnifiedResultsDisplay:
         calc_cli = calc_map.get(calc_type, calc_type.lower().replace(" ", "-"))
         
         # Start building command
-        cmd_parts = ["designpower", "calculate", design_cli, outcome_cli, calc_cli]
+        cmd_parts = ["designpower", calc_cli, "--design", design_cli, "--outcome", outcome_cli]
         
-        # Add common parameters
-        alpha = params.get("alpha", 0.05)
-        if alpha != 0.05:
-            cmd_parts.extend(["--alpha", str(alpha)])
+        # Define comprehensive parameter mapping from dashboard to CLI
+        # This covers ALL possible parameters systematically
+        param_mappings = {
+            # Core statistical parameters
+            "alpha": "--alpha",
+            "power": "--power", 
+            "allocation_ratio": "--allocation-ratio",
             
-        power = params.get("power", 0.8)
-        if power != 0.8 and calc_type in ["Sample Size", "Minimum Detectable Effect"]:
-            cmd_parts.extend(["--power", str(power)])
-        
-        # Add design-specific parameters
-        if design_type == "Parallel RCT":
-            if params.get("n1") is not None:
-                cmd_parts.extend(["--n1", str(params["n1"])])
-            if params.get("n2") is not None:
-                cmd_parts.extend(["--n2", str(params["n2"])])
-        elif design_type == "Single Arm":
-            if params.get("n") is not None:
-                cmd_parts.extend(["--n", str(params["n"])])
-        elif design_type == "Cluster RCT":
-            if params.get("n_clusters") is not None:
-                cmd_parts.extend(["--n-clusters", str(params["n_clusters"])])
-            if params.get("cluster_size") is not None:
-                cmd_parts.extend(["--cluster-size", str(params["cluster_size"])])
-            if params.get("icc") is not None:
-                cmd_parts.extend(["--icc", str(params["icc"])])
-        
-        # Add outcome-specific parameters
-        if outcome_type == "Binary":
-            if params.get("p1") is not None:
-                cmd_parts.extend(["--p1", str(params["p1"])])
-            if params.get("p2") is not None:
-                cmd_parts.extend(["--p2", str(params["p2"])])
-            if params.get("p") is not None:
-                cmd_parts.extend(["--p", str(params["p"])])
-            if params.get("p0") is not None:
-                cmd_parts.extend(["--p0", str(params["p0"])])
-        elif outcome_type == "Continuous":
-            if params.get("mean1") is not None:
-                cmd_parts.extend(["--mean1", str(params["mean1"])])
-            if params.get("mean2") is not None:
-                cmd_parts.extend(["--mean2", str(params["mean2"])])
-            if params.get("mean") is not None:
-                cmd_parts.extend(["--mean", str(params["mean"])])
-            if params.get("null_mean") is not None:
-                cmd_parts.extend(["--null-mean", str(params["null_mean"])])
-            if params.get("std_dev") is not None:
-                cmd_parts.extend(["--std-dev", str(params["std_dev"])])
-        elif outcome_type == "Survival":
-            if params.get("median1") is not None:
-                cmd_parts.extend(["--median1", str(params["median1"])])
-            if params.get("median2") is not None:
-                cmd_parts.extend(["--median2", str(params["median2"])])
-            if params.get("median_survival") is not None:
-                cmd_parts.extend(["--median-survival", str(params["median_survival"])])
-            if params.get("null_median_survival") is not None:
-                cmd_parts.extend(["--null-median-survival", str(params["null_median_survival"])])
-            if params.get("accrual_time") is not None:
-                cmd_parts.extend(["--accrual-time", str(params["accrual_time"])])
-            if params.get("follow_up_time") is not None:
-                cmd_parts.extend(["--follow-up-time", str(params["follow_up_time"])])
-        
-        # Add allocation ratio if not default
-        allocation_ratio = params.get("allocation_ratio", 1.0)
-        if allocation_ratio != 1.0:
-            cmd_parts.extend(["--allocation-ratio", str(allocation_ratio)])
-        
-        # Add dropout rate if not default
-        dropout_rate = params.get("dropout_rate", 0.1)
-        if dropout_rate != 0.1:
-            cmd_parts.extend(["--dropout-rate", str(dropout_rate)])
-        
-        # Add advanced options
-        method = params.get("method", "analytical")
-        if method != "analytical":
-            cmd_parts.extend(["--method", method])
+            # Sample sizes
+            "n1": "--n1",
+            "n2": "--n2", 
+            "n": "--n",
+            "n_clusters": "--n-clusters",
+            "cluster_size": "--cluster-size",
             
-        hypothesis = params.get("hypothesis_type", "Superiority")
-        if hypothesis != "Superiority":
-            cmd_parts.extend(["--hypothesis", hypothesis.lower().replace(" ", "-")])
+            # Binary outcome parameters
+            "p1": "--p1",
+            "p2": "--p2",
+            "p": "--p",
+            "p0": "--p0",
+            
+            # Continuous outcome parameters  
+            "mean1": "--mean1",
+            "mean2": "--mean2",
+            "mean": "--mean",
+            "null_mean": "--null-mean",
+            "std_dev": "--std-dev",
+            "std_dev2": "--std-dev2",
+            
+            # Effect size parameters
+            "delta": "--delta",
+            "effect_size": "--effect-size",
+            
+            # Survival parameters
+            "median1": "--median1", 
+            "median2": "--median2",
+            "median_survival": "--median-survival",
+            "median_survival1": "--median1",
+            "hr": "--hr",
+            "accrual_time": "--accrual-time",
+            "follow_up_time": "--follow-up-time",
+            "dropout_rate": "--dropout-rate",
+            
+            # Cluster-specific parameters
+            "icc": "--icc",
+            "cv_cluster_size": "--cv-cluster-size",
+            
+            # Non-inferiority parameters
+            "non_inferiority_margin": "--non-inferiority-margin",
+            "assumed_difference": "--assumed-difference",
+            "assumed_difference_ni": "--assumed-difference",
+            
+            # Repeated measures parameters
+            "correlation": "--correlation",
+            
+            # Simulation parameters
+            "nsim": "--nsim",
+            "seed": "--seed",
+            "min_n": "--min-n",
+            "max_n": "--max-n",
+            "step_n": "--step-n",
+        }
         
-        # Add simulation parameters if applicable
-        use_simulation = params.get("use_simulation", False)
-        if use_simulation or method == "simulation":
-            nsim = params.get("nsim", 1000)
-            if nsim != 1000:
-                cmd_parts.extend(["--nsim", str(nsim)])
-            if params.get("seed") is not None:
-                cmd_parts.extend(["--seed", str(params["seed"])])
+        # Add all applicable parameters systematically
+        for param_key, cli_flag in param_mappings.items():
+            value = params.get(param_key)
+            if value is not None:
+                # Skip power parameter for power calculations
+                if cli_flag == "--power" and calc_type == "Power":
+                    continue
+                # Convert to appropriate type and add
+                if isinstance(value, (int, float)):
+                    if cli_flag in ["--n1", "--n2", "--n", "--n-clusters", "--cluster-size"]:
+                        cmd_parts.extend([cli_flag, str(int(value))])
+                    else:
+                        cmd_parts.extend([cli_flag, str(value)])
+                else:
+                    cmd_parts.extend([cli_flag, str(value)])
         
-        # Add non-inferiority margin if applicable
-        if params.get("nim") is not None:
-            cmd_parts.extend(["--nim", str(params["nim"])])
+        # Handle derived parameters (like delta from mean1/mean2)
+        if outcome_type == "Continuous" and "--delta" not in cmd_parts:
+            mean1 = params.get("mean1")
+            mean2 = params.get("mean2") 
+            if mean1 is not None and mean2 is not None:
+                delta = abs(mean2 - mean1)
+                cmd_parts.extend(["--delta", str(delta)])
         
-        # Add test type for binary outcomes
-        if outcome_type == "Binary" and params.get("test_type") is not None:
-            test_type = params["test_type"]
-            # Map internal test types to CLI parameter names
-            test_type_map = {
+        # Handle boolean flags
+        boolean_flags = {
+            "repeated_measures": "--repeated-measures",
+            "unequal_var": "--unequal-variances", 
+            "use_simulation": "--simulate",
+        }
+        
+        for param_key, cli_flag in boolean_flags.items():
+            if params.get(param_key, False):
+                cmd_parts.append(cli_flag)
+        
+        # Handle special mappings
+        if params.get("method") and params.get("method") != "analytical":
+            cmd_parts.extend(["--method", params["method"]])
+            
+        if params.get("hypothesis_type") and params.get("hypothesis_type") != "Superiority":
+            hypothesis = params["hypothesis_type"].lower().replace(" ", "-")
+            cmd_parts.extend(["--hypothesis", hypothesis])
+            
+        # Map UI values to CLI values for specific parameters
+        value_mappings = {
+            "test_type": {
                 "normal_approximation": "normal-approximation",
-                "fishers_exact": "fishers-exact",
+                "fishers_exact": "fishers-exact", 
                 "likelihood_ratio": "likelihood-ratio"
+            },
+            "analysis_method": {
+                "ANCOVA": "ancova",
+                "Change Score": "change-score"
+            },
+            "effect_measure": {
+                "risk_difference": "risk-difference",
+                "odds_ratio": "odds-ratio",
+                "relative_risk": "relative-risk"
+            },
+            "icc_scale": {
+                "Linear": "linear",
+                "Logistic": "logistic"
             }
-            cli_test_type = test_type_map.get(test_type, test_type)
-            cmd_parts.extend(["--test-type", cli_test_type])
+        }
+        
+        for param_key, mapping in value_mappings.items():
+            value = params.get(param_key)
+            if value is not None:
+                cli_value = mapping.get(value, value.lower().replace(" ", "-").replace("_", "-"))
+                if param_key == "test_type":
+                    cmd_parts.extend(["--test-type", cli_value])
+                elif param_key == "analysis_method":
+                    cmd_parts.extend(["--analysis-method", cli_value])
+                elif param_key == "effect_measure":
+                    cmd_parts.extend(["--effect-measure", cli_value])
+                elif param_key == "icc_scale":
+                    cmd_parts.extend(["--icc-scale", cli_value])
         
         return " ".join(cmd_parts)
 
