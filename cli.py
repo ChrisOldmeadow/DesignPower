@@ -474,5 +474,186 @@ def julia_example():
         raise typer.Exit(1)
 
 
+@app.command("generate-script")
+def generate_script(
+    design: DesignType = typer.Option(DesignType.PARALLEL, help="Study design"),
+    outcome: OutcomeType = typer.Option(OutcomeType.CONTINUOUS, help="Outcome type"),
+    calculation: CalculationType = typer.Option(CalculationType.SAMPLE_SIZE, help="Type of calculation"),
+    
+    # Core parameters
+    delta: Optional[float] = typer.Option(None, help="Minimum detectable effect (difference in means)"),
+    std_dev: Optional[float] = typer.Option(None, help="Standard deviation (for continuous outcomes)"),
+    p1: Optional[float] = typer.Option(None, help="Proportion in control group (for binary outcomes)"),
+    p2: Optional[float] = typer.Option(None, help="Proportion in intervention group (for binary outcomes)"),
+    power: float = typer.Option(0.8, help="Desired statistical power (1 - beta)"),
+    alpha: float = typer.Option(0.05, help="Significance level"),
+    allocation_ratio: float = typer.Option(1.0, help="Ratio of sample sizes (n2/n1) for parallel design"),
+    
+    # Sample size inputs (for power/MDE calculations)
+    n1: Optional[int] = typer.Option(None, help="Sample size group 1 (for power/MDE calculations)"),
+    n2: Optional[int] = typer.Option(None, help="Sample size group 2 (for power/MDE calculations)"),
+    
+    # Cluster design parameters
+    cluster_size: Optional[int] = typer.Option(None, help="Average number of individuals per cluster (for cluster designs)"),
+    icc: Optional[float] = typer.Option(None, help="Intracluster correlation coefficient (for cluster designs)"),
+    n_clusters: Optional[int] = typer.Option(None, help="Number of clusters per arm (for cluster designs)"),
+    
+    # Method selection
+    method: str = typer.Option("analytical", help="Calculation method (analytical, simulation, permutation)"),
+    nsim: int = typer.Option(1000, help="Number of simulations (for simulation-based estimation)"),
+    seed: Optional[int] = typer.Option(None, help="Random seed for reproducibility"),
+    
+    # Output options
+    output_file: Optional[str] = typer.Option(None, "--output", "-o", help="Output file name (defaults to stdout)")
+):
+    """
+    Generate a reproducible Python script for the specified analysis.
+    
+    This command creates a standalone Python script that reproduces the exact
+    calculation with all parameters explicitly specified.
+    """
+    try:
+        # Build parameters dictionary
+        params = {
+            'calculation_type': calculation.value.replace("-", " ").title(),
+            'method': method,
+            'alpha': alpha,
+            'power': power,
+            'allocation_ratio': allocation_ratio,
+            'nsim': nsim,
+            'seed': seed
+        }
+        
+        # Add design-specific parameters
+        if design == DesignType.PARALLEL:
+            if outcome == OutcomeType.CONTINUOUS:
+                # Validate required parameters
+                if calculation == CalculationType.SAMPLE_SIZE:
+                    if delta is None or std_dev is None:
+                        console.print("[bold red]Error:[/bold red] For sample size calculation, --delta and --std-dev are required.")
+                        raise typer.Exit(1)
+                    params.update({'mean1': 0.0, 'mean2': delta, 'std_dev': std_dev})
+                elif calculation == CalculationType.POWER:
+                    if n1 is None or n2 is None or delta is None or std_dev is None:
+                        console.print("[bold red]Error:[/bold red] For power calculation, --n1, --n2, --delta, and --std-dev are required.")
+                        raise typer.Exit(1)
+                    params.update({'n1': n1, 'n2': n2, 'mean1': 0.0, 'mean2': delta, 'std_dev': std_dev})
+                elif calculation == CalculationType.MDE:
+                    if n1 is None or n2 is None or std_dev is None:
+                        console.print("[bold red]Error:[/bold red] For MDE calculation, --n1, --n2, and --std-dev are required.")
+                        raise typer.Exit(1)
+                    params.update({'n1': n1, 'n2': n2, 'std_dev': std_dev})
+                
+                # Generate script using parallel RCT functions
+                from app.components.parallel_rct import generate_cli_code_parallel_continuous
+                script = generate_cli_code_parallel_continuous(params)
+                
+            elif outcome == OutcomeType.BINARY:
+                # Validate required parameters
+                if calculation == CalculationType.SAMPLE_SIZE:
+                    if p1 is None or p2 is None:
+                        console.print("[bold red]Error:[/bold red] For sample size calculation, --p1 and --p2 are required.")
+                        raise typer.Exit(1)
+                    params.update({'p1': p1, 'p2': p2})
+                elif calculation == CalculationType.POWER:
+                    if n1 is None or n2 is None or p1 is None or p2 is None:
+                        console.print("[bold red]Error:[/bold red] For power calculation, --n1, --n2, --p1, and --p2 are required.")
+                        raise typer.Exit(1)
+                    params.update({'n1': n1, 'n2': n2, 'p1': p1, 'p2': p2})
+                elif calculation == CalculationType.MDE:
+                    if n1 is None or n2 is None or p1 is None:
+                        console.print("[bold red]Error:[/bold red] For MDE calculation, --n1, --n2, and --p1 are required.")
+                        raise typer.Exit(1)
+                    params.update({'n1': n1, 'n2': n2, 'p1': p1})
+                
+                # Generate script using parallel RCT functions
+                from app.components.parallel_rct import generate_cli_code_parallel_binary
+                script = generate_cli_code_parallel_binary(params)
+                
+        elif design == DesignType.CLUSTER:
+            if outcome == OutcomeType.CONTINUOUS:
+                # Validate required cluster parameters
+                if cluster_size is None or icc is None:
+                    console.print("[bold red]Error:[/bold red] For cluster designs, --cluster-size and --icc are required.")
+                    raise typer.Exit(1)
+                
+                if calculation == CalculationType.SAMPLE_SIZE:
+                    if delta is None or std_dev is None:
+                        console.print("[bold red]Error:[/bold red] For sample size calculation, --delta and --std-dev are required.")
+                        raise typer.Exit(1)
+                    params.update({
+                        'cluster_size': cluster_size, 'icc': icc,
+                        'mean1': 0.0, 'mean2': delta, 'std_dev': std_dev
+                    })
+                elif calculation == CalculationType.POWER:
+                    if n_clusters is None or delta is None or std_dev is None:
+                        console.print("[bold red]Error:[/bold red] For power calculation, --n-clusters, --delta, and --std-dev are required.")
+                        raise typer.Exit(1)
+                    params.update({
+                        'n_clusters': n_clusters, 'cluster_size': cluster_size, 'icc': icc,
+                        'mean1': 0.0, 'mean2': delta, 'std_dev': std_dev
+                    })
+                elif calculation == CalculationType.MDE:
+                    if n_clusters is None or std_dev is None:
+                        console.print("[bold red]Error:[/bold red] For MDE calculation, --n-clusters and --std-dev are required.")
+                        raise typer.Exit(1)
+                    params.update({
+                        'n_clusters': n_clusters, 'cluster_size': cluster_size, 'icc': icc,
+                        'std_dev': std_dev
+                    })
+                
+                # Generate script using cluster RCT functions
+                from app.components.cluster_rct import generate_cli_code_cluster_continuous
+                script = generate_cli_code_cluster_continuous(params)
+                
+            elif outcome == OutcomeType.BINARY:
+                # Validate required cluster parameters
+                if cluster_size is None or icc is None:
+                    console.print("[bold red]Error:[/bold red] For cluster designs, --cluster-size and --icc are required.")
+                    raise typer.Exit(1)
+                
+                if calculation == CalculationType.SAMPLE_SIZE:
+                    if p1 is None or p2 is None:
+                        console.print("[bold red]Error:[/bold red] For sample size calculation, --p1 and --p2 are required.")
+                        raise typer.Exit(1)
+                    params.update({
+                        'cluster_size': cluster_size, 'icc': icc,
+                        'p1': p1, 'p2': p2
+                    })
+                elif calculation == CalculationType.POWER:
+                    if n_clusters is None or p1 is None or p2 is None:
+                        console.print("[bold red]Error:[/bold red] For power calculation, --n-clusters, --p1, and --p2 are required.")
+                        raise typer.Exit(1)
+                    params.update({
+                        'n_clusters': n_clusters, 'cluster_size': cluster_size, 'icc': icc,
+                        'p1': p1, 'p2': p2
+                    })
+                elif calculation == CalculationType.MDE:
+                    if n_clusters is None or p1 is None:
+                        console.print("[bold red]Error:[/bold red] For MDE calculation, --n-clusters and --p1 are required.")
+                        raise typer.Exit(1)
+                    params.update({
+                        'n_clusters': n_clusters, 'cluster_size': cluster_size, 'icc': icc,
+                        'p1': p1
+                    })
+                
+                # Generate script using cluster RCT functions
+                from app.components.cluster_rct import generate_cli_code_cluster_binary
+                script = generate_cli_code_cluster_binary(params)
+        
+        # Output the script
+        if output_file:
+            with open(output_file, 'w') as f:
+                f.write(script)
+            console.print(f"[bold green]✓[/bold green] Reproducible script saved to: {output_file}")
+            console.print(f"[bold blue]Usage:[/bold blue] python {output_file}")
+        else:
+            console.print(script)
+            
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     app()
