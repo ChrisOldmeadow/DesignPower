@@ -89,7 +89,7 @@ def generate_cli_code_parallel_binary(params):
         else:
             all_params = core_params
         
-        result_display = 'result["power"]'
+        result_key = "power"
         
     elif calc_type == "Sample Size":
         if hypothesis_type == "Superiority":
@@ -121,7 +121,7 @@ def generate_cli_code_parallel_binary(params):
         else:
             all_params = core_params
             
-        result_display = 'result["total_sample_size"]'
+        result_key = "total_sample_size"
         
     elif calc_type == "Minimum Detectable Effect":
         if hypothesis_type == "Superiority":
@@ -154,9 +154,9 @@ def generate_cli_code_parallel_binary(params):
             all_params = core_params
             
         if hypothesis_type == "Superiority":
-            result_display = 'result["minimum_detectable_p2"]'
+            result_key = "minimum_detectable_p2"
         else:
-            result_display = 'result["minimum_detectable_margin"]'
+            result_key = "minimum_detectable_margin"
     
     # Generate clean, simple code with usage instructions
     code = f"""# Parallel RCT Binary Outcome - {calc_type} Analysis ({hypothesis_type})
@@ -182,7 +182,7 @@ result = {function_name}(
     {all_params}
 )
 
-print(f"{calc_type}: {{result['{result_display.split('\"')[1]}']:.3f}}")
+print(f"{calc_type}: {{result['{result_key}']:.3f}}")
 
 # Full results
 import json
@@ -243,7 +243,7 @@ def generate_cli_code_parallel_survival(params):
         else:
             all_params = core_params
         
-        result_display = 'result["power"]'
+        result_key = "power"
         
     elif calc_type == "Sample Size":
         function_name = f"sample_size_survival{'_sim' if method == 'simulation' else ''}"
@@ -266,7 +266,7 @@ def generate_cli_code_parallel_survival(params):
         else:
             all_params = core_params
             
-        result_display = 'result["total_sample_size"]'
+        result_key = "total_sample_size"
         
     elif calc_type == "Minimum Detectable Effect":
         function_name = f"min_detectable_effect_survival{'_sim' if method == 'simulation' else ''}"
@@ -289,7 +289,7 @@ def generate_cli_code_parallel_survival(params):
         else:
             all_params = core_params
             
-        result_display = 'result["minimum_detectable_median"]'
+        result_key = "minimum_detectable_median"
     
     # Generate clean, simple code with usage instructions
     code = f"""# Parallel RCT Survival Outcome - {calc_type} Analysis ({hypothesis_type})
@@ -315,7 +315,7 @@ result = {function_name}(
     {all_params}
 )
 
-print(f"{calc_type}: {{result['{result_display.split('"')[1]}']:.3f}}")
+print(f"{calc_type}: {{result['{result_key}']:.3f}}")
 print(f"Hazard ratio: {{result.get('hazard_ratio', 'N/A'):.3f}}")
 print(f"Expected events: {{result.get('total_events', 'N/A'):.0f}}")
 
@@ -391,7 +391,7 @@ def generate_cli_code_parallel_continuous(params):
         else:
             all_params = core_params
         
-        result_display = 'result["power"]'
+        result_key = "power"
         
     elif calc_type == "Sample Size":
         if hypothesis_type == "Superiority":
@@ -423,7 +423,7 @@ def generate_cli_code_parallel_continuous(params):
         else:
             all_params = core_params
             
-        result_display = 'result["total_sample_size"]'
+        result_key = "total_sample_size"
         
     elif calc_type == "Minimum Detectable Effect":
         if hypothesis_type == "Superiority":
@@ -455,9 +455,9 @@ def generate_cli_code_parallel_continuous(params):
             all_params = core_params
             
         if hypothesis_type == "Superiority":
-            result_display = 'result["minimum_detectable_effect"]'
+            result_key = "minimum_detectable_effect"
         else:
-            result_display = 'result["minimum_detectable_margin"]'
+            result_key = "minimum_detectable_margin"
     
     # Generate clean, simple code with usage instructions
     code = f"""# Parallel RCT Continuous Outcome - {calc_type} Analysis ({hypothesis_type})
@@ -483,7 +483,7 @@ result = {function_name}(
     {all_params}
 )
 
-print(f"{calc_type}: {{result['{result_display.split('"')[1]}']:.3f}}")
+print(f"{calc_type}: {{result['{result_key}']:.3f}}")
 print(f"Effect size: {{result.get('effect_size', 'N/A'):.3f}}")
 
 # Full results
