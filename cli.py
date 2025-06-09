@@ -110,12 +110,85 @@ def sample_size(
     individuals_per_cluster: Optional[int] = typer.Option(None, help="Number of individuals per cluster per step (for stepped wedge)"),
     treatment_effect: Optional[float] = typer.Option(None, help="Effect size of intervention (for stepped wedge)"),
     nsim: int = typer.Option(1000, help="Number of simulations (for simulation-based estimation)"),
-    output_json: bool = typer.Option(False, "--json", help="Output result as JSON")
+    output_json: bool = typer.Option(False, "--json", help="Output result as JSON"),
+    generate_script: bool = typer.Option(False, "--script", help="Generate reproducible Python script instead of just showing results"),
+    script_output: Optional[str] = typer.Option(None, "--script-file", help="Save generated script to file (use with --script)")
 ):
     """
     Calculate required sample size for a given study design.
     """
     try:
+        # If script generation is requested, use the new comprehensive script generator
+        if generate_script:
+            # Build parameters for script generation
+            params = {
+                'calculation_type': 'Sample Size',
+                'method': 'analytical',  # Default to analytical for CLI
+                'alpha': alpha,
+                'power': power,
+                'allocation_ratio': allocation_ratio,
+                'nsim': nsim
+            }
+            
+            # Handle different design/outcome combinations
+            if design == DesignType.PARALLEL:
+                if outcome == OutcomeType.CONTINUOUS:
+                    if delta is None or std_dev is None:
+                        console.print("[bold red]Error:[/bold red] For continuous outcomes, --delta and --std-dev are required.")
+                        raise typer.Exit(1)
+                    params.update({'mean1': 0.0, 'mean2': delta, 'std_dev': std_dev})
+                    from app.components.parallel_rct import generate_cli_code_parallel_continuous
+                    script = generate_cli_code_parallel_continuous(params)
+                    
+                elif outcome == OutcomeType.BINARY:
+                    if p1 is None or p2 is None:
+                        console.print("[bold red]Error:[/bold red] For binary outcomes, --p1 and --p2 are required.")
+                        raise typer.Exit(1)
+                    params.update({'p1': p1, 'p2': p2})
+                    from app.components.parallel_rct import generate_cli_code_parallel_binary
+                    script = generate_cli_code_parallel_binary(params)
+                    
+            elif design == DesignType.CLUSTER:
+                if cluster_size is None or icc is None:
+                    console.print("[bold red]Error:[/bold red] For cluster designs, --cluster-size and --icc are required.")
+                    raise typer.Exit(1)
+                    
+                if outcome == OutcomeType.CONTINUOUS:
+                    if delta is None or std_dev is None:
+                        console.print("[bold red]Error:[/bold red] For continuous outcomes, --delta and --std-dev are required.")
+                        raise typer.Exit(1)
+                    params.update({
+                        'cluster_size': cluster_size, 'icc': icc,
+                        'mean1': 0.0, 'mean2': delta, 'std_dev': std_dev
+                    })
+                    from app.components.cluster_rct import generate_cli_code_cluster_continuous
+                    script = generate_cli_code_cluster_continuous(params)
+                    
+                elif outcome == OutcomeType.BINARY:
+                    if p1 is None or p2 is None:
+                        console.print("[bold red]Error:[/bold red] For binary outcomes, --p1 and --p2 are required.")
+                        raise typer.Exit(1)
+                    params.update({
+                        'cluster_size': cluster_size, 'icc': icc,
+                        'p1': p1, 'p2': p2
+                    })
+                    from app.components.cluster_rct import generate_cli_code_cluster_binary
+                    script = generate_cli_code_cluster_binary(params)
+            else:
+                console.print(f"[bold red]Error:[/bold red] Script generation not yet supported for {design.value} design.")
+                raise typer.Exit(1)
+            
+            # Output the script
+            if script_output:
+                with open(script_output, 'w') as f:
+                    f.write(script)
+                console.print(f"[bold green]✓[/bold green] Reproducible script saved to: {script_output}")
+                console.print(f"[bold blue]Usage:[/bold blue] python {script_output}")
+            else:
+                console.print(script)
+            return
+        
+        # Original calculation logic for basic results display
         result = None
         method_name = None
         
