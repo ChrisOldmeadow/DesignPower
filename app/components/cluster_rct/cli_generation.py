@@ -1,7 +1,8 @@
 """CLI code generation utilities for cluster RCT components.
 
 This module provides functions to generate reproducible Python code
-for cluster RCT power analysis and sample size calculations.
+for cluster RCT power analysis and sample size calculations with
+ACTUAL parameter values from the UI.
 """
 
 import textwrap
@@ -37,26 +38,11 @@ def _detect_resource_constraints():
         return False  # Default to not constrained if detection fails
 
 
-# For mapping UI analysis method names to backend keywords
-analysis_method_map_continuous_sim = {
-    "Linear Mixed Model (LMM)": "mixedlm",
-    "T-test on Aggregate Data": "aggregate_ttest",
-    "GEE (Individual-Level)": "gee" # Placeholder, assuming GEE might be used for continuous
-}
-
-analysis_method_map_binary_sim = {
-    "Design Effect Adjusted Z-test": "deff_ztest",
-    "T-test on Aggregate Data": "aggregate_ttest",
-    "GLMM (Individual-Level)": "glmm",
-    "GEE (Individual-Level)": "gee"
-}
-
-
 def generate_cli_code_cluster_continuous(params):
     """
-    Generate clean, simple reproducible code for cluster RCT continuous outcome calculations.
+    Generate reproducible Python code for cluster RCT continuous outcome calculations.
     
-    This matches the style in EXAMPLES.md for consistency and simplicity.
+    Uses ACTUAL parameter values from the UI to create a runnable script.
     """
     # Extract key parameters from UI
     calc_type = params.get('calculation_type', 'Power')
@@ -82,88 +68,77 @@ def generate_cli_code_cluster_continuous(params):
     # Analysis method and model-specific parameters
     analysis_model = params.get('analysis_model', 'ttest')
     
-    # Extract model-specific parameters
-    model_params = ""
-    
-    if analysis_model == 'bayes':
-        # Extract Bayesian-specific parameters
-        bayes_backend = params.get('bayes_backend', 'stan')
-        bayes_draws = params.get('bayes_draws', 500)
-        bayes_warmup = params.get('bayes_warmup', 500)
-        bayes_inference_method = params.get('bayes_inference_method', 'credible_interval')
-        
-        backend_method = 'bayes'
-        model_params = f"""    bayes_backend="{bayes_backend}",
-    bayes_draws={bayes_draws},
-    bayes_warmup={bayes_warmup},
-    bayes_inference_method="{bayes_inference_method}","""
-    elif analysis_model == 'mixedlm':
-        # Extract LMM-specific parameters
-        use_satterthwaite = params.get('use_satterthwaite', False)
-        lmm_method = params.get('lmm_method', 'auto')
-        lmm_reml = params.get('lmm_reml', True)
-        lmm_cov_penalty_weight = params.get('lmm_cov_penalty_weight', 0.0)
-        
-        backend_method = 'mixedlm'
-        model_params = f"""    use_satterthwaite={use_satterthwaite},
-    lmm_method="{lmm_method}",
-    lmm_reml={lmm_reml},"""
-        if lmm_cov_penalty_weight > 0:
-            model_params += f"""
-    lmm_cov_penalty_weight={lmm_cov_penalty_weight},"""
-    elif analysis_model == 'gee':
-        # Extract GEE-specific parameters
-        use_bias_correction = params.get('use_bias_correction', False)
-        
-        backend_method = 'gee'
-        model_params = f"""    use_bias_correction={use_bias_correction},"""
-    else:
-        backend_method = analysis_model
-        model_params = ""
-    
-    # Build import statement
+    # Build import statement and function name
     if method == "analytical":
         import_line = "from core.designs.cluster_rct.analytical_continuous import"
-        module_prefix = ""
     elif method == "permutation":
         import_line = "from core.designs.cluster_rct.analytical_continuous import"
-        module_prefix = ""
     else:
         import_line = "from core.designs.cluster_rct.simulation_continuous import"
-        module_prefix = ""
     
-    # Build function call based on calculation type
+    # Determine function name and parameters based on calculation type
     if calc_type == "Power":
         if method == "permutation":
             function_name = "power_continuous_permutation"
         else:
             function_name = f"power_continuous{'_sim' if method == 'simulation' else ''}"
         
-        # Build parameters for power calculation
-        core_params = f"""n_clusters={n_clusters},
-    cluster_size={cluster_size},
-    icc={icc},
-    mean1={mean1},
-    mean2={mean2},
-    std_dev={std_dev},
-    alpha={alpha}"""
-        
+        # Build actual parameter string with real values
         if method == "simulation":
-            sim_params = f"""nsim={nsim},"""
+            param_lines = [
+                f"    n_clusters={n_clusters},",
+                f"    cluster_size={cluster_size},", 
+                f"    icc={icc},",
+                f"    mean1={mean1},",
+                f"    mean2={mean2},",
+                f"    std_dev={std_dev},",
+                f"    alpha={alpha},",
+                f"    nsim={nsim},"
+            ]
             if seed is not None:
-                sim_params += f"""
-    seed={seed},"""
+                param_lines.append(f"    seed={seed},")
+            param_lines.append(f"    analysis_model='{analysis_model}'")
             
-            sim_params += f"""
-    analysis_model="{backend_method}","""
-            
-            all_params = core_params + ",\n    " + sim_params.strip()
-            if model_params:
-                all_params += "\n    " + model_params.strip()
+            # Add model-specific parameters if needed
+            if analysis_model == 'bayes':
+                bayes_backend = params.get('bayes_backend', 'stan')
+                bayes_draws = params.get('bayes_draws', 500)
+                bayes_warmup = params.get('bayes_warmup', 500)
+                bayes_inference_method = params.get('bayes_inference_method', 'credible_interval')
+                param_lines.extend([
+                    f"    bayes_backend='{bayes_backend}',",
+                    f"    bayes_draws={bayes_draws},",
+                    f"    bayes_warmup={bayes_warmup},",
+                    f"    bayes_inference_method='{bayes_inference_method}'"
+                ])
+            elif analysis_model == 'mixedlm':
+                use_satterthwaite = params.get('use_satterthwaite', False)
+                lmm_method = params.get('lmm_method', 'auto')
+                lmm_reml = params.get('lmm_reml', True)
+                param_lines.extend([
+                    f"    use_satterthwaite={use_satterthwaite},",
+                    f"    lmm_method='{lmm_method}',",
+                    f"    lmm_reml={lmm_reml}"
+                ])
+                lmm_cov_penalty_weight = params.get('lmm_cov_penalty_weight', 0.0)
+                if lmm_cov_penalty_weight > 0:
+                    param_lines.append(f"    lmm_cov_penalty_weight={lmm_cov_penalty_weight}")
+            elif analysis_model == 'gee':
+                use_bias_correction = params.get('use_bias_correction', False)
+                param_lines.append(f"    use_bias_correction={use_bias_correction}")
         else:
-            all_params = core_params
-            
-        result_display = 'result["power"]'
+            # Analytical method
+            param_lines = [
+                f"    n_clusters={n_clusters},",
+                f"    cluster_size={cluster_size},",
+                f"    icc={icc},",
+                f"    mean1={mean1},",
+                f"    mean2={mean2},",
+                f"    std_dev={std_dev},",
+                f"    alpha={alpha}"
+            ]
+        
+        result_key = "power"
         
     elif calc_type == "Sample Size":
         if method == "permutation":
@@ -171,30 +146,32 @@ def generate_cli_code_cluster_continuous(params):
         else:
             function_name = f"sample_size_continuous{'_sim' if method == 'simulation' else ''}"
         
-        core_params = f"""mean1={mean1},
-    mean2={mean2},
-    std_dev={std_dev},
-    icc={icc},
-    cluster_size={cluster_size},
-    power={power},
-    alpha={alpha}"""
-        
         if method == "simulation":
-            sim_params = f"""nsim={nsim},"""
+            param_lines = [
+                f"    mean1={mean1},",
+                f"    mean2={mean2},",
+                f"    std_dev={std_dev},",
+                f"    icc={icc},",
+                f"    cluster_size={cluster_size},",
+                f"    power={power},",
+                f"    alpha={alpha},",
+                f"    nsim={nsim},"
+            ]
             if seed is not None:
-                sim_params += f"""
-    seed={seed},"""
-                
-            sim_params += f"""
-    analysis_model="{backend_method}","""
-            
-            all_params = core_params + ",\n    " + sim_params.strip()
-            if model_params:
-                all_params += "\n    " + model_params.strip()
+                param_lines.append(f"    seed={seed},")
+            param_lines.append(f"    analysis_model='{analysis_model}'")
         else:
-            all_params = core_params
-            
-        result_display = 'result["n_clusters"]'
+            param_lines = [
+                f"    mean1={mean1},",
+                f"    mean2={mean2},",
+                f"    std_dev={std_dev},",
+                f"    icc={icc},",
+                f"    cluster_size={cluster_size},",
+                f"    power={power},",
+                f"    alpha={alpha}"
+            ]
+        
+        result_key = "n_clusters"
         
     elif calc_type == "Minimum Detectable Effect":
         if method == "permutation":
@@ -202,31 +179,35 @@ def generate_cli_code_cluster_continuous(params):
         else:
             function_name = f"min_detectable_effect_continuous{'_sim' if method == 'simulation' else ''}"
         
-        core_params = f"""n_clusters={n_clusters},
-    cluster_size={cluster_size},
-    icc={icc},
-    std_dev={std_dev},
-    power={power},
-    alpha={alpha}"""
-        
         if method == "simulation":
-            sim_params = f"""nsim={nsim},"""
+            param_lines = [
+                f"    n_clusters={n_clusters},",
+                f"    cluster_size={cluster_size},",
+                f"    icc={icc},",
+                f"    std_dev={std_dev},",
+                f"    power={power},",
+                f"    alpha={alpha},",
+                f"    nsim={nsim},"
+            ]
             if seed is not None:
-                sim_params += f"""
-    seed={seed},"""
-                
-            sim_params += f"""
-    analysis_model="{backend_method}","""
-            
-            all_params = core_params + ",\n    " + sim_params.strip()
-            if model_params:
-                all_params += "\n    " + model_params.strip()
+                param_lines.append(f"    seed={seed},")
+            param_lines.append(f"    analysis_model='{analysis_model}'")
         else:
-            all_params = core_params
-            
-        result_display = 'result["mde"]'
+            param_lines = [
+                f"    n_clusters={n_clusters},",
+                f"    cluster_size={cluster_size},",
+                f"    icc={icc},",
+                f"    std_dev={std_dev},",
+                f"    power={power},",
+                f"    alpha={alpha}"
+            ]
+        
+        result_key = "mde"
     
-    # Generate clean, simple code with usage instructions
+    # Join parameters properly
+    all_params = "\n".join(param_lines)
+    
+    # Generate the actual reproducible code
     code = f"""# Cluster RCT Continuous Outcome - {calc_type} Analysis
 # Generated by DesignPower
 #
@@ -240,21 +221,22 @@ def generate_cli_code_cluster_continuous(params):
 #    - Option A: Run from DesignPower project directory: python my_analysis.py
 #    - Option B: Add DesignPower to Python path, then run from anywhere
 #    - Option C: Run in Jupyter/IDE with DesignPower project as working directory
-#
-# The script will print the main result and full details in JSON format
 
 {import_line} {function_name}
 
-# Calculate {calc_type.lower()}
+# Calculate {calc_type.lower()} with these specific parameters:
 result = {function_name}(
-    {all_params}
+{all_params}
 )
 
-print(f"{calc_type}: {{result['{result_display.split('\"')[1]}']:.3f}}")
-print(f"Design effect: {{result['design_effect']:.2f}}")
+# Display main result
+print(f"{calc_type}: {{result['{result_key}']:.3f}}")
+if 'design_effect' in result:
+    print(f"Design effect: {{result['design_effect']:.2f}}")
 
-# Full results
+# Display full results
 import json
+print("\\nFull results:")
 print(json.dumps(result, indent=2))"""
 
     return code
@@ -262,9 +244,9 @@ print(json.dumps(result, indent=2))"""
 
 def generate_cli_code_cluster_binary(params):
     """
-    Generate clean, simple reproducible code for cluster RCT binary outcome calculations.
+    Generate reproducible Python code for cluster RCT binary outcome calculations.
     
-    This matches the style in EXAMPLES.md for consistency and simplicity.
+    Uses ACTUAL parameter values from the UI to create a runnable script.
     """
     # Extract key parameters from UI
     calc_type = params.get('calc_type', 'Power')
@@ -292,82 +274,58 @@ def generate_cli_code_cluster_binary(params):
     
     # Analysis method and model-specific parameters
     analysis_method = params.get('analysis_method', 'deff_ztest')
-    analysis_method_ui = params.get('analysis_method_ui', '')
     
-    # Extract model-specific parameters
-    model_params = ""
-    
-    # Map UI analysis method to backend
-    if analysis_method == 'bayes':
-        # Extract Bayesian-specific parameters
-        bayes_backend = params.get('bayes_backend', 'stan')
-        bayes_draws = params.get('bayes_draws', 500)
-        bayes_warmup = params.get('bayes_warmup', 500)
-        bayes_inference_method = params.get('bayes_inference_method', 'credible_interval')
-        
-        backend_method = 'bayes'
-        model_params = f"""    bayes_backend="{bayes_backend}",
-    bayes_draws={bayes_draws},
-    bayes_warmup={bayes_warmup},
-    bayes_inference_method="{bayes_inference_method}","""
-    elif analysis_method == 'glmm':
-        # GLMM doesn't have additional parameters in the current implementation
-        backend_method = 'glmm'
-        model_params = ""
-    elif analysis_method == 'gee':
-        # GEE doesn't have bias correction for binary outcomes in current implementation
-        backend_method = 'gee'
-        model_params = ""
-    else:
-        backend_method = analysis_method
-        model_params = ""
-    
-    # Build import statement
+    # Build import statement and function name
     if method == "analytical":
         import_line = "from core.designs.cluster_rct.analytical_binary import"
-        module_prefix = ""
     elif method == "permutation":
         import_line = "from core.designs.cluster_rct.analytical_binary import"
-        module_prefix = ""
     else:
         import_line = "from core.designs.cluster_rct.simulation_binary import"
-        module_prefix = ""
     
-    # Build function call based on calculation type
+    # Determine function name and parameters based on calculation type
     if calc_type == "Power":
         if method == "permutation":
             function_name = "power_binary_permutation"
         else:
             function_name = f"power_binary{'_sim' if method == 'simulation' else ''}"
         
-        # Build parameters for power calculation
-        core_params = f"""n_clusters={n_clusters},
-    cluster_size={cluster_size},
-    icc={icc},
-    p1={p1},
-    p2={p2},
-    alpha={alpha}"""
+        # Build actual parameter string with real values
+        param_lines = [
+            f"    n_clusters={n_clusters},",
+            f"    cluster_size={cluster_size},",
+            f"    icc={icc},",
+            f"    p1={p1},",
+            f"    p2={p2},",
+            f"    alpha={alpha}"
+        ]
         
         # Add optional parameters if non-default
         if cv_cluster_size > 0:
-            core_params += f",\n    cv_cluster_size={cv_cluster_size}"
+            param_lines.append(f"    cv_cluster_size={cv_cluster_size}")
         
         if method == "simulation":
-            sim_params = f"""nsim={nsim},"""
+            param_lines.extend([
+                f"    nsim={nsim},"
+            ])
             if seed is not None:
-                sim_params += f"""
-    seed={seed},"""
+                param_lines.append(f"    seed={seed},")
+            param_lines.append(f"    analysis_method='{analysis_method}'")
             
-            sim_params += f"""
-    analysis_method="{backend_method}","""
-            
-            all_params = core_params + ",\n    " + sim_params.strip()
-            if model_params:
-                all_params += "\n    " + model_params.strip()
-        else:
-            all_params = core_params
-            
-        result_display = 'result["power"]'
+            # Add model-specific parameters if needed
+            if analysis_method == 'bayes':
+                bayes_backend = params.get('bayes_backend', 'stan')
+                bayes_draws = params.get('bayes_draws', 500)
+                bayes_warmup = params.get('bayes_warmup', 500)
+                bayes_inference_method = params.get('bayes_inference_method', 'credible_interval')
+                param_lines.extend([
+                    f"    bayes_backend='{bayes_backend}',",
+                    f"    bayes_draws={bayes_draws},",
+                    f"    bayes_warmup={bayes_warmup},",
+                    f"    bayes_inference_method='{bayes_inference_method}'"
+                ])
+        
+        result_key = "power"
         
     elif calc_type == "Sample Size":
         if method == "permutation":
@@ -375,33 +333,28 @@ def generate_cli_code_cluster_binary(params):
         else:
             function_name = f"sample_size_binary{'_sim' if method == 'simulation' else ''}"
         
-        core_params = f"""p1={p1},
-    p2={p2},
-    icc={icc},
-    cluster_size={cluster_size},
-    power={power},
-    alpha={alpha}"""
+        param_lines = [
+            f"    p1={p1},",
+            f"    p2={p2},",
+            f"    icc={icc},",
+            f"    cluster_size={cluster_size},",
+            f"    power={power},",
+            f"    alpha={alpha}"
+        ]
         
         # Add optional parameters if non-default
         if cv_cluster_size > 0:
-            core_params += f",\n    cv_cluster_size={cv_cluster_size}"
+            param_lines.append(f"    cv_cluster_size={cv_cluster_size}")
         
         if method == "simulation":
-            sim_params = f"""nsim={nsim},"""
+            param_lines.extend([
+                f"    nsim={nsim},"
+            ])
             if seed is not None:
-                sim_params += f"""
-    seed={seed},"""
-                
-            sim_params += f"""
-    analysis_method="{backend_method}","""
-            
-            all_params = core_params + ",\n    " + sim_params.strip()
-            if model_params:
-                all_params += "\n    " + model_params.strip()
-        else:
-            all_params = core_params
-            
-        result_display = 'result["n_clusters"]'
+                param_lines.append(f"    seed={seed},")
+            param_lines.append(f"    analysis_method='{analysis_method}'")
+        
+        result_key = "n_clusters"
         
     elif calc_type == "Minimum Detectable Effect":
         if method == "permutation":
@@ -409,37 +362,35 @@ def generate_cli_code_cluster_binary(params):
         else:
             function_name = f"min_detectable_effect_binary{'_sim' if method == 'simulation' else ''}"
         
-        core_params = f"""n_clusters={n_clusters},
-    cluster_size={cluster_size},
-    icc={icc},
-    p1={p1},
-    power={power},
-    alpha={alpha}"""
+        param_lines = [
+            f"    n_clusters={n_clusters},",
+            f"    cluster_size={cluster_size},",
+            f"    icc={icc},",
+            f"    p1={p1},",
+            f"    power={power},",
+            f"    alpha={alpha}"
+        ]
         
         # Add optional parameters if non-default
         if cv_cluster_size > 0:
-            core_params += f",\n    cv_cluster_size={cv_cluster_size}"
+            param_lines.append(f"    cv_cluster_size={cv_cluster_size}")
         if effect_measure != 'risk_difference':
-            core_params += f",\n    effect_measure='{effect_measure}'"
+            param_lines.append(f"    effect_measure='{effect_measure}'")
         
         if method == "simulation":
-            sim_params = f"""nsim={nsim},"""
+            param_lines.extend([
+                f"    nsim={nsim},"
+            ])
             if seed is not None:
-                sim_params += f"""
-    seed={seed},"""
-                
-            sim_params += f"""
-    analysis_method="{backend_method}","""
-            
-            all_params = core_params + ",\n    " + sim_params.strip()
-            if model_params:
-                all_params += "\n    " + model_params.strip()
-        else:
-            all_params = core_params
-            
-        result_display = 'result["mde"]'
+                param_lines.append(f"    seed={seed},")
+            param_lines.append(f"    analysis_method='{analysis_method}'")
+        
+        result_key = "mde"
     
-    # Generate clean, simple code with usage instructions
+    # Join parameters properly
+    all_params = "\n".join(param_lines)
+    
+    # Generate the actual reproducible code
     code = f"""# Cluster RCT Binary Outcome - {calc_type} Analysis
 # Generated by DesignPower
 #
@@ -453,21 +404,22 @@ def generate_cli_code_cluster_binary(params):
 #    - Option A: Run from DesignPower project directory: python my_analysis.py
 #    - Option B: Add DesignPower to Python path, then run from anywhere
 #    - Option C: Run in Jupyter/IDE with DesignPower project as working directory
-#
-# The script will print the main result and full details in JSON format
 
 {import_line} {function_name}
 
-# Calculate {calc_type.lower()}
+# Calculate {calc_type.lower()} with these specific parameters:
 result = {function_name}(
-    {all_params}
+{all_params}
 )
 
-print(f"{calc_type}: {{result['{result_display.split('"')[1]}']:.3f}}")
-print(f"Design effect: {{result['design_effect']:.2f}}")
+# Display main result
+print(f"{calc_type}: {{result['{result_key}']:.3f}}")
+if 'design_effect' in result:
+    print(f"Design effect: {{result['design_effect']:.2f}}")
 
-# Full results
+# Display full results
 import json
+print("\\nFull results:")
 print(json.dumps(result, indent=2))"""
 
     return code
