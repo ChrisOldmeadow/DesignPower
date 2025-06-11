@@ -18,6 +18,18 @@ from core.power import (
     sample_size_binary_cluster_rct,
     min_detectable_effect_binary_cluster_rct
 )
+from core.designs.single_arm.continuous import (
+    one_sample_t_test_sample_size,
+    one_sample_t_test_power
+)
+from core.designs.single_arm.binary import (
+    one_sample_proportion_test_sample_size,
+    one_sample_proportion_test_power,
+    ahern_sample_size,
+    ahern_power,
+    simons_two_stage_design,
+    simons_power
+)
 from core.simulation import (
     simulate_parallel_rct,
     simulate_cluster_rct,
@@ -35,6 +47,7 @@ class DesignType(str, Enum):
     PARALLEL = "parallel"
     CLUSTER = "cluster"
     STEPPED_WEDGE = "stepped-wedge"
+    SINGLE_ARM = "single-arm"
 
 
 class OutcomeType(str, Enum):
@@ -723,6 +736,221 @@ def generate_script(
         else:
             console.print(script)
             
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        raise typer.Exit(1)
+
+
+@app.command("single-arm")
+def single_arm(
+    outcome: OutcomeType = typer.Option(OutcomeType.BINARY, help="Outcome type (continuous or binary)"),
+    calculation: CalculationType = typer.Option(CalculationType.SAMPLE_SIZE, help="Type of calculation"),
+    
+    # Common parameters
+    alpha: float = typer.Option(0.05, help="Significance level"),
+    power: float = typer.Option(0.8, help="Desired statistical power (1 - beta)"),
+    
+    # Continuous outcome parameters
+    mean: Optional[float] = typer.Option(None, help="Sample mean (for continuous outcomes)"),
+    std_dev: Optional[float] = typer.Option(None, help="Standard deviation (for continuous outcomes)"),
+    null_mean: Optional[float] = typer.Option(0.0, help="Null hypothesis mean (for continuous outcomes)"),
+    
+    # Binary outcome parameters  
+    p: Optional[float] = typer.Option(None, help="Expected proportion (for binary outcomes)"),
+    p0: Optional[float] = typer.Option(None, help="Null hypothesis proportion (for binary outcomes)"),
+    design_method: str = typer.Option("standard", help="Design method: standard, ahern, or simons"),
+    simon_type: str = typer.Option("optimal", help="Simon's design type: optimal or minimax"),
+    
+    # Sample size (for power calculations)
+    n: Optional[int] = typer.Option(None, help="Sample size (required for power calculations)"),
+    
+    # Simon's two-stage specific parameters (for power calculations)
+    n1: Optional[int] = typer.Option(None, help="Stage 1 sample size (for Simon's power calculation)"),
+    r1: Optional[int] = typer.Option(None, help="Stage 1 rejection threshold (for Simon's power calculation)"),
+    r: Optional[int] = typer.Option(None, help="Final rejection threshold (for power calculations)"),
+    
+    # Output options
+    output_json: bool = typer.Option(False, "--json", help="Output result as JSON"),
+    generate_script: bool = typer.Option(False, "--script", help="Generate reproducible Python script"),
+    script_output: Optional[str] = typer.Option(None, "--script-file", help="Save generated script to file")
+):
+    """
+    Calculate sample size or power for single-arm (one-sample) studies.
+    
+    Examples:
+    
+    # Binary outcome with A'Hern design
+    designpower single-arm --outcome binary --p 0.3 --p0 0.1 --design-method ahern
+    
+    # Binary outcome with Simon's two-stage design  
+    designpower single-arm --outcome binary --p 0.4 --p0 0.2 --design-method simons
+    
+    # Continuous outcome
+    designpower single-arm --outcome continuous --mean 1.5 --std-dev 2.0 --null-mean 0.0
+    
+    # Power calculation for standard binary design
+    designpower single-arm --calculation power --outcome binary --n 50 --p 0.3 --p0 0.1
+    """
+    try:
+        if generate_script:
+            # Build parameters for script generation
+            params = {
+                'calculation_type': calculation.value.replace('-', ' ').title(),
+                'alpha': alpha,
+                'power': power
+            }
+            
+            if outcome == OutcomeType.CONTINUOUS:
+                if calculation == CalculationType.SAMPLE_SIZE and (mean is None or std_dev is None):
+                    console.print("[bold red]Error:[/bold red] For continuous outcomes, --mean and --std-dev are required.")
+                    raise typer.Exit(1)
+                if calculation == CalculationType.POWER and n is None:
+                    console.print("[bold red]Error:[/bold red] For power calculation, --n is required.")
+                    raise typer.Exit(1)
+                    
+                params.update({
+                    'mean': mean or 0.0,
+                    'std_dev': std_dev or 1.0,
+                    'null_mean': null_mean,
+                    'n': n
+                })
+                
+                from app.components.single_arm import generate_cli_code_single_arm_continuous
+                script = generate_cli_code_single_arm_continuous(params)
+                
+            else:  # Binary outcomes
+                if p is None or p0 is None:
+                    console.print("[bold red]Error:[/bold red] For binary outcomes, --p and --p0 are required.")
+                    raise typer.Exit(1)
+                if calculation == CalculationType.POWER and n is None:
+                    console.print("[bold red]Error:[/bold red] For power calculation, --n is required.")
+                    raise typer.Exit(1)
+                    
+                params.update({
+                    'p': p,
+                    'p0': p0,
+                    'design_method': design_method,
+                    'simon_design_type': simon_type,
+                    'n': n,
+                    'n1': n1,
+                    'r1': r1,
+                    'r': r
+                })
+                
+                from app.components.single_arm import generate_cli_code_single_arm_binary
+                script = generate_cli_code_single_arm_binary(params)
+            
+            # Output the script
+            if script_output:
+                with open(script_output, 'w') as f:
+                    f.write(script)
+                console.print(f"[bold green]✓[/bold green] Reproducible script saved to: {script_output}")
+                console.print(f"[bold blue]Usage:[/bold blue] python {script_output}")
+            else:
+                console.print(script)
+                
+        else:
+            # Perform actual calculation
+            if outcome == OutcomeType.CONTINUOUS:
+                if calculation == CalculationType.SAMPLE_SIZE:
+                    if mean is None or std_dev is None:
+                        console.print("[bold red]Error:[/bold red] For continuous outcomes, --mean and --std-dev are required.")
+                        raise typer.Exit(1)
+                    
+                    result = one_sample_t_test_sample_size(
+                        mean=mean,
+                        null_mean=null_mean,
+                        std_dev=std_dev,
+                        alpha=alpha,
+                        power=power
+                    )
+                    
+                elif calculation == CalculationType.POWER:
+                    if n is None or mean is None or std_dev is None:
+                        console.print("[bold red]Error:[/bold red] For power calculation, --n, --mean, and --std-dev are required.")
+                        raise typer.Exit(1)
+                        
+                    result = one_sample_t_test_power(
+                        n=n,
+                        mean=mean,
+                        null_mean=null_mean,
+                        std_dev=std_dev,
+                        alpha=alpha
+                    )
+                    
+                else:  # MDE
+                    console.print("[bold red]Error:[/bold red] MDE calculation not yet implemented for single-arm continuous outcomes.")
+                    raise typer.Exit(1)
+                    
+            else:  # Binary outcomes
+                if p is None or p0 is None:
+                    console.print("[bold red]Error:[/bold red] For binary outcomes, --p and --p0 are required.")
+                    raise typer.Exit(1)
+                    
+                if calculation == CalculationType.SAMPLE_SIZE:
+                    if design_method.lower() == "ahern":
+                        result = ahern_sample_size(
+                            p0=p0,
+                            p1=p,
+                            alpha=alpha,
+                            beta=1-power
+                        )
+                        
+                    elif design_method.lower() == "simons":
+                        result = simons_two_stage_design(
+                            p0=p0,
+                            p1=p,
+                            alpha=alpha,
+                            beta=1-power,
+                            design_type=simon_type.lower()
+                        )
+                        
+                    else:  # Standard
+                        sample_size = one_sample_proportion_test_sample_size(
+                            p0=p0,
+                            p1=p,
+                            alpha=alpha,
+                            power=power
+                        )
+                        result = {"n": sample_size}
+                        
+                elif calculation == CalculationType.POWER:
+                    if n is None:
+                        console.print("[bold red]Error:[/bold red] For power calculation, --n is required.")
+                        raise typer.Exit(1)
+                        
+                    if design_method.lower() == "ahern":
+                        if r is None:
+                            console.print("[bold red]Error:[/bold red] For A'Hern power calculation, --r (rejection threshold) is required.")
+                            raise typer.Exit(1)
+                        result = ahern_power(n=n, r=r, p0=p0, p1=p)
+                        
+                    elif design_method.lower() == "simons":
+                        if n1 is None or r1 is None or r is None:
+                            console.print("[bold red]Error:[/bold red] For Simon's power calculation, --n1, --r1, and --r are required.")
+                            raise typer.Exit(1)
+                        power_val = simons_power(n1=n1, r1=r1, n=n, r=r, p=p)
+                        result = {"power": power_val}
+                        
+                    else:  # Standard
+                        power_val = one_sample_proportion_test_power(
+                            n=n,
+                            p0=p0,
+                            p1=p,
+                            alpha=alpha
+                        )
+                        result = {"power": power_val}
+                        
+                else:  # MDE
+                    console.print("[bold red]Error:[/bold red] MDE calculation not yet implemented for single-arm binary outcomes.")
+                    raise typer.Exit(1)
+            
+            # Display results
+            if output_json:
+                console.print(json.dumps(result, indent=2))
+            else:
+                display_result(result, f"Single-arm {outcome.value} ({design_method})")
+                
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise typer.Exit(1)
