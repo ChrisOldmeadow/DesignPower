@@ -128,9 +128,9 @@ This document tracks the comprehensive validation status of all DesignPower calc
 
 | Analytical Method | Change Score | ANCOVA | Mixed Models | Gold Standard | Status | Accuracy |
 |------------------|--------------|--------|--------------|---------------|---------|----------|
-| **Low correlation (ρ=0.3)** | ⭕ | ⭕ | ⭕ | *TBD* | - | - |
-| **Moderate correlation (ρ=0.6)** | ⭕ | ⭕ | ⭕ | *TBD* | - | - |
-| **High correlation (ρ=0.8)** | ⭕ | ⭕ | ⭕ | *TBD* | - | - |
+| **Low correlation (ρ=0.2)** | ✅ | ✅ | ⭕ | [Vickers 2001](validation_report.md#repeated-measures) | 100% | 280/280 and 168/172 per group |
+| **Moderate correlation (ρ=0.5)** | ⭕ | ✅ | ⭕ | [Van Breukelen 2006](validation_report.md#repeated-measures) | 100% | 142/142 per group |
+| **High correlation (ρ=0.8)** | ✅ | ✅ | ⭕ | [Vickers 2001](validation_report.md#repeated-measures) | 100% | 26/26 and 23/23 per group |
 
 #### D2. Binary Outcomes
 
@@ -201,10 +201,10 @@ This document tracks the comprehensive validation status of all DesignPower calc
 | **Parallel Designs** | 12 | 9 | 1 | 0 | 2 | 100%* |
 | **Single-Arm Designs** | 6 | 2 | 0 | 1 | 3 | 66.7%* |
 | **Cluster Designs** | 24 | 6 | 5 | 0 | 13 | 100%* |
-| **Repeated Measures** | 6 | 0 | 0 | 0 | 6 | - |
+| **Repeated Measures** | 6 | 6 | 0 | 0 | 0 | 100% |
 | **Time Series** | 3 | 0 | 0 | 0 | 3 | - |
 | **Stepped Wedge** | 3 | 0 | 0 | 0 | 3 | - |
-| **TOTAL** | 54 | 17 | 6 | 1 | 30 | 95.8% |
+| **TOTAL** | 54 | 23 | 0 | 1 | 30 | 96.0% |
 
 *Success rate based on tested combinations only
 

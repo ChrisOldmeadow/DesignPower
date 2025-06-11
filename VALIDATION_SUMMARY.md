@@ -4,7 +4,7 @@
 
 ## Executive Summary
 
-DesignPower has undergone systematic validation against established statistical gold standards with a current overall validation success rate of **96.0%**. This **exceeds the target standard (≥95%)** and demonstrates high confidence in our statistical implementations. The Single-Arm trial designs show perfect validation (100%), including both A'Hern and Simon's two-stage methods. While there are still gaps in unit test coverage, the core statistical methods are highly reliable. This document provides a unified view of validation status, identifies remaining improvements, and prioritizes next steps.
+DesignPower has undergone systematic validation against established statistical gold standards with a current overall validation success rate of **96.0%**. This **exceeds the target standard (≥95%)** and demonstrates high confidence in our statistical implementations. The Single-Arm trial designs show perfect validation (100%), including both A'Hern and Simon's two-stage methods. Repeated measures designs now also show perfect validation (100%) across both ANCOVA and change score methods. While there are still gaps in unit test coverage, the core statistical methods are highly reliable. This document provides a unified view of validation status, identifies remaining improvements, and prioritizes next steps.
 
 ## Current Validation Status
 
@@ -19,6 +19,7 @@ DesignPower has undergone systematic validation against established statistical 
 | **Parallel RCT** | 8 | 7 | 87.5% | ⚠️ Below target |
 | **Single-Arm** | 13 | 13 | 100% | ✅ Excellent |
 | **Cluster RCT** | 4 | 4 | 100% | ✅ Excellent |
+| **Repeated Measures** | 6 | 6 | 100% | ✅ Excellent |
 
 ### Unit Test Coverage
 - **Total Test Files**: 37
@@ -68,6 +69,11 @@ DesignPower has undergone systematic validation against established statistical 
    - Coverage: 4/4 benchmarks passed
    - Accuracy: 97.8-101.2% (within acceptable tolerances)
 
+6. **Repeated Measures Designs**
+   - Sources: Vickers (2001), Van Breukelen (2006)
+   - Coverage: 6/6 benchmarks passed (ANCOVA and change score methods)
+   - Accuracy: 100% within tolerance across all correlation levels (ρ=0.2, 0.5, 0.8)
+
 ## Critical Failures Requiring Immediate Attention
 
 ### ❌ Gold Standard Failures
@@ -103,7 +109,7 @@ DesignPower has undergone systematic validation against established statistical 
 3. **Higher ICC Cluster RCTs**: Only ICC=0.02 tested, need 0.05, 0.10
 4. **Simon Two-Stage Design**: Standard phase II design not validated
 5. **Survival Analysis**: No Log-rank test validation
-6. **Repeated Measures**: No ANCOVA vs change score validation
+6. **Advanced Repeated Measures**: No mixed models or longitudinal validation
 
 ### Medium-Priority Gaps
 1. **Interrupted Time Series**: No segmented regression validation

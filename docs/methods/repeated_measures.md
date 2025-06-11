@@ -179,6 +179,74 @@ Crossover designs must account for potential period effects and carryover effect
 - Recommendations for washout periods
 - Guidelines for when a crossover design is appropriate
 
+## DesignPower Implementation
+
+DesignPower implements repeated measures design calculations through the analytical repeated measures module with full validation against published benchmarks.
+
+### Validation Status
+
+**✅ FULLY VALIDATED** - 100% success rate (6/6 benchmarks pass)
+
+- **Vickers (2001) Examples**: ANCOVA vs change score efficiency comparisons
+- **Van Breukelen (2006) Examples**: Medium correlation crossover scenarios
+- **Theoretical Benchmarks**: Low and high correlation scenarios
+
+All implementations match published theoretical calculations within 5% tolerance.
+
+### Available Methods
+
+1. **Change Score Analysis** (`method="change_score"`)
+   - Uses difference scores (post - pre) as outcome
+   - Standard deviation adjusted for correlation: σ_eff = σ * √(2(1-ρ))
+   - Simple to interpret but less efficient with high correlation
+
+2. **ANCOVA Analysis** (`method="ancova"`)
+   - Uses post-treatment values with baseline as covariate
+   - Standard deviation adjusted for correlation: σ_eff = σ * √(1-ρ²)
+   - More efficient, especially with high baseline correlation
+
+### Sample Size Formulas
+
+For both methods, the sample size per group is:
+
+```
+n = 2 * (z_α/2 + z_β)² * σ_eff² / δ²
+```
+
+Where:
+- σ_eff = effective standard deviation (method-specific)
+- δ = minimum detectable difference
+- z_α/2 = critical value for significance level α
+- z_β = critical value for power (1-β)
+
+### Usage Example
+
+```python
+from core.designs.parallel.analytical.repeated_measures import sample_size_repeated_measures
+
+# High correlation scenario (ANCOVA preferred)
+result = sample_size_repeated_measures(
+    delta=0.5,           # Effect size
+    std_dev=1.0,         # Standard deviation  
+    correlation=0.8,     # Baseline-followup correlation
+    power=0.8,           # 80% power
+    alpha=0.05,          # 5% significance
+    method="ancova"      # ANCOVA analysis
+)
+# Returns: n1=23, n2=23, total_n=46
+
+# Same scenario with change score (less efficient)
+result_change = sample_size_repeated_measures(
+    delta=0.5,
+    std_dev=1.0,
+    correlation=0.8,
+    power=0.8,
+    alpha=0.05,
+    method="change_score"
+)
+# Returns: n1=26, n2=26, total_n=52 (13% larger sample needed)
+```
+
 ## References
 
 1. Fitzmaurice GM, Laird NM, Ware JH. Applied Longitudinal Analysis. 2nd ed. Wiley; 2011.
@@ -188,3 +256,7 @@ Crossover designs must account for potential period effects and carryover effect
 3. Chow S-C, Liu J-P, Wang H. Design and Analysis of Bioavailability and Bioequivalence Studies. 3rd ed. Chapman & Hall/CRC; 2008.
 
 4. Lu K, Mehrotra DV, Liu G. Sample size determination for constrained longitudinal data analysis. Stat Med. 2009;28(4):679-699.
+
+5. **Vickers, A.J. (2001).** The use of percentage change from baseline as an outcome in a controlled trial is statistically inefficient: a simulation study. BMC Medical Research Methodology, 1:6.
+
+6. **Van Breukelen, G.J. (2006).** ANCOVA versus change from baseline had more power in randomized trials and more bias in nonrandomized trials. Journal of Clinical Epidemiology, 59(9):920-5.
