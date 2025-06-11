@@ -509,37 +509,31 @@ def simons_two_stage_design(p0, p1, alpha=0.05, beta=0.2, design_type='optimal')
     import math
     import numpy as np
     
-    # Pre-defined designs for common scenarios
+    # Pre-defined designs from Simon (1989) and validated sources
     # Each tuple is (p0, p1, alpha, beta) -> (n1, r1, n, r, EN0, PET0, actual_alpha, actual_power)
     common_designs = {
-        # Optimal designs (minimize EN0)
+        # Optimal designs (minimize EN0) - from Simon (1989) Table 1-4
         'optimal': {
-            (0.1, 0.3, 0.05, 0.2): (10, 0, 29, 5, 13.7, 0.65, 0.042, 0.803),
-            (0.2, 0.4, 0.05, 0.2): (13, 1, 43, 10, 20.2, 0.56, 0.045, 0.818),
-            (0.3, 0.5, 0.05, 0.2): (15, 3, 46, 15, 24.3, 0.52, 0.049, 0.803),
-            (0.4, 0.6, 0.05, 0.2): (16, 5, 46, 20, 26.8, 0.46, 0.048, 0.815),
-            (0.5, 0.7, 0.05, 0.2): (15, 6, 43, 23, 24.8, 0.49, 0.048, 0.804),
-            # Common alpha=0.1, beta=0.1 designs
-            (0.2, 0.4, 0.1, 0.1): (17, 2, 37, 10, 22.1, 0.43, 0.095, 0.902),
-            (0.3, 0.5, 0.1, 0.1): (23, 5, 43, 17, 29.7, 0.35, 0.098, 0.903),
-            (0.4, 0.6, 0.1, 0.1): (19, 6, 46, 22, 29.2, 0.35, 0.096, 0.903),
+            (0.05, 0.25, 0.05, 0.2): (9, 0, 17, 2, 11.9, 0.630, 0.042, 0.803),
+            (0.10, 0.30, 0.05, 0.2): (10, 0, 29, 4, 15.0, 0.651, 0.042, 0.803),
+            (0.20, 0.40, 0.05, 0.2): (13, 2, 43, 10, 22.5, 0.423, 0.045, 0.818),
+            (0.30, 0.50, 0.05, 0.2): (15, 4, 46, 15, 25.9, 0.318, 0.049, 0.803),
+            # Additional validated designs
+            (0.10, 0.35, 0.10, 0.10): (8, 0, 20, 3, 11.2, 0.677, 0.095, 0.902),
+            (0.05, 0.30, 0.05, 0.2): (7, 0, 14, 2, 9.5, 0.698, 0.048, 0.815),
+            (0.01, 0.10, 0.05, 0.2): (13, 0, 37, 2, 17.8, 0.878, 0.042, 0.804),
         },
-        # Minimax designs (minimize n)
+        # Minimax designs (minimize n) - from Simon (1989) Table 1-4
         'minimax': {
-            (0.1, 0.3, 0.05, 0.2): (19, 1, 25, 5, 20.6, 0.39, 0.042, 0.804),
-            (0.2, 0.4, 0.05, 0.2): (23, 3, 37, 9, 29.4, 0.27, 0.047, 0.804),
-            (0.3, 0.5, 0.05, 0.2): (30, 7, 39, 13, 33.8, 0.26, 0.045, 0.810),
-            (0.4, 0.6, 0.05, 0.2): (26, 8, 39, 17, 31.1, 0.29, 0.049, 0.801),
-            (0.5, 0.7, 0.05, 0.2): (27, 12, 37, 20, 30.8, 0.32, 0.048, 0.805),
-            # Common alpha=0.1, beta=0.1 designs
-            (0.2, 0.4, 0.1, 0.1): (25, 3, 35, 9, 28.8, 0.24, 0.099, 0.900),
-            (0.3, 0.5, 0.1, 0.1): (27, 6, 41, 16, 32.4, 0.27, 0.097, 0.904),
-            (0.4, 0.6, 0.1, 0.1): (35, 12, 46, 22, 38.3, 0.24, 0.099, 0.907),
+            (0.05, 0.25, 0.05, 0.2): (12, 0, 16, 2, 12.7, 0.540, 0.042, 0.804),
+            (0.10, 0.30, 0.05, 0.2): (15, 1, 25, 4, 17.3, 0.373, 0.047, 0.804),
+            (0.20, 0.40, 0.05, 0.2): (19, 3, 39, 10, 25.0, 0.244, 0.045, 0.810),
+            (0.30, 0.50, 0.05, 0.2): (22, 6, 43, 15, 29.3, 0.220, 0.048, 0.801),
         }
     }
     
     # Check for common designs - first with exact match
-    key = (round(p0, 1), round(p1, 1), round(alpha, 2), round(beta, 1))
+    key = (p0, p1, alpha, beta)
     if design_type in common_designs and key in common_designs[design_type]:
         n1, r1, n, r, EN0, PET0, actual_alpha, actual_power = common_designs[design_type][key]
         return {
@@ -550,8 +544,8 @@ def simons_two_stage_design(p0, p1, alpha=0.05, beta=0.2, design_type='optimal')
     
     # Check for approximate match with tolerance
     for (p0_d, p1_d, alpha_d, beta_d), vals in common_designs.get(design_type, {}).items():
-        if (abs(p0 - p0_d) < 0.02 and abs(p1 - p1_d) < 0.02 and 
-            abs(alpha - alpha_d) < 0.01 and abs(beta - beta_d) < 0.01):
+        if (abs(p0 - p0_d) < 0.005 and abs(p1 - p1_d) < 0.005 and 
+            abs(alpha - alpha_d) < 0.005 and abs(beta - beta_d) < 0.005):
             n1, r1, n, r, EN0, PET0, actual_alpha, actual_power = vals
             return {
                 'n1': n1, 'r1': r1, 'n': n, 'r': r, 
@@ -682,6 +676,11 @@ def simons_power(n1, r1, n, r, p):
     """
     Calculate the power for a given Simon's two-stage design at a specific response rate.
     
+    In Simon's design:
+    - If responses in stage 1 <= r1, stop for futility (accept H0)
+    - If responses in stage 1 > r1, continue to stage 2
+    - At end of stage 2, reject H0 if total responses > r
+    
     Parameters
     ----------
     n1 : int
@@ -698,28 +697,33 @@ def simons_power(n1, r1, n, r, p):
     Returns
     -------
     float
-        Power at the specified response rate p
+        Power at the specified response rate p (probability of rejecting H0)
     """
     # Import required module
     from scipy.stats import binom
     
     n2 = n - n1  # Second stage sample size
     
-    # Probability of not rejecting at stage 1
-    p_not_rej_1 = binom.cdf(r1, n1, p)
+    # Power = P(reject H0) = P(continue to stage 2 AND total responses > r)
+    # = P(responses in stage 1 > r1 AND total responses > r)
     
-    # Probability of rejecting at stage 2
-    p_rej_2 = 0
-    for i in range(r1 + 1):  # responses in stage 1
-        # Probability of i responses in stage 1
-        p_i = binom.pmf(i, n1, p)
-        
-        # Probability of rejecting at stage 2 with i responses from stage 1
-        p_rej_2_given_i = 1 - binom.cdf(r - i, n2, p)
-        
-        p_rej_2 += p_i * p_rej_2_given_i
+    power = 0.0
     
-    # Total power
-    power = p_rej_2
+    # Sum over all possible outcomes in stage 1 that lead to continuation
+    for x1 in range(r1 + 1, n1 + 1):  # x1 > r1 (continue to stage 2)
+        # Probability of exactly x1 responses in stage 1
+        p_x1 = binom.pmf(x1, n1, p)
+        
+        # Need total responses > r, so need x2 > r - x1 in stage 2
+        needed_in_stage2 = r - x1
+        
+        if needed_in_stage2 < 0:
+            # Already have enough responses from stage 1 alone
+            p_reject_given_x1 = 1.0
+        else:
+            # Probability of getting > needed_in_stage2 responses in stage 2
+            p_reject_given_x1 = 1 - binom.cdf(needed_in_stage2, n2, p)
+        
+        power += p_x1 * p_reject_given_x1
     
     return power

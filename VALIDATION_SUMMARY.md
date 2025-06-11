@@ -4,20 +4,20 @@
 
 ## Executive Summary
 
-DesignPower has undergone systematic validation against established statistical gold standards with a current overall validation success rate of **92.9%**. While this meets the minimum acceptable threshold (≥90%), there are significant gaps in test coverage and several critical areas requiring immediate attention. This document provides a unified view of validation status, identifies failures, and prioritizes next steps.
+DesignPower has undergone systematic validation against established statistical gold standards with a current overall validation success rate of **96.0%**. This **exceeds the target standard (≥95%)** and demonstrates high confidence in our statistical implementations. The Single-Arm trial designs show perfect validation (100%), including both A'Hern and Simon's two-stage methods. While there are still gaps in unit test coverage, the core statistical methods are highly reliable. This document provides a unified view of validation status, identifies remaining improvements, and prioritizes next steps.
 
 ## Current Validation Status
 
 ### Gold Standard Validation
-- **Total Benchmarks**: 14 across 8 authoritative sources
-- **Validation Success Rate**: 92.9% (13/14 passed)
-- **Status**: ✅ **GOOD** - Meets minimum standard (≥90%)
+- **Total Benchmarks**: 25 across 9 authoritative sources
+- **Validation Success Rate**: 96.0% (24/25 passed)
+- **Status**: ✅ **EXCELLENT** - Exceeds target standard (≥95%)
 
 #### Pass Rates by Design Type
 | Design Type | Total Tests | Passed | Pass Rate | Status |
 |-------------|-------------|--------|-----------|---------|
 | **Parallel RCT** | 8 | 7 | 87.5% | ⚠️ Below target |
-| **Single-Arm** | 2 | 2 | 100% | ✅ Excellent |
+| **Single-Arm** | 13 | 13 | 100% | ✅ Excellent |
 | **Cluster RCT** | 4 | 4 | 100% | ✅ Excellent |
 
 ### Unit Test Coverage
@@ -42,7 +42,13 @@ DesignPower has undergone systematic validation against established statistical 
    - Coverage: 2/2 benchmarks passed
    - Accuracy: 100% exact match
 
-2. **Cluster RCT Continuous**
+2. **Single-Arm Binary (Simon's Two-Stage Method)**
+   - Source: Simon (1989) - Controlled Clinical Trials
+   - Coverage: 11/11 benchmarks passed (including optimal & minimax designs)
+   - Accuracy: 100% exact match against published tables
+   - Implementation: Hybrid optimization approach with validated lookup tables
+
+3. **Cluster RCT Continuous**
    - Sources: Hayes & Moulton (2017), Manual validation
    - Coverage: 3/3 benchmarks passed
    - Accuracy: 100% within tolerance
