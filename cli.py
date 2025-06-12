@@ -30,6 +30,17 @@ from core.designs.single_arm.binary import (
     simons_two_stage_design,
     simons_power
 )
+from core.designs.single_arm.survival import (
+    one_sample_survival_test_sample_size,
+    one_sample_survival_test_power
+)
+from core.designs.parallel.analytical_survival import (
+    sample_size_survival,
+    power_survival,
+    min_detectable_effect_survival,
+    sample_size_survival_non_inferiority,
+    power_survival_non_inferiority
+)
 from core.simulation import (
     simulate_parallel_rct,
     simulate_cluster_rct,
@@ -54,6 +65,7 @@ class OutcomeType(str, Enum):
     """Enum for supported outcome types."""
     CONTINUOUS = "continuous"
     BINARY = "binary"
+    SURVIVAL = "survival"
 
 
 class CalculationType(str, Enum):
@@ -950,6 +962,266 @@ def single_arm(
                 console.print(json.dumps(result, indent=2))
             else:
                 display_result(result, f"Single-arm {outcome.value} ({design_method})")
+                
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        raise typer.Exit(1)
+
+
+@app.command("survival")
+def survival(
+    design: DesignType = typer.Option(DesignType.PARALLEL, help="Study design (parallel or single-arm)"),
+    calculation: CalculationType = typer.Option(CalculationType.SAMPLE_SIZE, help="Type of calculation"),
+    hypothesis: str = typer.Option("superiority", help="Hypothesis type: superiority or non-inferiority"),
+    
+    # Common parameters
+    alpha: float = typer.Option(0.05, help="Significance level"),
+    power: float = typer.Option(0.8, help="Desired statistical power (1 - beta)"),
+    sides: int = typer.Option(2, help="One-sided (1) or two-sided (2) test"),
+    
+    # Survival-specific parameters
+    median_control: Optional[float] = typer.Option(None, help="Median survival in control group (months)"),
+    median_treatment: Optional[float] = typer.Option(None, help="Median survival in treatment group (months)"),
+    hazard_ratio: Optional[float] = typer.Option(None, help="Hazard ratio (treatment/control)"),
+    
+    # For single-arm studies  
+    median_null: Optional[float] = typer.Option(None, help="Null hypothesis median survival (single-arm)"),
+    median_alt: Optional[float] = typer.Option(None, help="Alternative hypothesis median survival (single-arm)"),
+    
+    # Study design parameters
+    enrollment_period: float = typer.Option(12.0, help="Enrollment period (months)"),
+    follow_up_period: float = typer.Option(12.0, help="Follow-up period (months)"),
+    dropout_rate: float = typer.Option(0.1, help="Expected dropout rate"),
+    allocation_ratio: float = typer.Option(1.0, help="Allocation ratio (n2/n1) for parallel design"),
+    
+    # Non-inferiority parameters
+    ni_margin: Optional[float] = typer.Option(None, help="Non-inferiority margin (hazard ratio)"),
+    assumed_hr: Optional[float] = typer.Option(1.0, help="Assumed true HR for non-inferiority"),
+    
+    # Sample sizes (for power calculations)
+    n: Optional[int] = typer.Option(None, help="Total sample size (single-arm)"),
+    n1: Optional[int] = typer.Option(None, help="Sample size group 1 (parallel)"),
+    n2: Optional[int] = typer.Option(None, help="Sample size group 2 (parallel)"),
+    
+    # Output options
+    output_json: bool = typer.Option(False, "--json", help="Output result as JSON"),
+    generate_script: bool = typer.Option(False, "--script", help="Generate reproducible Python script"),
+    script_output: Optional[str] = typer.Option(None, "--script-file", help="Save generated script to file")
+):
+    """
+    Calculate sample size or power for survival analysis studies.
+    
+    Examples:
+    
+    # Parallel survival study (superiority)
+    designpower survival --design parallel --median-control 12 --median-treatment 18
+    
+    # Parallel study with hazard ratio
+    designpower survival --design parallel --median-control 12 --hazard-ratio 0.7
+    
+    # Single-arm survival study
+    designpower survival --design single-arm --median-null 6 --median-alt 12
+    
+    # Non-inferiority survival study
+    designpower survival --hypothesis non-inferiority --median-control 12 --ni-margin 1.3
+    
+    # Power calculation
+    designpower survival --calculation power --n1 100 --n2 100 --median-control 12 --median-treatment 18
+    """
+    try:
+        if generate_script:
+            # Build parameters for script generation
+            params = {
+                'calculation_type': calculation.value.replace('-', ' ').title(),
+                'design': design.value,
+                'hypothesis_type': hypothesis.title(),
+                'alpha': alpha,
+                'power': power,
+                'sides': sides,
+                'enrollment_period': enrollment_period,
+                'follow_up_period': follow_up_period,
+                'dropout_rate': dropout_rate,
+                'allocation_ratio': allocation_ratio
+            }
+            
+            if design == DesignType.PARALLEL:
+                if median_control is None:
+                    console.print("[bold red]Error:[/bold red] For parallel studies, --median-control is required.")
+                    raise typer.Exit(1)
+                    
+                # Determine median_treatment from hazard_ratio if provided
+                if hazard_ratio is not None and median_treatment is None:
+                    median_treatment = median_control / hazard_ratio
+                elif median_treatment is None:
+                    console.print("[bold red]Error:[/bold red] Either --median-treatment or --hazard-ratio is required.")
+                    raise typer.Exit(1)
+                    
+                params.update({
+                    'median_control': median_control,
+                    'median_treatment': median_treatment,
+                    'hazard_ratio': hazard_ratio,
+                    'ni_margin': ni_margin,
+                    'assumed_hr': assumed_hr,
+                    'n1': n1,
+                    'n2': n2
+                })
+                
+                from app.components.parallel_rct import generate_cli_code_parallel_survival
+                script = generate_cli_code_parallel_survival(params)
+                
+            else:  # Single-arm
+                if median_null is None or median_alt is None:
+                    console.print("[bold red]Error:[/bold red] For single-arm studies, --median-null and --median-alt are required.")
+                    raise typer.Exit(1)
+                    
+                params.update({
+                    'median_null': median_null,
+                    'median_alt': median_alt,
+                    'n': n
+                })
+                
+                from app.components.single_arm import generate_cli_code_single_arm_survival
+                script = generate_cli_code_single_arm_survival(params)
+            
+            # Output the script
+            if script_output:
+                with open(script_output, 'w') as f:
+                    f.write(script)
+                console.print(f"[bold green]✓[/bold green] Reproducible script saved to: {script_output}")
+                console.print(f"[bold blue]Usage:[/bold blue] python {script_output}")
+            else:
+                console.print(script)
+                
+        else:
+            # Perform actual calculation
+            if design == DesignType.PARALLEL:
+                if median_control is None:
+                    console.print("[bold red]Error:[/bold red] For parallel studies, --median-control is required.")
+                    raise typer.Exit(1)
+                    
+                # Determine median_treatment from hazard_ratio if provided
+                if hazard_ratio is not None and median_treatment is None:
+                    median_treatment = median_control / hazard_ratio
+                elif median_treatment is None:
+                    console.print("[bold red]Error:[/bold red] Either --median-treatment or --hazard-ratio is required.")
+                    raise typer.Exit(1)
+                
+                if hypothesis.lower() == "non-inferiority":
+                    if ni_margin is None:
+                        console.print("[bold red]Error:[/bold red] For non-inferiority, --ni-margin is required.")
+                        raise typer.Exit(1)
+                        
+                    if calculation == CalculationType.SAMPLE_SIZE:
+                        result = sample_size_survival_non_inferiority(
+                            median1=median_control,
+                            non_inferiority_margin=ni_margin,
+                            enrollment_period=enrollment_period,
+                            follow_up_period=follow_up_period,
+                            dropout_rate=dropout_rate,
+                            power=power,
+                            alpha=alpha,
+                            allocation_ratio=allocation_ratio,
+                            assumed_hr=assumed_hr
+                        )
+                    elif calculation == CalculationType.POWER:
+                        if n1 is None or n2 is None:
+                            console.print("[bold red]Error:[/bold red] For power calculation, --n1 and --n2 are required.")
+                            raise typer.Exit(1)
+                        result = power_survival_non_inferiority(
+                            n1=n1, n2=n2,
+                            median1=median_control,
+                            non_inferiority_margin=ni_margin,
+                            enrollment_period=enrollment_period,
+                            follow_up_period=follow_up_period,
+                            dropout_rate=dropout_rate,
+                            alpha=alpha,
+                            assumed_hr=assumed_hr
+                        )
+                    else:
+                        console.print("[bold red]Error:[/bold red] MDE calculation not implemented for non-inferiority survival studies.")
+                        raise typer.Exit(1)
+                        
+                else:  # Superiority
+                    if calculation == CalculationType.SAMPLE_SIZE:
+                        result = sample_size_survival(
+                            median1=median_control,
+                            median2=median_treatment,
+                            enrollment_period=enrollment_period,
+                            follow_up_period=follow_up_period,
+                            dropout_rate=dropout_rate,
+                            power=power,
+                            alpha=alpha,
+                            allocation_ratio=allocation_ratio,
+                            sides=sides
+                        )
+                    elif calculation == CalculationType.POWER:
+                        if n1 is None or n2 is None:
+                            console.print("[bold red]Error:[/bold red] For power calculation, --n1 and --n2 are required.")
+                            raise typer.Exit(1)
+                        result = power_survival(
+                            n1=n1, n2=n2,
+                            median1=median_control,
+                            median2=median_treatment,
+                            enrollment_period=enrollment_period,
+                            follow_up_period=follow_up_period,
+                            dropout_rate=dropout_rate,
+                            alpha=alpha,
+                            sides=sides
+                        )
+                    else:  # MDE
+                        if n1 is None or n2 is None:
+                            console.print("[bold red]Error:[/bold red] For MDE calculation, --n1 and --n2 are required.")
+                            raise typer.Exit(1)
+                        result = min_detectable_effect_survival(
+                            n1=n1, n2=n2,
+                            median1=median_control,
+                            enrollment_period=enrollment_period,
+                            follow_up_period=follow_up_period,
+                            dropout_rate=dropout_rate,
+                            alpha=alpha,
+                            power=power,
+                            sides=sides
+                        )
+                        
+            else:  # Single-arm
+                if median_null is None or median_alt is None:
+                    console.print("[bold red]Error:[/bold red] For single-arm studies, --median-null and --median-alt are required.")
+                    raise typer.Exit(1)
+                    
+                if calculation == CalculationType.SAMPLE_SIZE:
+                    result = one_sample_survival_test_sample_size(
+                        median_null=median_null,
+                        median_alt=median_alt,
+                        enrollment_period=enrollment_period,
+                        follow_up_period=follow_up_period,
+                        dropout_rate=dropout_rate,
+                        alpha=alpha,
+                        power=power,
+                        sides=sides
+                    )
+                elif calculation == CalculationType.POWER:
+                    if n is None:
+                        console.print("[bold red]Error:[/bold red] For power calculation, --n is required.")
+                        raise typer.Exit(1)
+                    result = one_sample_survival_test_power(
+                        n=n,
+                        median_null=median_null,
+                        median_alt=median_alt,
+                        enrollment_period=enrollment_period,
+                        follow_up_period=follow_up_period,
+                        dropout_rate=dropout_rate,
+                        alpha=alpha,
+                        sides=sides
+                    )
+                else:
+                    console.print("[bold red]Error:[/bold red] MDE calculation not yet implemented for single-arm survival studies.")
+                    raise typer.Exit(1)
+            
+            # Display results
+            if output_json:
+                console.print(json.dumps(result, indent=2))
+            else:
+                display_result(result, f"{design.value.title()} survival ({hypothesis})")
                 
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
