@@ -154,7 +154,8 @@ def generate_cli_code_parallel_binary(params):
         "sample_size_binary": "core.designs.parallel.analytical_binary",
         "sample_size_binary_sim": "core.designs.parallel.simulation_binary",
         "power_binary_non_inferiority": "core.designs.parallel.analytical_binary",
-        "sample_size_binary_non_inferiority": "core.designs.parallel.analytical_binary"
+        "sample_size_binary_non_inferiority": "core.designs.parallel.analytical_binary",
+        "min_detectable_binary_non_inferiority_margin": "core.designs.parallel.analytical_binary"
     }
     
     # Get the actual function and its source code
@@ -749,7 +750,10 @@ def generate_cli_code_parallel_continuous(params):
         "sample_size_continuous": "core.designs.parallel.analytical_continuous",
         "sample_size_continuous_sim": "core.designs.parallel.simulation_continuous",
         "power_repeated_measures": "core.designs.parallel.analytical_continuous",
-        "sample_size_repeated_measures": "core.designs.parallel.analytical_continuous"
+        "sample_size_repeated_measures": "core.designs.parallel.analytical_continuous",
+        "power_continuous_non_inferiority": "core.designs.parallel.analytical_continuous",
+        "sample_size_continuous_non_inferiority": "core.designs.parallel.analytical_continuous",
+        "min_detectable_continuous_non_inferiority_margin": "core.designs.parallel.analytical_continuous"
     }
     
     # Get the actual function and its source code

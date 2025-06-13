@@ -1002,8 +1002,13 @@ if __name__ == "__main__":
 
 def generate_cli_code_single_arm_binary(params):
     """
-    Generate reproducible CLI code for single-arm binary outcomes.
+    Generate enhanced reproducible CLI code for single-arm binary outcomes with algorithm transparency.
+    
+    Uses ACTUAL parameter values from the UI to create a runnable script with complete algorithm source code.
     """
+    # Import the source extraction utility for showing algorithm details
+    from core.utils.source_extraction import get_function_source
+    from core.utils.enhanced_script_generation import get_function_from_name
     calculation_type = params.get('calculation_type', 'Sample Size')
     p = params.get('p', 0.3)
     p0 = params.get('p0', 0.1)
@@ -1015,6 +1020,36 @@ def generate_cli_code_single_arm_binary(params):
     n1 = params.get('n1')
     r1 = params.get('r1')
     r = params.get('r')
+    
+    # Get algorithm source code based on the design method being used
+    algorithm_source = ""
+    try:
+        if design_method.lower() == 'ahern':
+            if calculation_type == 'Sample Size':
+                key_function = get_function_from_name("core.designs.single_arm.binary", "ahern_sample_size")
+            else:
+                key_function = get_function_from_name("core.designs.single_arm.binary", "ahern_power")
+        elif design_method.lower() == 'simons':
+            if calculation_type == 'Sample Size':
+                key_function = get_function_from_name("core.designs.single_arm.binary", "simons_two_stage_design")
+            else:
+                key_function = get_function_from_name("core.designs.single_arm.binary", "simons_power")
+        else:
+            # Standard single-sample test
+            if calculation_type == 'Sample Size':
+                key_function = get_function_from_name("core.designs.single_arm.binary", "one_sample_proportion_test_sample_size")
+            else:
+                key_function = get_function_from_name("core.designs.single_arm.binary", "one_sample_proportion_test_power")
+        
+        if key_function:
+            algorithm_source = get_function_source(key_function)
+    except Exception as e:
+        algorithm_source = f"""
+# ============================================================================
+# KEY ALGORITHM: {design_method} method for {calculation_type}
+# Note: Unable to extract source code ({str(e)})
+# ============================================================================
+"""
     
     script = f'''#!/usr/bin/env python3
 """
@@ -1033,6 +1068,8 @@ from core.designs.single_arm.binary import (
     simons_two_stage_design,
     simons_power
 )
+
+{algorithm_source}
 
 def main():
     """Main analysis function."""
@@ -1211,8 +1248,13 @@ if __name__ == "__main__":
     return script
 def generate_cli_code_single_arm_survival(params):
     """
-    Generate reproducible CLI code for single-arm survival outcomes.
+    Generate enhanced reproducible CLI code for single-arm survival outcomes with algorithm transparency.
+    
+    Uses ACTUAL parameter values from the UI to create a runnable script with complete algorithm source code.
     """
+    # Import the source extraction utility for showing algorithm details
+    from core.utils.source_extraction import get_function_source
+    from core.utils.enhanced_script_generation import get_function_from_name
     calculation_type = params.get('calculation_type', 'Sample Size')
     median_null = params.get('median_null', 6.0)
     median_alt = params.get('median_alt', 12.0)
@@ -1223,6 +1265,24 @@ def generate_cli_code_single_arm_survival(params):
     power = params.get('power', 0.8)
     sides = params.get('sides', 2)
     n = params.get('n')
+    
+    # Get algorithm source code based on the calculation type
+    algorithm_source = ""
+    try:
+        if calculation_type == 'Sample Size':
+            key_function = get_function_from_name("core.designs.single_arm.survival", "one_sample_survival_test_sample_size")
+        else:
+            key_function = get_function_from_name("core.designs.single_arm.survival", "one_sample_survival_test_power")
+        
+        if key_function:
+            algorithm_source = get_function_source(key_function)
+    except Exception as e:
+        algorithm_source = f"""
+# ============================================================================
+# KEY ALGORITHM: one_sample_survival_test_{calculation_type.lower().replace(' ', '_')}
+# Note: Unable to extract source code ({str(e)})
+# ============================================================================
+"""
     
     script = f'''#!/usr/bin/env python3
 """
@@ -1238,6 +1298,8 @@ from core.designs.single_arm.survival import (
     one_sample_survival_test_power
 )
 import math
+
+{algorithm_source}
 
 def main():
     """Main analysis function."""

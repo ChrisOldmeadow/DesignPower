@@ -40,10 +40,13 @@ def _detect_resource_constraints():
 
 def generate_cli_code_cluster_continuous(params):
     """
-    Generate reproducible Python code for cluster RCT continuous outcome calculations.
+    Generate enhanced reproducible Python code for cluster RCT continuous outcome calculations with algorithm transparency.
     
-    Uses ACTUAL parameter values from the UI to create a runnable script.
+    Uses ACTUAL parameter values from the UI to create a runnable script with complete algorithm source code.
     """
+    # Import the source extraction utility for showing algorithm details
+    from core.utils.source_extraction import get_function_source
+    from core.utils.enhanced_script_generation import get_function_from_name
     # Extract key parameters from UI
     calc_type = params.get('calculation_type', 'Power')
     method = params.get('method', 'analytical')
@@ -207,6 +210,27 @@ def generate_cli_code_cluster_continuous(params):
     # Join parameters properly
     all_params = "\n".join(param_lines)
     
+    # Get algorithm source code based on the function being used
+    algorithm_source = ""
+    try:
+        if method == "analytical":
+            module_path = "core.designs.cluster_rct.analytical_continuous"
+        elif method == "permutation":
+            module_path = "core.designs.cluster_rct.analytical_continuous"
+        else:
+            module_path = "core.designs.cluster_rct.simulation_continuous"
+        
+        actual_function = get_function_from_name(module_path, function_name)
+        if actual_function:
+            algorithm_source = get_function_source(actual_function)
+    except Exception as e:
+        algorithm_source = f"""
+# ============================================================================
+# KEY ALGORITHM: {function_name}
+# Note: Unable to extract source code ({str(e)})
+# ============================================================================
+"""
+    
     # Calculate effect size and derived values for display
     effect_size = abs(mean2 - mean1)
     standardized_effect = effect_size / std_dev if std_dev > 0 else 0
@@ -266,6 +290,7 @@ def generate_cli_code_cluster_continuous(params):
 #    - Option C: Run in Jupyter/IDE with DesignPower project as working directory
 
 {import_line} {function_name}
+{algorithm_source}
 
 # Calculate {calc_type.lower()} with the specified study parameters
 result = {function_name}(
@@ -315,10 +340,13 @@ print(json.dumps(result, indent=2))"""
 
 def generate_cli_code_cluster_binary(params):
     """
-    Generate reproducible Python code for cluster RCT binary outcome calculations.
+    Generate enhanced reproducible Python code for cluster RCT binary outcome calculations with algorithm transparency.
     
-    Uses ACTUAL parameter values from the UI to create a runnable script.
+    Uses ACTUAL parameter values from the UI to create a runnable script with complete algorithm source code.
     """
+    # Import the source extraction utility for showing algorithm details
+    from core.utils.source_extraction import get_function_source
+    from core.utils.enhanced_script_generation import get_function_from_name
     # Extract key parameters from UI
     calc_type = params.get('calc_type', 'Power')
     method = params.get('method', 'analytical')
@@ -461,6 +489,27 @@ def generate_cli_code_cluster_binary(params):
     # Join parameters properly
     all_params = "\n".join(param_lines)
     
+    # Get algorithm source code based on the function being used
+    algorithm_source = ""
+    try:
+        if method == "analytical":
+            module_path = "core.designs.cluster_rct.analytical_binary"
+        elif method == "permutation":
+            module_path = "core.designs.cluster_rct.analytical_binary"
+        else:
+            module_path = "core.designs.cluster_rct.simulation_binary"
+        
+        actual_function = get_function_from_name(module_path, function_name)
+        if actual_function:
+            algorithm_source = get_function_source(actual_function)
+    except Exception as e:
+        algorithm_source = f"""
+# ============================================================================
+# KEY ALGORITHM: {function_name}
+# Note: Unable to extract source code ({str(e)})
+# ============================================================================
+"""
+    
     # Calculate effect size and derived values for display
     effect_size = abs(p2 - p1)
     relative_risk = p2 / p1 if p1 > 0 else float('inf')
@@ -520,6 +569,7 @@ def generate_cli_code_cluster_binary(params):
 #    - Option C: Run in Jupyter/IDE with DesignPower project as working directory
 
 {import_line} {function_name}
+{algorithm_source}
 
 # Calculate {calc_type.lower()} with the specified study parameters
 result = {function_name}(
