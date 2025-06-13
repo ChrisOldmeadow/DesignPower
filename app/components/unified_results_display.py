@@ -637,7 +637,22 @@ class UnifiedResultsDisplay:
             with tab1:
                 try:
                     cli_code = cli_generator(params)
-                    st.code(cli_code, language="python")
+                    
+                    # Clean the code to prevent display issues
+                    if cli_code:
+                        # Remove any problematic Unicode characters that might cause display issues
+                        cli_code = cli_code.replace('│', '|').replace('►', '>').replace('…', '...')
+                        
+                        # Ensure lines aren't excessively long for display
+                        lines = cli_code.split('\n')
+                        max_line_length = max(len(line) for line in lines) if lines else 0
+                        
+                        if max_line_length > 500:
+                            st.warning("⚠️ Generated script contains very long lines. Download for best viewing.")
+                        
+                        st.code(cli_code, language="python")
+                    else:
+                        st.error("❌ Could not generate Python script.")
                     
                     cli_key_suffix = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()[:8]
                     st.download_button(
@@ -649,6 +664,11 @@ class UnifiedResultsDisplay:
                     )
                 except Exception as e:
                     st.error(f"Error generating Python script: {e}")
+                    # Show more detailed error info for debugging
+                    if st.checkbox("Show detailed error info"):
+                        st.code(f"Error type: {type(e).__name__}\nError message: {str(e)}")
+                        import traceback
+                        st.code(traceback.format_exc())
             
             with tab2:
                 try:

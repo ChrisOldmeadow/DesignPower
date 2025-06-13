@@ -312,16 +312,14 @@ def power_binary(n1, n2, p1, p2, alpha=0.05, test_type="normal approximation", c
             es_on_se = effect_size / se
             power = stats.norm.cdf(es_on_se - z_alpha_sided) + stats.norm.cdf(-es_on_se - z_alpha_sided)
             
-            # Apply conservative adjustment since Fisher's exact is typically less powerful
-            # This is an empirically-derived adjustment factor
-            power = power * 0.85  # Conservative adjustment for large samples
+            # Note: For large samples, normal approximation approaches Fisher's exact test
+            # No arbitrary adjustment factors are applied - use the mathematical result as-is
             
             calculation_method = "normal_approximation"
         
     elif test_type == "likelihood_ratio":
-        # For likelihood ratio test
-        # Likelihood ratio test is typically more powerful than normal approximation
-        factor = 1.05
+        # For likelihood ratio test, use standard asymptotic approximation
+        # Note: Exact likelihood ratio power calculation requires more complex methods
         
         # Calculate pooled proportion
         p_pooled = (p1 * n1 + p2 * n2) / (n1 + n2)
@@ -332,8 +330,8 @@ def power_binary(n1, n2, p1, p2, alpha=0.05, test_type="normal approximation", c
         # Calculate critical value
         z_alpha = stats.norm.ppf(1 - alpha/2)
         
-        # Calculate power with adjustment
-        z_beta = (effect_size / se - z_alpha) * factor
+        # Calculate power using standard normal approximation
+        z_beta = (effect_size / se - z_alpha)
         power = stats.norm.cdf(z_beta)
         
     else:  # Default to normal approximation
@@ -445,29 +443,10 @@ def sample_size_binary(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, test
         # Estimate total sample size for adjustment
         n_total_est = n1_base * (1 + allocation_ratio)
         
-        # Apply size-dependent inflation factor
-        # Also consider if dealing with rare events
-        is_rare_event = min(p1, p2) < 0.05
-        
-        if is_rare_event:
-            # For rare events, Fisher's exact test benefits from the discreteness
-            # of the binomial distribution, requiring smaller samples
-            if n_total_est < 600:
-                factor = 0.83  # Significant deflation for rare events
-            elif n_total_est < 1000:
-                factor = 0.90  # Moderate deflation
-            else:
-                factor = 0.98  # Slight deflation even for large samples
-        else:
-            # Standard inflation factors
-            if n_total_est < 40:
-                factor = 1.15  # 15% inflation for very small samples
-            elif n_total_est < 100:
-                factor = 1.10  # 10% inflation for small samples
-            else:
-                factor = 1.05  # 5% inflation for moderate/large samples
-            
-        n1 = math.ceil(n1_base * factor)
+        # For Fisher's exact test with small to moderate samples, use the normal approximation
+        # as the starting point. The exact test will be used at analysis time.
+        # No arbitrary adjustment factors - use the mathematically derived result
+        n1 = math.ceil(n1_base)
         
     elif test_type == "likelihood_ratio":
         # For likelihood ratio test, use a slightly different formula
@@ -485,10 +464,16 @@ def sample_size_binary(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, test
         
         # Apply continuity correction if requested
         if correction:
-            # Add continuity correction factor (0.5/n for each group)
-            # This is a simplified approach - the exact correction depends on multiple factors
-            correction_factor = 1.15  # Approximate factor for continuity correction
-            n1 = n1 * correction_factor
+            # Standard continuity correction adds 0.5 to each cell in the 2x2 table
+            # This modifies the effect size calculation, following established methods
+            # Reference: Fleiss, J.L. et al. (2003). Statistical Methods for Rates and Proportions
+            corrected_p1 = (p1 * n1 + 0.5) / (n1 + 1)
+            corrected_p2 = (p2 * n1 + 0.5) / (n1 + 1)  # Approximate with same n
+            effect_diff = abs(corrected_p1 - corrected_p2)
+            # Recalculate with corrected effect size - no arbitrary multipliers
+            numerator = (z_alpha + z_beta)**2 * (corrected_p1 * (1 - corrected_p1) + corrected_p2 * (1 - corrected_p2) / allocation_ratio)
+            denominator = effect_diff**2
+            n1 = numerator / denominator
             
         n1 = math.ceil(n1)
     
