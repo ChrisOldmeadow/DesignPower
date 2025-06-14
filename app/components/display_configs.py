@@ -324,6 +324,154 @@ def create_parallel_rct_survival_config() -> DisplayConfig:
     )
 
 
+def create_stepped_wedge_continuous_config() -> DisplayConfig:
+    """Create display configuration for Stepped Wedge with continuous outcome."""
+    
+    def display_main_results(results: Dict[str, Any], params: Dict[str, Any], calc_type: str, hypothesis_type: str):
+        """Custom display function for main results."""
+        st.metric("Power", f"{results['power']:.3f}")
+        
+        # Display design summary
+        st.write("**Study Design Summary:**")
+        total_n = results.get('parameters', {}).get('total_n', 0)
+        clusters = results.get('parameters', {}).get('clusters', 0)
+        steps = results.get('parameters', {}).get('steps', 0)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"• Total Sample Size: {total_n:,}")
+            st.write(f"• Number of Clusters: {clusters}")
+        with col2:
+            st.write(f"• Number of Time Steps: {steps}")
+            st.write(f"• Cluster-Periods: {clusters * steps}")
+    
+    main_section = SectionConfig(
+        title="Stepped Wedge Design Results",
+        metrics=[],
+        custom_display_func=display_main_results
+    )
+    
+    return DisplayConfig(
+        design_name="Stepped Wedge",
+        outcome_name="Continuous Outcome", 
+        sections=[main_section],
+        cli_code_generator=None
+    )
+
+
+def create_stepped_wedge_binary_config() -> DisplayConfig:
+    """Create display configuration for Stepped Wedge with binary outcome."""
+    
+    def display_main_results(results: Dict[str, Any], params: Dict[str, Any], calc_type: str, hypothesis_type: str):
+        """Custom display function for main results."""
+        st.metric("Power", f"{results['power']:.3f}")
+        
+        # Display design summary
+        st.write("**Study Design Summary:**")
+        total_n = results.get('parameters', {}).get('total_n', 0)
+        clusters = results.get('parameters', {}).get('clusters', 0)
+        steps = results.get('parameters', {}).get('steps', 0)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"• Total Sample Size: {total_n:,}")
+            st.write(f"• Number of Clusters: {clusters}")
+        with col2:
+            st.write(f"• Number of Time Steps: {steps}")
+            st.write(f"• Cluster-Periods: {clusters * steps}")
+    
+    main_section = SectionConfig(
+        title="Stepped Wedge Design Results",
+        metrics=[],
+        custom_display_func=display_main_results
+    )
+    
+    return DisplayConfig(
+        design_name="Stepped Wedge",
+        outcome_name="Binary Outcome",
+        sections=[main_section],
+        cli_code_generator=None
+    )
+
+
+def create_interrupted_time_series_continuous_config() -> DisplayConfig:
+    """Create display configuration for Interrupted Time Series with continuous outcome."""
+    
+    def display_main_results(results: Dict[str, Any], params: Dict[str, Any], calc_type: str, hypothesis_type: str):
+        """Custom display function for main results."""
+        if calc_type == "Sample Size":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Pre-intervention Time Points", results.get('n_pre', 'N/A'))
+            with col2:
+                st.metric("Post-intervention Time Points", results.get('n_post', 'N/A'))
+            with col3:
+                st.metric("Total Time Points", results.get('total_n', 'N/A'))
+        else:
+            st.metric("Power", f"{results['power']:.3f}")
+        
+        # Display autocorrelation information
+        params_dict = results.get('parameters', {})
+        autocorr = params_dict.get('autocorr', 0)
+        if autocorr > 0:
+            st.write("**Autocorrelation Adjustment:**")
+            st.write(f"• Autocorrelation coefficient: {autocorr:.3f}")
+            adjustment_factor = (1 - autocorr) / (1 + autocorr)
+            st.write(f"• Effective sample size factor: {adjustment_factor:.3f}")
+    
+    main_section = SectionConfig(
+        title="Interrupted Time Series Results",
+        metrics=[],
+        custom_display_func=display_main_results
+    )
+    
+    return DisplayConfig(
+        design_name="Interrupted Time Series",
+        outcome_name="Continuous Outcome",
+        sections=[main_section],
+        cli_code_generator=None
+    )
+
+
+def create_interrupted_time_series_binary_config() -> DisplayConfig:
+    """Create display configuration for Interrupted Time Series with binary outcome."""
+    
+    def display_main_results(results: Dict[str, Any], params: Dict[str, Any], calc_type: str, hypothesis_type: str):
+        """Custom display function for main results."""
+        if calc_type == "Sample Size":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Pre-intervention Observations", results.get('n_pre', 'N/A'))
+            with col2:
+                st.metric("Post-intervention Observations", results.get('n_post', 'N/A'))
+            with col3:
+                st.metric("Total Observations", results.get('total_n', 'N/A'))
+        else:
+            st.metric("Power", f"{results['power']:.3f}")
+        
+        # Display autocorrelation information
+        params_dict = results.get('parameters', {})
+        autocorr = params_dict.get('autocorr', 0)
+        if autocorr > 0:
+            st.write("**Autocorrelation Adjustment:**")
+            st.write(f"• Autocorrelation coefficient: {autocorr:.3f}")
+            adjustment_factor = (1 - autocorr) / (1 + autocorr)
+            st.write(f"• Effective sample size factor: {adjustment_factor:.3f}")
+    
+    main_section = SectionConfig(
+        title="Interrupted Time Series Results",
+        metrics=[],
+        custom_display_func=display_main_results
+    )
+    
+    return DisplayConfig(
+        design_name="Interrupted Time Series",
+        outcome_name="Binary Outcome",
+        sections=[main_section],
+        cli_code_generator=None
+    )
+
+
 def register_all_configs(unified_display):
     """Register all display configurations with the unified display system."""
     
@@ -331,12 +479,18 @@ def register_all_configs(unified_display):
     try:
         from .parallel_rct import generate_cli_code_parallel_continuous, generate_cli_code_parallel_binary, generate_cli_code_parallel_survival
         from .cluster_rct import generate_cli_code_cluster_continuous, generate_cli_code_cluster_binary
+        from .stepped_wedge import generate_cli_code_stepped_wedge_continuous, generate_cli_code_stepped_wedge_binary
+        from .interrupted_time_series import generate_cli_code_interrupted_time_series_continuous, generate_cli_code_interrupted_time_series_binary
     except ImportError:
         # Handle case where CLI generators aren't available
         generate_cli_code_parallel_continuous = None
         generate_cli_code_parallel_binary = None
         generate_cli_code_parallel_survival = None
         generate_cli_code_cluster_continuous = None
+        generate_cli_code_stepped_wedge_continuous = None
+        generate_cli_code_stepped_wedge_binary = None
+        generate_cli_code_interrupted_time_series_continuous = None
+        generate_cli_code_interrupted_time_series_binary = None
         generate_cli_code_cluster_binary = None
     
     # Parallel RCT configurations
@@ -368,3 +522,21 @@ def register_all_configs(unified_display):
     # Add other single arm configurations as needed
     # unified_display.register_config(("Single Arm Trial", "Continuous Outcome"), create_single_arm_continuous_config())
     # unified_display.register_config(("Single Arm Trial", "Survival Outcome"), create_single_arm_survival_config())
+    
+    # Stepped Wedge configurations  
+    stepped_wedge_continuous_config = create_stepped_wedge_continuous_config()
+    stepped_wedge_continuous_config.cli_code_generator = generate_cli_code_stepped_wedge_continuous
+    unified_display.register_config(("Stepped Wedge", "Continuous Outcome"), stepped_wedge_continuous_config)
+    
+    stepped_wedge_binary_config = create_stepped_wedge_binary_config()
+    stepped_wedge_binary_config.cli_code_generator = generate_cli_code_stepped_wedge_binary
+    unified_display.register_config(("Stepped Wedge", "Binary Outcome"), stepped_wedge_binary_config)
+    
+    # Interrupted Time Series configurations
+    its_continuous_config = create_interrupted_time_series_continuous_config()
+    its_continuous_config.cli_code_generator = generate_cli_code_interrupted_time_series_continuous
+    unified_display.register_config(("Interrupted Time Series", "Continuous Outcome"), its_continuous_config)
+    
+    its_binary_config = create_interrupted_time_series_binary_config() 
+    its_binary_config.cli_code_generator = generate_cli_code_interrupted_time_series_binary
+    unified_display.register_config(("Interrupted Time Series", "Binary Outcome"), its_binary_config)

@@ -51,6 +51,22 @@ from app.components.cluster_display_utils import (
     display_icc_conversion_info,
     display_cluster_continuous_results
 )
+from app.components.stepped_wedge import (
+    render_stepped_wedge_continuous,
+    render_stepped_wedge_binary,
+    calculate_stepped_wedge_continuous,
+    calculate_stepped_wedge_binary,
+    generate_cli_code_stepped_wedge_continuous,
+    generate_cli_code_stepped_wedge_binary
+)
+from app.components.interrupted_time_series import (
+    render_interrupted_time_series_continuous,
+    render_interrupted_time_series_binary,
+    calculate_interrupted_time_series_continuous,
+    calculate_interrupted_time_series_binary,
+    generate_cli_code_interrupted_time_series_continuous,
+    generate_cli_code_interrupted_time_series_binary
+)
 # Import unified results display system
 from app.components.unified_results_display import unified_display
 from app.components.display_configs import register_all_configs
@@ -67,6 +83,14 @@ DESIGN_CONFIGS = {
     },
     "cluster_rct": {
         "name": "Cluster RCT",
+        "outcomes": ["Continuous Outcome", "Binary Outcome"]
+    },
+    "stepped_wedge": {
+        "name": "Stepped Wedge",
+        "outcomes": ["Continuous Outcome", "Binary Outcome"]
+    },
+    "interrupted_time_series": {
+        "name": "Interrupted Time Series",
         "outcomes": ["Continuous Outcome", "Binary Outcome"]
     }
 }
@@ -104,6 +128,22 @@ COMPONENTS = {
     ("Cluster RCT", "Binary Outcome"): {
         "render": render_cluster_binary,
         "calculate": calculate_cluster_binary
+    },
+    ("Stepped Wedge", "Continuous Outcome"): {
+        "render": render_stepped_wedge_continuous,
+        "calculate": calculate_stepped_wedge_continuous
+    },
+    ("Stepped Wedge", "Binary Outcome"): {
+        "render": render_stepped_wedge_binary,
+        "calculate": calculate_stepped_wedge_binary
+    },
+    ("Interrupted Time Series", "Continuous Outcome"): {
+        "render": render_interrupted_time_series_continuous,
+        "calculate": calculate_interrupted_time_series_continuous
+    },
+    ("Interrupted Time Series", "Binary Outcome"): {
+        "render": render_interrupted_time_series_binary,
+        "calculate": calculate_interrupted_time_series_binary
     }
 }
 

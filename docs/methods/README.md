@@ -38,7 +38,13 @@ The documentation is organized by study design and outcome type, matching the st
    - [Continuous Outcomes](cluster_rct_continuous.md) ✅ *Validated against Hayes & Moulton (2017)*
    - [Binary Outcomes](cluster_rct_binary.md) ✅ *Validated against Donner & Klar (2000)*
 
-4. **Special Topics**
+4. **Stepped Wedge Cluster RCT**
+   - [Stepped Wedge Methodology](stepped_wedge_methodology.md) 📋 *Comprehensive methodology guide*
+
+5. **Interrupted Time Series**
+   - [Interrupted Time Series Methodology](interrupted_time_series_methodology.md) 📋 *Complete ITS analysis framework*
+
+6. **Special Topics**
    - [Repeated Measures Designs](repeated_measures.md)
    - [Simulation Methods](simulation_methods.md)
    - [Bayesian Inference Methods](bayesian_inference.md)

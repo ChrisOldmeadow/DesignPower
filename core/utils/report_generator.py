@@ -71,6 +71,32 @@ METHOD_REFERENCES = {
     "cluster_binary_simulation": {
         "citation": "Hemming K, Girling AJ, Sitch AJ, Marsh J, Lilford RJ. (2011). Sample size calculations for cluster randomised controlled trials with a fixed number of clusters. BMC Medical Research Methodology, 11(1), 102",
         "doi": "https://doi.org/10.1186/1471-2288-11-102"
+    },
+    # Stepped wedge designs
+    "stepped_wedge_continuous": {
+        "citation": "Hemming K, Haines TP, Chilton PJ, Girling AJ, Lilford RJ. (2015). The stepped wedge cluster randomised trial: rationale, design and analysis. BMJ, 350, h391",
+        "doi": "https://doi.org/10.1136/bmj.h391"
+    },
+    "stepped_wedge_binary": {
+        "citation": "Hemming K, Haines TP, Chilton PJ, Girling AJ, Lilford RJ. (2015). The stepped wedge cluster randomised trial: rationale, design and analysis. BMJ, 350, h391",
+        "doi": "https://doi.org/10.1136/bmj.h391"
+    },
+    "stepped_wedge_simulation": {
+        "citation": "Baio G, Copas A, Ambler G, Hargreaves J, Beard E, Omar RZ. (2015). Sample size calculation for a stepped wedge trial. Trials, 16(1), 354",
+        "doi": "https://doi.org/10.1186/s13063-015-0840-9"
+    },
+    # Interrupted time series designs
+    "interrupted_time_series_continuous": {
+        "citation": "Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. (2002). Segmented regression analysis of interrupted time series studies in medication use research. Journal of Clinical Pharmacy and Therapeutics, 27(4), 299-309",
+        "doi": "https://doi.org/10.1046/j.1365-2710.2002.00430.x"
+    },
+    "interrupted_time_series_binary": {
+        "citation": "Bernal JL, Cummins S, Gasparrini A. (2017). Interrupted time series regression for the evaluation of public health interventions: a tutorial. International Journal of Epidemiology, 46(1), 348-355",
+        "doi": "https://doi.org/10.1093/ije/dyw098"
+    },
+    "interrupted_time_series_simulation": {
+        "citation": "Zhang F, Wagner AK, Soumerai SB, Ross-Degnan D. (2009). Methods for estimating confidence intervals in interrupted time series analyses of health interventions. Journal of Clinical Epidemiology, 62(2), 143-148",
+        "doi": "https://doi.org/10.1016/j.jclinepi.2008.08.007"
     }
 }
 
@@ -540,6 +566,316 @@ def generate_mde_report(results, params, design_type, outcome_type):
     
     return report_text.strip()
 
+def generate_stepped_wedge_report(results, params):
+    """
+    Generate a comprehensive report for stepped wedge cluster randomized trials.
+    
+    Parameters
+    ----------
+    results : dict
+        Results from the stepped wedge calculation
+    params : dict
+        Input parameters used for the calculation
+        
+    Returns
+    -------
+    str
+        Formatted HTML report with design overview and references
+    """
+    # Extract parameters
+    clusters = params.get('clusters', 0)
+    steps = params.get('steps', 0) 
+    individuals_per_cluster = params.get('individuals_per_cluster', 0)
+    icc = params.get('icc', 0)
+    power = results.get('power', 0)
+    alpha = params.get('alpha', 0.05)
+    method = params.get('method', 'Simulation')
+    nsim = params.get('nsim', 1000)
+    outcome_type = results.get('outcome_type', 'Unknown')
+    
+    # Calculate design metrics
+    total_n = clusters * steps * individuals_per_cluster
+    total_cluster_periods = clusters * steps
+    control_periods = clusters  # Only baseline step
+    intervention_periods = clusters * (steps - 1)
+    design_efficiency = intervention_periods / total_cluster_periods
+    
+    # Get appropriate reference based on method used
+    method_used = params.get('method', 'Simulation')
+    cluster_autocorr = params.get('cluster_autocorr', 0)
+    
+    if method_used == "Hussey & Hughes Analytical":
+        # Use Hussey & Hughes as primary reference for analytical method
+        reference = {
+            "citation": "Hussey MA, Hughes JP. (2007). Design and analysis of stepped wedge cluster randomized trials. Contemporary Clinical Trials, 28(2), 182-191",
+            "doi": "https://doi.org/10.1016/S1551-7144(06)00118-8"
+        }
+    elif 'continuous' in outcome_type.lower():
+        reference = METHOD_REFERENCES.get("stepped_wedge_continuous")
+    elif 'binary' in outcome_type.lower():
+        reference = METHOD_REFERENCES.get("stepped_wedge_binary")
+    else:
+        reference = METHOD_REFERENCES.get("stepped_wedge_continuous")  # Default
+    
+    # Outcome-specific parameters
+    if 'continuous' in outcome_type.lower():
+        treatment_effect = params.get('treatment_effect', 0)
+        std_dev = params.get('std_dev', 1)
+        effect_text = f"treatment effect of {treatment_effect:.2f} units with standard deviation {std_dev:.2f}"
+    else:  # Binary
+        p_control = params.get('p_control', 0)
+        p_intervention = params.get('p_intervention', 0) 
+        risk_diff = p_intervention - p_control if p_intervention and p_control else 0
+        effect_text = f"change in proportion from {p_control:.2f} to {p_intervention:.2f} (risk difference = {risk_diff:.3f})"
+    
+    # Design effect calculation
+    design_effect = 1 + (individuals_per_cluster - 1) * icc
+    
+    report_html = f"""
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">
+    
+    <h2 style="color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;">
+    📊 Stepped Wedge Cluster Randomized Trial - Power Analysis Report
+    </h2>
+    
+    <h3 style="color: #495057;">⚡ Power Analysis Results</h3>
+    <div style="background-color: #e8f4fd; padding: 15px; border-radius: 8px; border-left: 4px solid #2E86AB;">
+    <p><strong>Statistical Power:</strong> <span style="font-size: 1.2em; color: #2E86AB; font-weight: bold;">{power:.1%}</span></p>
+    <p><strong>Significance Level (α):</strong> {alpha:.3f}</p>
+    <p><strong>Expected Effect:</strong> {effect_text}</p>
+    <p><strong>Analysis Method:</strong> {method} {'(' + str(nsim) + ' simulations)' if method.lower() == 'simulation' else ''}</p>
+    </div>
+    
+    <div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
+    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">📝 Methodological Description</h4>
+    <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #cce7ff;">
+    <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
+    A sample size of {individuals_per_cluster} individuals per cluster per time period, from each of {clusters} clusters, 
+    stepping every time period across {steps} time steps (including baseline), will give the study {power:.0%} power to 
+    detect a {'treatment effect of ' + str(treatment_effect) + ' units' if 'continuous' in outcome_type.lower() else 'change from ' + str(p_control) + ' to ' + str(p_intervention) + ' in the proportion'}, 
+    assuming {'a standard deviation of ' + str(std_dev) if 'continuous' in outcome_type.lower() else 'the stated proportions'}, an intracluster correlation coefficient (ICC) of {icc:.3f}{', and a cluster autocorrelation coefficient (CAC) of ' + str(cluster_autocorr) if cluster_autocorr > 0 else ''}, 
+    with a Type I error rate of {alpha*100:.0f}%. Power calculations were performed using {'analytical methods' if method_used == 'Hussey & Hughes Analytical' else 'simulation-based methods'} as 
+    described by {reference['citation'].split('.')[0] + ' et al.'}.
+    </p>
+    </div>
+    <p style="font-size: 0.9em; color: #666; margin-top: 10px; margin-bottom: 0;">
+    <strong>Tip:</strong> Copy the text above directly into your grant application or study protocol.
+    </p>
+    </div>
+    
+    <h3 style="color: #495057;">🔧 Design Efficiency Metrics</h3>
+    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+    <tr style="background-color: #f8f9fa;">
+        <td style="padding: 8px; border: 1px solid #dee2e6; font-weight: bold;">Total Cluster-Periods</td>
+        <td style="padding: 8px; border: 1px solid #dee2e6;">{total_cluster_periods}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px; border: 1px solid #dee2e6; font-weight: bold;">Control Periods</td>
+        <td style="padding: 8px; border: 1px solid #dee2e6;">{control_periods} ({control_periods/total_cluster_periods:.1%})</td>
+    </tr>
+    <tr style="background-color: #f8f9fa;">
+        <td style="padding: 8px; border: 1px solid #dee2e6; font-weight: bold;">Intervention Periods</td>
+        <td style="padding: 8px; border: 1px solid #dee2e6;">{intervention_periods} ({intervention_periods/total_cluster_periods:.1%})</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px; border: 1px solid #dee2e6; font-weight: bold;">Design Efficiency</td>
+        <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>{design_efficiency:.1%}</strong></td>
+    </tr>
+    </table>
+    
+    
+    <h3 style="color: #495057;">📚 Methodological Reference</h3>
+    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Primary Reference:</strong></p>
+    <p style="font-style: italic; margin: 10px 0;">{reference['citation']}</p>
+    <p><strong>DOI:</strong> <a href="{reference['doi']}" target="_blank" style="color: #2E86AB;">{reference['doi']}</a></p>
+    
+    <p style="margin-top: 15px;"><strong>Additional Key References:</strong></p>
+    <ul style="margin-top: 10px;">
+    <li>Hussey MA, Hughes JP. (2007). Design and analysis of stepped wedge cluster randomized trials. Contemporary Clinical Trials, 28(2), 182-191.</li>
+    <li>Mdege ND, Man MS, Taylor CA, Torgerson DJ. (2011). Systematic review of stepped wedge cluster randomized trials shows that design is particularly used to evaluate interventions during routine implementation. Journal of Clinical Epidemiology, 64(9), 936-948.</li>
+    <li>Copas AJ, Lewis JJ, Thompson JA, Davey C, Baio G, Hargreaves JR. (2015). Designing a stepped wedge trial: three main designs, carry-over effects and randomisation approaches. Trials, 16(1), 352.</li>
+    </ul>
+    </div>
+    
+    <div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 15px 0;">
+    <h4 style="color: #0c5460; margin-top: 0;">⚠️ Important Considerations</h4>
+    <ul style="color: #0c5460; margin-bottom: 0;">
+    <li><strong>Temporal trends:</strong> Ensure appropriate modeling of time trends in analysis</li>
+    <li><strong>Carry-over effects:</strong> Consider potential lasting effects of the intervention</li>
+    <li><strong>ICC estimation:</strong> Use pilot data or literature to estimate ICC accurately</li>
+    <li><strong>Randomization:</strong> Cluster sequence should be randomized to intervention steps</li>
+    </ul>
+    </div>
+    
+    <hr style="margin: 20px 0; border: none; border-top: 1px solid #dee2e6;">
+    <p style="font-size: 0.9em; color: #6c757d; text-align: center; margin: 10px 0;">
+    Report generated by DesignPower • Stepped Wedge Cluster RCT Module
+    </p>
+    </div>
+    """
+    
+    return report_html
+
+def generate_interrupted_time_series_report(results, params):
+    """
+    Generate a comprehensive report for interrupted time series designs.
+    
+    Parameters
+    ----------
+    results : dict
+        Results from the ITS calculation
+    params : dict
+        Input parameters used for the calculation
+        
+    Returns
+    -------
+    str
+        Formatted HTML report with design overview and references
+    """
+    # Extract parameters
+    n_pre = params.get('n_pre', results.get('n_pre', 0))
+    n_post = params.get('n_post', results.get('n_post', 0))
+    total_n = results.get('total_n', n_pre + n_post)
+    autocorr = params.get('autocorr', 0)
+    power = results.get('power', 0)
+    alpha = params.get('alpha', 0.05)
+    method = params.get('method', 'Analytical')
+    outcome_type = results.get('outcome_type', 'Unknown')
+    calculation_type = params.get('calculation_type', 'Power')
+    
+    # Get appropriate reference
+    if 'continuous' in outcome_type.lower():
+        reference = METHOD_REFERENCES.get("interrupted_time_series_continuous")
+    elif 'binary' in outcome_type.lower():
+        reference = METHOD_REFERENCES.get("interrupted_time_series_binary")
+    else:
+        reference = METHOD_REFERENCES.get("interrupted_time_series_continuous")  # Default
+    
+    # Outcome-specific parameters
+    if 'continuous' in outcome_type.lower():
+        mean_change = params.get('mean_change', 0)
+        std_dev = params.get('std_dev', 1)
+        effect_size = abs(mean_change) / std_dev if std_dev > 0 else 0
+        effect_text = f"expected change in level of {mean_change:.2f} units (standardized effect size = {effect_size:.3f})"
+    else:  # Binary
+        p_pre = params.get('p_pre', 0)
+        p_post = params.get('p_post', 0)
+        risk_diff = p_post - p_pre if p_post and p_pre else 0
+        effect_text = f"change in proportion from {p_pre:.2f} to {p_post:.2f} (risk difference = {risk_diff:.3f})"
+    
+    # Autocorrelation adjustment
+    if autocorr > 0:
+        adjustment_factor = (1 - autocorr) / (1 + autocorr)
+        effective_n = total_n * adjustment_factor
+        autocorr_text = f"""
+        <tr style="background-color: #f8f9fa;">
+            <td style="padding: 8px; border: 1px solid #dee2e6; font-weight: bold;">Autocorrelation (ρ)</td>
+            <td style="padding: 8px; border: 1px solid #dee2e6;">{autocorr:.3f}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #dee2e6; font-weight: bold;">Effective Sample Size</td>
+            <td style="padding: 8px; border: 1px solid #dee2e6;">{effective_n:.1f} (adjustment factor = {adjustment_factor:.3f})</td>
+        </tr>
+        """
+    else:
+        autocorr_text = ""
+        effective_n = total_n
+    
+    # Calculation type specific text
+    if calculation_type == "Sample Size":
+        power_text = params.get('power', 0.8)
+        result_text = f"""
+        <p><strong>Required Sample Size:</strong></p>
+        <p>• Pre-intervention time points: <span style="font-size: 1.1em; color: #2E86AB; font-weight: bold;">{n_pre}</span></p>
+        <p>• Post-intervention time points: <span style="font-size: 1.1em; color: #2E86AB; font-weight: bold;">{n_post}</span></p>
+        <p>• Total time points: <span style="font-size: 1.2em; color: #2E86AB; font-weight: bold;">{total_n}</span></p>
+        <p><strong>Target Power:</strong> {power_text:.1%}</p>
+        """
+    else:  # Power calculation
+        result_text = f"""
+        <p><strong>Statistical Power:</strong> <span style="font-size: 1.2em; color: #2E86AB; font-weight: bold;">{power:.1%}</span></p>
+        <p><strong>Sample Size:</strong> {total_n} time points ({n_pre} pre + {n_post} post)</p>
+        """
+    
+    report_html = f"""
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">
+    
+    <h2 style="color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;">
+    📈 Interrupted Time Series - Power Analysis Report
+    </h2>
+    
+    <h3 style="color: #495057;">⚡ Analysis Results</h3>
+    <div style="background-color: #e8f4fd; padding: 15px; border-radius: 8px; border-left: 4px solid #2E86AB;">
+    {result_text}
+    <p><strong>Significance Level (α):</strong> {alpha:.3f}</p>
+    <p><strong>Expected Effect:</strong> {effect_text}</p>
+    <p><strong>Analysis Method:</strong> {method}</p>
+    </div>
+    
+    <div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
+    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">📝 Methodological Description</h4>
+    <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #cce7ff;">
+    <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
+    {('A sample size of ' + str(n_pre) + ' pre-intervention and ' + str(n_post) + ' post-intervention time points (total ' + str(total_n) + ' observations) will provide ' + str(int(power*100)) + '% power to detect a ' + effect_text) if calculation_type != "Sample Size" else ('To achieve ' + str(int(params.get('power', 0.8)*100)) + '% power to detect a ' + effect_text + ', a minimum of ' + str(n_pre) + ' pre-intervention and ' + str(n_post) + ' post-intervention time points (total ' + str(total_n) + ' observations) is required')}, 
+    {('assuming an autocorrelation coefficient of ' + str(autocorr) + ', ') if autocorr > 0 else ''}with a Type I error rate of {alpha*100:.0f}%. 
+    Power calculations were performed using {'segmented regression analysis' if method.lower() == 'analytical' else 'simulation-based methods'} as described by {reference['citation'].split('.')[0] + ' et al.'}.
+    </p>
+    </div>
+    <p style="font-size: 0.9em; color: #666; margin-top: 10px; margin-bottom: 0;">
+    <strong>Tip:</strong> Copy the text above directly into your grant application or study protocol.
+    </p>
+    </div>
+    
+    
+    <h3 style="color: #495057;">📊 Statistical Considerations</h3>
+    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Segmented Regression Model:</strong></p>
+    <p style="font-family: monospace; background-color: #e9ecef; padding: 10px; border-radius: 4px;">
+    Y<sub>t</sub> = β<sub>0</sub> + β<sub>1</sub>×time<sub>t</sub> + β<sub>2</sub>×intervention<sub>t</sub> + β<sub>3</sub>×time_after_intervention<sub>t</sub> + ε<sub>t</sub>
+    </p>
+    <ul>
+    <li><strong>β<sub>0</sub>:</strong> Baseline level at time zero</li>
+    <li><strong>β<sub>1</sub>:</strong> Pre-intervention trend (slope)</li>
+    <li><strong>β<sub>2</sub>:</strong> Level change immediately after intervention</li>
+    <li><strong>β<sub>3</sub>:</strong> Change in trend (slope) after intervention</li>
+    </ul>
+    </div>
+    
+    <h3 style="color: #495057;">📚 Methodological Reference</h3>
+    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Primary Reference:</strong></p>
+    <p style="font-style: italic; margin: 10px 0;">{reference['citation']}</p>
+    <p><strong>DOI:</strong> <a href="{reference['doi']}" target="_blank" style="color: #2E86AB;">{reference['doi']}</a></p>
+    
+    <p style="margin-top: 15px;"><strong>Additional Key References:</strong></p>
+    <ul style="margin-top: 10px;">
+    <li>Kontopantelis E, Doran T, Springate DA, Buchan I, Reeves D. (2013). Regression based quasi-experimental approach when randomisation is not possible: interrupted time series analysis. BMJ, 346, f2750.</li>
+    <li>Penfold RB, Zhang F. (2013). Use of interrupted time series analysis in evaluating health care quality improvements. Academic Pediatrics, 13(6), S38-S44.</li>
+    <li>Lopez Bernal J, Cummins S, Gasparrini A. (2018). The use of controls in interrupted time series studies of public health interventions. International Journal of Epidemiology, 47(6), 2082-2093.</li>
+    </ul>
+    </div>
+    
+    <div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 15px 0;">
+    <h4 style="color: #0c5460; margin-top: 0;">⚠️ Key Assumptions & Limitations</h4>
+    <ul style="color: #0c5460; margin-bottom: 0;">
+    <li><strong>Minimum data points:</strong> At least 3 points before and after intervention recommended</li>
+    <li><strong>Temporal stability:</strong> Underlying data generating process should be stable</li>
+    <li><strong>No confounding events:</strong> Other interventions should not occur during study period</li>
+    <li><strong>Autocorrelation:</strong> Must account for serial correlation in time series data</li>
+    <li><strong>Stationarity:</strong> Time series should be stationary or appropriately modeled</li>
+    </ul>
+    </div>
+    
+    <hr style="margin: 20px 0; border: none; border-top: 1px solid #dee2e6;">
+    <p style="font-size: 0.9em; color: #6c757d; text-align: center; margin: 10px 0;">
+    Report generated by DesignPower • Interrupted Time Series Module
+    </p>
+    </div>
+    """
+    
+    return report_html
+
 def generate_report(results, params, design_type, outcome_type):
     """
     Generate appropriate report based on calculation type.
@@ -560,6 +896,14 @@ def generate_report(results, params, design_type, outcome_type):
     str
         Formatted text report
     """
+    # Check if this is a Stepped Wedge design
+    if design_type == 'Stepped Wedge':
+        return generate_stepped_wedge_report(results, params)
+        
+    # Check if this is an Interrupted Time Series design
+    if design_type == 'Interrupted Time Series':
+        return generate_interrupted_time_series_report(results, params)
+        
     # Check if this is a Cluster RCT design
     if design_type == 'Cluster RCT':
         return generate_cluster_report(results, params)
