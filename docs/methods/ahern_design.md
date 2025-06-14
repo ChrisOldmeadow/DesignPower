@@ -1,6 +1,6 @@
-# A'Hern Design for Single-Arm Binary Outcome Trials ✅ *Validated*
+# A'Hern Design for Single-Arm Binary Outcome Trials
 
-This document details the methodology implemented in DesignPower for A'Hern designs, which are used for single-arm phase II trials with binary outcomes. The implementation has been validated against A'Hern (2001) Table 1 with 100% accuracy.
+This document details the methodology implemented in DesignPower for A'Hern designs, which are used for single-arm phase II trials with binary outcomes.
 
 ## Background
 
@@ -36,7 +36,7 @@ Where $X$ follows a binomial distribution $B(n, p)$.
 
 ### Implementation Algorithm
 
-DesignPower uses a **hybrid approach** for optimal accuracy:
+DesignPower uses a **hybrid approach** for optimal performance:
 
 #### Lookup Table Method (Standard Cases)
 For commonly used parameter combinations (α = 0.05, β = 0.1, 0.2), pre-computed values from A'Hern (2001) Table 1 ensure exact matches:
@@ -86,29 +86,13 @@ For an A'Hern design with sample size $n$ and rejection threshold $r$:
 3. Simple to implement and interpret
 4. Provides clear decision rules for proceeding with treatment development
 
-## Validation & Quality Assurance ✅
+## Algorithm Implementation
 
-DesignPower's A'Hern implementation has been rigorously validated:
+The DesignPower implementation uses a hybrid approach:
 
-### Gold Standard Validation
-- **A'Hern (2001) Table 1**: 100% accuracy achieved ✅
-- **Published Examples**: Cross-validation against literature examples
-- **Edge Cases**: Validated for boundary conditions and parameter ranges
-
-### Benchmark Results
-The implementation produces exact matches to A'Hern (2001) benchmarks:
-
-| p0  | p1  | α    | β   | n  | r  | Status |
-|-----|-----|------|-----|----|----|--------|
-| 0.05| 0.20| 0.05 | 0.20| 29 | 4  | ✅ PASS |
-| 0.20| 0.40| 0.05 | 0.20| 43 | 13 | ✅ PASS |
-
-### Algorithm Improvements (2025)
-1. **Hybrid Approach**: Combines lookup tables with enhanced search algorithm
-2. **Precision Handling**: Robust floating-point arithmetic for parameter matching
+1. **Hybrid Strategy**: Combines lookup tables with enhanced search algorithm
+2. **Precision Handling**: Robust floating-point arithmetic for parameter matching  
 3. **Performance**: Instant results for standard cases, fast computation for non-standard cases
-
-See `tests/validation/validation_report.html` for complete validation results.
 
 ## References
 

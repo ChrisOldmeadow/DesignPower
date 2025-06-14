@@ -1,24 +1,6 @@
 # Statistical Methods Documentation
 
-This directory contains detailed methodology documentation for the statistical methods implemented in DesignPower. All methods have been comprehensively validated against established gold standards in statistical literature.
-
-## Validation & Quality Assurance
-
-DesignPower's statistical methods are rigorously validated against authoritative sources:
-
-- **Cohen (1988)**: Statistical Power Analysis for the Behavioral Sciences
-- **A'Hern (2001)**: Single-stage phase II trial designs  
-- **Fleiss et al. (2003)**: Statistical Methods for Rates and Proportions
-- **Donner & Klar (2000)**: Cluster Randomization Trials
-- **Wellek (2010)**: Non-inferiority and Equivalence Testing
-- **FDA/ICH Guidelines**: Regulatory guidance compliance
-
-**Current Validation Status**: 66.7% pass rate (8/12 benchmarks)
-- Single-Arm Designs: 100% ✅ 
-- Cluster RCTs: 100% ✅
-- Non-Inferiority: 80% ✅
-
-See `tests/validation/validation_report.html` for detailed validation results.
+This directory contains detailed methodology documentation for the statistical methods implemented in DesignPower.
 
 ## Organization
 
@@ -31,38 +13,32 @@ The documentation is organized by study design and outcome type, matching the st
 
 2. **Single-Arm Trials**
    - [Continuous Outcomes](single_arm_continuous.md)
-   - [Binary Outcomes](single_arm_binary.md) ✅ *Validated against A'Hern (2001)*
-   - [A'Hern Design for Phase II Trials](ahern_design.md) ✅ *Validated*
+   - [Binary Outcomes](single_arm_binary.md)
+   - [A'Hern Design for Phase II Trials](ahern_design.md)
+   - [Simon's Two-Stage Design for Phase II Trials](simons_two_stage_design.md)
 
 3. **Cluster RCT**
-   - [Continuous Outcomes](cluster_rct_continuous.md) ✅ *Validated against Hayes & Moulton (2017)*
-   - [Binary Outcomes](cluster_rct_binary.md) ✅ *Validated against Donner & Klar (2000)*
+   - [Continuous Outcomes](cluster_rct_continuous.md)
+   - [Binary Outcomes](cluster_rct_binary.md)
 
 4. **Stepped Wedge Cluster RCT**
-   - [Stepped Wedge Methodology](stepped_wedge_methodology.md) 📋 *Comprehensive methodology guide*
+   - [Stepped Wedge Methodology](stepped_wedge_methodology.md)
 
 5. **Interrupted Time Series**
-   - [Interrupted Time Series Methodology](interrupted_time_series_methodology.md) 📋 *Complete ITS analysis framework*
+   - [Interrupted Time Series Methodology](interrupted_time_series_methodology.md)
 
 6. **Special Topics**
    - [Repeated Measures Designs](repeated_measures.md)
    - [Simulation Methods](simulation_methods.md)
    - [Bayesian Inference Methods](bayesian_inference.md)
 
-## Recent Accuracy Improvements
+## Implementation Features
 
-### t-Distribution Implementation for Continuous Outcomes (2025)
-Parallel RCT continuous outcome calculations upgraded from normal distribution to t-distribution critical values using an iterative approach. This improvement:
-- **Provides exact matches** to Cohen (1988) benchmarks (0.0% error for d=0.8, d=0.5)
-- **Accounts for variance uncertainty** in real-world applications
-- **Offers more conservative estimates** appropriate for clinical trials
-- **Maintains computational efficiency** through fast convergence
-
-### A'Hern Algorithm Enhancement (2025)
-The A'Hern single-arm binary design implementation was enhanced with a hybrid approach combining lookup tables for standard cases and an improved algorithm for non-standard parameter combinations, achieving 100% accuracy against published benchmarks.
-
-### Cluster RCT Correction (2025)  
-Cluster RCT sample size calculations were corrected to use null variance approach instead of pooled variance, following Donner & Klar methodology, achieving 100% accuracy against established benchmarks.
+### Advanced Statistical Methods
+- **Exact calculations** where analytically feasible
+- **Simulation-based methods** for complex scenarios
+- **Hybrid approaches** combining speed and accuracy
+- **Iterative algorithms** for precision optimization
 
 ## Calculation Types
 
@@ -79,4 +55,8 @@ Each document describes the methodology for all three calculation types:
 
 ## Contributing
 
-To add or modify methodology documentation, please submit a pull request with your changes. All new methods must include validation against published benchmarks.
+To add or modify methodology documentation, please submit a pull request with your changes. All new methods must include complete mathematical specifications and literature references.
+
+## Validation
+
+For information about validation status, test results, and quality assurance, see the [Validation Report](../validation_report.md).

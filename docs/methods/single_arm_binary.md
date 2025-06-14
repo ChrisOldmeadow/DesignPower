@@ -89,12 +89,12 @@ This requires searching over combinations of $n$ and $k$ to find the smallest $n
 
 DesignPower implements specialized designs for phase II trials with binary outcomes:
 
-1. **A'Hern Design**: A single-stage design using exact binomial probabilities ✅ *Validated*
-2. **Simon's Two-Stage Design**: A two-stage design that allows early stopping for futility
+1. **A'Hern Design**: A single-stage design using exact binomial probabilities
+2. **Simon's Two-Stage Design**: A two-stage design that allows early stopping for futility *[See dedicated documentation](simons_two_stage_design.md)*
 
 ### A'Hern Design Implementation
 
-DesignPower's A'Hern design implementation uses a **hybrid approach** for maximum accuracy:
+DesignPower's A'Hern design implementation uses a **hybrid approach**:
 
 #### Lookup Table Method (Standard Cases)
 For commonly used parameter combinations (α = 0.05, β = 0.1, 0.2), the implementation uses pre-computed lookup tables from A'Hern (2001) Table 1, ensuring exact matches to published values.
@@ -117,10 +117,8 @@ for n in range(1, max_n):
             return n, r  # Found valid design
 ```
 
-#### Validation Results
-The enhanced implementation achieves **100% accuracy** against A'Hern (2001) benchmarks:
-- p0=0.05, p1=0.20: n=29, r=4 ✅
-- p0=0.20, p1=0.40: n=43, r=13 ✅
+#### Implementation Features
+The enhanced implementation provides reliable results for both standard and custom parameter combinations.
 
 ### Simon's Two-Stage Design Implementation
 
@@ -161,8 +159,8 @@ Both subject to constraints:
 
 DesignPower uses a **three-tier approach** for complete coverage:
 
-##### Tier 1: Validated Lookup Table (Instant Results)
-Pre-computed designs from Simon (1989) and validated sources:
+##### Tier 1: Lookup Table (Instant Results)
+Pre-computed designs from Simon (1989):
 
 ```python
 # Simon (1989) Table 1-4 examples
@@ -175,12 +173,12 @@ SIMON_DESIGNS = {
         'optimal': (n1=10, r1=0, n=29, r=4, EN0=15.0),
         'minimax': (n1=15, r1=1, n=25, r=4, EN0=17.3)
     },
-    # ... additional validated designs
+    # ... additional standard designs
 }
 ```
 
 ##### Tier 2: Approximate Matching (Near-Instant)
-For parameters within tolerance (±0.005) of standard cases, return closest validated design.
+For parameters within tolerance (±0.005) of standard cases, return closest standard design.
 
 ##### Tier 3: Full Optimization Algorithm (1-10 seconds)
 Exhaustive search over discrete parameter space for custom requirements:
@@ -218,30 +216,16 @@ $$\alpha = P(\text{reject } H_0 | H_0) = \sum_{x_1=r_1+1}^{n_1} P(X_1=x_1|p_0) \
 **Type II Error**:
 $$\beta = P(\text{accept } H_0 | H_1) = 1 - \sum_{x_1=r_1+1}^{n_1} P(X_1=x_1|p_1) \cdot P(X_2 > r-x_1|p_1)$$
 
-#### Validation Results
+#### Implementation Coverage
 
-The implementation achieves **100% accuracy** against Simon (1989) benchmarks:
-
-| Design | p₀ | p₁ | α | β | n₁ | r₁ | n | r | EN₀ | Status |
-|--------|----|----|---|---|----|----|---|---|-----|--------|
-| Optimal | 0.05 | 0.25 | 0.05 | 0.2 | 9 | 0 | 17 | 2 | 11.9 | ✅ |
-| Minimax | 0.05 | 0.25 | 0.05 | 0.2 | 12 | 0 | 16 | 2 | 12.7 | ✅ |
-| Optimal | 0.10 | 0.30 | 0.05 | 0.2 | 10 | 0 | 29 | 4 | 15.0 | ✅ |
-| Optimal | 0.20 | 0.40 | 0.05 | 0.2 | 13 | 2 | 43 | 10 | 22.5 | ✅ |
-| Optimal | 0.30 | 0.50 | 0.05 | 0.2 | 15 | 4 | 46 | 15 | 25.9 | ✅ |
-
-**Total: 11/11 designs validated (100% success rate)**
-
-#### Coverage Guarantee
-
-- **Standard cases**: Instant lookup from validated literature
+- **Standard cases**: Instant lookup from published literature
 - **Custom cases**: Full optimization in 0.1-10 seconds
 - **Edge cases**: Graceful error handling for impossible combinations
 - **Unlimited flexibility**: Handles any valid (p₀, p₁, α, β) combination
 
 These designs are detailed in separate methodology documents:
-- [A'Hern Design](ahern_design.md) ✅ *Validated against A'Hern (2001)*
-- Simon's Two-Stage Design ✅ *Validated against Simon (1989)*
+- [A'Hern Design](ahern_design.md)
+- [Simon's Two-Stage Design](simons_two_stage_design.md)
 
 ## Simulation Methods
 
