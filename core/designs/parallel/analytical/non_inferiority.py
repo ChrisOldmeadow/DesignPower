@@ -334,29 +334,18 @@ def sample_size_binary_non_inferiority(
         print(f"Error in sample size calculation: {str(e)}")
         n1_base = 1000  # Default to a reasonable sample size
     
-    # Apply adjustment factor based on test type
+    # Use the mathematically derived result without arbitrary adjustment factors
+    n1 = n1_base
+    
+    # Set method description based on test type
     if test_type == "Normal Approximation":
-        # No adjustment needed
-        n1 = n1_base
         method_description = "Normal Approximation (z-test)"
     elif test_type == "Likelihood Ratio Test":
-        # LR test typically needs slightly smaller samples
-        n1 = n1_base * 0.95  # 5% smaller than normal approximation
-        method_description = "Likelihood Ratio Test (typically requires smaller samples)"
+        method_description = "Likelihood Ratio Test"
     elif test_type == "Exact Test":
-        # Fisher's exact test generally requires larger samples for equivalent power
-        if p1 < 0.1 or p2 < 0.1 or p1 > 0.9 or p2 > 0.9:
-            # More conservative for extreme proportions
-            n1 = n1_base * 1.25  # 25% larger
-            method_description = "Fisher's Exact Test (larger samples for extreme proportions)"
-        else:
-            # Moderate increase for non-extreme proportions
-            n1 = n1_base * 1.15  # 15% larger
-            method_description = "Fisher's Exact Test (requires larger samples)"
+        method_description = "Fisher's Exact Test"
     else:
-        # Use normal approximation as default
-        n1 = n1_base
-        method_description = "Unknown test type, defaulting to Normal Approximation"
+        method_description = "Normal Approximation (default)"
         
     # Print debugging information
     print(f"Test type: {test_type}, Sample size: {n1}, Description: {method_description}")

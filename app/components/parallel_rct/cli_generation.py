@@ -30,7 +30,7 @@ def generate_cli_code_parallel_binary(params):
     p1 = params.get('p1', 0.3)
     p2 = params.get('p2', 0.5)
     alpha = params.get('alpha', 0.05)
-    power = params.get('power', 0.8)
+    power = params.get('power', 0.8)  # May be None for power calculations
     allocation_ratio = params.get('allocation_ratio', 1.0)
     
     # Simulation-specific parameters
@@ -162,6 +162,12 @@ def generate_cli_code_parallel_binary(params):
     module_path = module_path_map.get(function_name, "core.designs.parallel.analytical_binary")
     actual_function = get_function_from_name(module_path, function_name)
     
+    # For simulation functions, we need to import additional dependencies
+    additional_imports = ""
+    if method == "simulation":
+        additional_imports = """from core.designs.parallel.simulation_binary import simulate_binary_trial
+from core.designs.parallel.analytical_binary import perform_binary_test"""
+    
     if actual_function:
         algorithm_source = get_function_source(actual_function)
         algorithm_section = f"""
@@ -198,6 +204,9 @@ def generate_cli_code_parallel_binary(params):
         relative_risk = p2 / p1 if p1 > 0 else float('inf')
         odds_ratio = (p2 / (1 - p2)) / (p1 / (1 - p1)) if p1 < 1 and p2 < 1 else float('inf')
         
+        # Safe power formatting
+        power_text = f"{power*100:.0f}%" if power is not None else "TBD (being calculated)"
+        
         study_summary = f"""# STUDY DESIGN SUMMARY:
 # Design: Parallel Group Randomized Controlled Trial
 # Outcome Type: Binary (proportion analysis)
@@ -210,7 +219,7 @@ def generate_cli_code_parallel_binary(params):
 # - Absolute difference: {effect_size:.3f} ({effect_size*100:.1f} percentage points)
 # - Relative risk: {relative_risk:.2f}
 # - Odds ratio: {odds_ratio:.2f}
-# - Desired statistical power: {power*100:.0f}%
+# - Desired statistical power: {power_text}
 # - Significance level (alpha): {alpha*100:.0f}%
 # - Allocation ratio (treatment:control): {allocation_ratio}:1
 # - Statistical test: {test_type.replace('_', ' ').title()}
@@ -220,7 +229,7 @@ def generate_cli_code_parallel_binary(params):
         if calc_type == "Sample Size":
             study_summary += f"""
 # How many participants are needed to detect a difference in proportions from
-# {p1:.3f} to {p2:.3f} with {power*100:.0f}% power at {alpha*100:.0f}% significance level?"""
+# {p1:.3f} to {p2:.3f} with {power_text} power at {alpha*100:.0f}% significance level?"""
         elif calc_type == "Power":
             study_summary += f"""
 # With {n1} participants in control and {n2} in treatment group, what is the
@@ -228,9 +237,12 @@ def generate_cli_code_parallel_binary(params):
         else:  # MDE
             study_summary += f"""
 # With {n1} participants in control and {n2} in treatment group, what is the
-# smallest difference in proportions detectable with {power*100:.0f}% power at {alpha*100:.0f}% significance?"""
+# smallest difference in proportions detectable with {power_text} power at {alpha*100:.0f}% significance?"""
             
     else:  # Non-Inferiority
+        # Safe power formatting for non-inferiority
+        power_text = f"{power*100:.0f}%" if power is not None else "TBD (being calculated)"
+        
         study_summary = f"""# STUDY DESIGN SUMMARY:
 # Design: Parallel Group Randomized Controlled Trial
 # Outcome Type: Binary (proportion analysis)
@@ -242,7 +254,7 @@ def generate_cli_code_parallel_binary(params):
 # - Non-inferiority margin: {non_inferiority_margin:.3f} ({non_inferiority_margin*100:.1f} percentage points)
 # - Assumed true difference: {assumed_difference_ni:.3f} ({assumed_difference_ni*100:.1f} percentage points)
 # - Direction: Treatment should be no more than {non_inferiority_margin*100:.1f}pp {non_inferiority_direction} than reference
-# - Desired statistical power: {power*100:.0f}%
+# - Desired statistical power: {power_text}
 # - Significance level (alpha): {alpha*100:.0f}% (one-sided for non-inferiority)
 # - Allocation ratio (test:reference): {allocation_ratio}:1
 # - Statistical test: {test_type.replace('_', ' ').title()}
@@ -252,7 +264,7 @@ def generate_cli_code_parallel_binary(params):
         if calc_type == "Sample Size":
             study_summary += f"""
 # How many participants are needed to demonstrate non-inferiority with a margin
-# of {non_inferiority_margin:.3f} with {power*100:.0f}% power?"""
+# of {non_inferiority_margin:.3f} with {power_text}?"""
         elif calc_type == "Power":
             study_summary += f"""
 # With {n1} participants in test and {n2} in reference group, what is the
@@ -260,7 +272,7 @@ def generate_cli_code_parallel_binary(params):
         else:  # MDE
             study_summary += f"""
 # With {n1} participants in test and {n2} in reference group, what is the
-# smallest non-inferiority margin demonstrable with {power*100:.0f}% power?"""
+# smallest non-inferiority margin demonstrable with {power_text}?"""
 
     # Generate enhanced code with algorithm transparency
     code = f"""{study_summary}
@@ -282,6 +294,7 @@ def generate_cli_code_parallel_binary(params):
 #    - Option C: Run in Jupyter/IDE with DesignPower project as working directory
 
 {import_line} {function_name}
+{additional_imports}
 
 {algorithm_section}
 
@@ -506,8 +519,19 @@ result = {function_name}(
 )
 
 print(f"{calc_type}: {{result['{result_key}']:.3f}}")
-print(f"Hazard ratio: {{result.get('hazard_ratio', 'N/A'):.3f}}")
-print(f"Expected events: {{result.get('total_events', 'N/A'):.0f}}")
+# Safe formatting for hazard ratio
+hazard_ratio = result.get('hazard_ratio')
+if hazard_ratio is not None:
+    print(f"Hazard ratio: {{hazard_ratio:.3f}}")
+else:
+    print("Hazard ratio: N/A")
+
+# Safe formatting for expected events  
+total_events = result.get('total_events')
+if total_events is not None:
+    print(f"Expected events: {{total_events:.0f}}")
+else:
+    print("Expected events: N/A")
 
 # Algorithm information
 print("\\\\n" + "=" * 60)
@@ -545,7 +569,7 @@ def generate_cli_code_parallel_continuous(params):
     mean2 = params.get('mean2', 12.0)
     std_dev = params.get('std_dev', 5.0)
     alpha = params.get('alpha', 0.05)
-    power = params.get('power', 0.8)
+    power = params.get('power', 0.8)  # May be None for power calculations
     allocation_ratio = params.get('allocation_ratio', 1.0)
     
     # Simulation-specific parameters
@@ -818,14 +842,17 @@ def generate_cli_code_parallel_continuous(params):
             study_summary += f"""
 # - Group 2 standard deviation: {std_dev2}"""
             
+        # Safe power formatting for sample size calculations
+        power_text = f"{power*100:.0f}%" if power is not None else "TBD"
+        
         study_summary += f"""
-# - Desired statistical power: {power*100:.0f}%
+# - Desired statistical power: {power_text}
 # - Significance level (alpha): {alpha*100:.0f}%
 # - Allocation ratio (treatment:control): {allocation_ratio}:1
 #
 # RESEARCH QUESTION:
 # How many participants are needed to detect a mean difference of {effect_size}
-# with {power*100:.0f}% power at {alpha*100:.0f}% significance level?"""
+# with {power_text} power at {alpha*100:.0f}% significance level?"""
     
     elif calc_type == "Power":
         study_summary += f"""
@@ -866,14 +893,17 @@ def generate_cli_code_parallel_continuous(params):
             study_summary += f"""
 # - Group 2 standard deviation: {std_dev2}"""
             
+        # Safe power formatting for MDE calculations  
+        power_text = f"{power*100:.0f}%" if power is not None else "TBD"
+        
         study_summary += f"""
-# - Desired statistical power: {power*100:.0f}%
+# - Desired statistical power: {power_text}
 # - Significance level (alpha): {alpha*100:.0f}%
 # - Allocation ratio (treatment:control): {allocation_ratio}:1
 #
 # RESEARCH QUESTION:
 # What is the minimum detectable effect size (mean difference)
-# with {n1 + n2} participants and {power*100:.0f}% power at {alpha*100:.0f}% significance?"""
+# with {n1 + n2} participants and {power_text} power at {alpha*100:.0f}% significance?"""
 
     if method == "simulation":
         study_summary += f"""
@@ -916,7 +946,12 @@ print(f"\\n{'='*60}")
 print(f"RESULT: {calc_type.upper()}")
 print(f"{'='*60}")
 print(f"{calc_type}: {{result['{result_key}']:.3f}}")
-print(f"Effect size (Cohen's d): {{result.get('effect_size', 'N/A'):.3f}}")
+# Safe formatting for effect size
+effect_size = result.get('effect_size')
+if effect_size is not None:
+    print(f"Effect size (Cohen's d): {{effect_size:.3f}}")
+else:
+    print("Effect size (Cohen's d): N/A")
 if 'n1' in result and 'n2' in result:
     print(f"Group 1 sample size: {{result['n1']}}")
     print(f"Group 2 sample size: {{result['n2']}}")
@@ -927,11 +962,14 @@ print(f"{'='*60}")"""
 
     # Add interpretation based on calculation type
     if calc_type == "Sample Size":
+        # Safe power formatting for interpretation section
+        power_text = f"{power*100:.0f}%" if power is not None else "the specified"
+        
         interpretation = f"""
 print("To detect a mean difference of {effect_size} between groups:")
 print("- Control group (expected mean: {mean1})")  
 print("- Treatment group (expected mean: {mean2})")
-print("- With {power*100:.0f}% power at {alpha*100:.0f}% significance level")
+print("- With {power_text} power at {alpha*100:.0f}% significance level")
 print("- You need {{result['{result_key}']:.0f}} total participants")
 if 'n1' in result and 'n2' in result:
     print("- Group allocation: {{result['n1']:.0f}} control, {{result['n2']:.0f}} treatment")"""
@@ -945,11 +983,17 @@ print("- Your study has {{result['{result_key}']*100:.1f}}% statistical power")
 print("- This means a {{result['{result_key}']*100:.1f}}% chance of detecting the effect if it exists")"""
     
     elif calc_type == "Minimum Detectable Effect":
+        # Safe power formatting for MDE interpretation
+        power_text = f"{power*100:.0f}%" if power is not None else "the specified"
+        
         interpretation = f"""
 print("With {n1 + n2} total participants ({n1} control, {n2} treatment):")
-print("- At {alpha*100:.0f}% significance level with {power*100:.0f}% power")
+print("- At {alpha*100:.0f}% significance level with {power_text} power")
 print("- The minimum detectable mean difference is: {{result['{result_key}']:.3f}}")
-print("- Effect size (Cohen's d): {{result.get('effect_size', 'N/A'):.3f}}")
+if result.get('effect_size') is not None:
+    print("- Effect size (Cohen's d): {{result['effect_size']:.3f}}")
+else:
+    print("- Effect size (Cohen's d): N/A")
 print("- Smaller differences would be undetectable with this sample size")"""
     else:
         interpretation = ""

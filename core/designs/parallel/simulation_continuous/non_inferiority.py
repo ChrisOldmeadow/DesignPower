@@ -14,7 +14,7 @@ from .utils import _calculate_effective_sd, _calculate_welch_satterthwaite_df, _
 def sample_size_continuous_non_inferiority_sim(non_inferiority_margin, std_dev, power=0.8, alpha=0.05, 
                                             allocation_ratio=1.0, nsim=1000, min_n=10, max_n=1000, step=10,
                                             assumed_difference=0.0, direction="lower", repeated_measures=False,
-                                            correlation=0.5, method="change_score"):
+                                            correlation=0.5, method="change_score", seed=None):
     """
     Calculate sample size for non-inferiority test with continuous outcome using simulation.
     
@@ -50,6 +50,8 @@ def sample_size_continuous_non_inferiority_sim(non_inferiority_margin, std_dev, 
         Correlation between baseline and follow-up measurements, by default 0.5
     method : str, optional
         Analysis method for repeated measures: "change_score" or "ancova", by default "change_score"
+    seed : int, optional
+        Random seed for reproducibility, by default None
     
     Returns
     -------
@@ -84,20 +86,18 @@ def sample_size_continuous_non_inferiority_sim(non_inferiority_margin, std_dev, 
         sim_result = simulate_continuous_non_inferiority(
             n1=n1,
             n2=n2,
-            mean1_control=0, # Reference mean for control, effect captured by assumed_difference
             non_inferiority_margin=non_inferiority_margin,
-            sd1=std_dev,     # This is sd_outcome1 for repeated measures
-            sd2=std_dev,     # This is sd_outcome2 for repeated measures
+            std_dev=std_dev,
             alpha=alpha,
             assumed_difference=assumed_difference,
             direction=direction,
             nsim=nsim,
-            seed=None, # The sample size function doesn't currently manage a seed to pass here
+            seed=seed,
             repeated_measures=repeated_measures,
             correlation=correlation,
-            analysis_method=method
+            method=method
         )
-        achieved_power = sim_result["power"]
+        achieved_power = sim_result["empirical_power"]
         
         # If power is sufficient, break the loop
         if achieved_power >= power:
@@ -118,20 +118,18 @@ def sample_size_continuous_non_inferiority_sim(non_inferiority_margin, std_dev, 
         sim_result = simulate_continuous_non_inferiority(
             n1=n1,
             n2=n2,
-            mean1_control=0, # Reference mean for control, effect captured by assumed_difference
             non_inferiority_margin=non_inferiority_margin,
-            sd1=std_dev,     # This is sd_outcome1 for repeated measures
-            sd2=std_dev,     # This is sd_outcome2 for repeated measures
+            std_dev=std_dev,
             alpha=alpha,
             assumed_difference=assumed_difference,
             direction=direction,
             nsim=nsim,
-            seed=None, # The sample size function doesn't currently manage a seed to pass here
+            seed=seed,
             repeated_measures=repeated_measures,
             correlation=correlation,
-            analysis_method=method
+            method=method
         )
-        achieved_power = sim_result["power"]
+        achieved_power = sim_result["empirical_power"]
     
     # Return result dictionary
     return {

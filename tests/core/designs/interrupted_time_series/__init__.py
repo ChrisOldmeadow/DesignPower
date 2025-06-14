@@ -1,0 +1,1 @@
+# Test package for interrupted time series designs

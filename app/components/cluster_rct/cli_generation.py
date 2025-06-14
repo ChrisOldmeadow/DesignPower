@@ -59,7 +59,7 @@ def generate_cli_code_cluster_continuous(params):
     mean2 = params.get('mean2', 3.5)
     std_dev = params.get('std_dev', 1.2)
     alpha = params.get('alpha', 0.05)
-    power = params.get('power', 0.8)
+    power = params.get('power', 0.8)  # May be None for power calculations
     
     # Cluster size variation
     cv_cluster_size = params.get('cv_cluster_size', 0.0)
@@ -236,6 +236,9 @@ def generate_cli_code_cluster_continuous(params):
     standardized_effect = effect_size / std_dev if std_dev > 0 else 0
     design_effect = 1 + (cluster_size - 1) * icc
     
+    # Safe power formatting
+    power_text = f"{power*100:.0f}" if power is not None else "TBD (being calculated)"
+    
     study_summary = f"""# STUDY DESIGN SUMMARY:
 # Design: Cluster Randomized Controlled Trial
 # Outcome Type: Continuous (mean difference analysis)
@@ -249,7 +252,7 @@ def generate_cli_code_cluster_continuous(params):
 # - Average cluster size: {cluster_size} individuals
 # - Intracluster correlation (ICC): {icc:.3f}
 # - Design effect: {design_effect:.2f}
-# - Desired statistical power: {power*100:.0f}%
+# - Desired statistical power: {power_text}%
 # - Significance level (alpha): {alpha*100:.0f}%
 #
 # CLUSTERING IMPACT:
@@ -265,7 +268,7 @@ def generate_cli_code_cluster_continuous(params):
     if calc_type == "Sample Size":
         study_summary += f"""
 # How many clusters are needed to detect a mean difference of {effect_size}
-# with {power*100:.0f}% power at {alpha*100:.0f}% significance level?"""
+# with {power_text}% power at {alpha*100:.0f}% significance level?"""
     elif calc_type == "Power":
         study_summary += f"""
 # With {n_clusters} clusters per arm ({cluster_size} individuals each), what is the
@@ -273,7 +276,7 @@ def generate_cli_code_cluster_continuous(params):
     else:  # MDE
         study_summary += f"""
 # With {n_clusters} clusters per arm ({cluster_size} individuals each), what is the
-# smallest mean difference detectable with {power*100:.0f}% power at {alpha*100:.0f}% significance?"""
+# smallest mean difference detectable with {power_text}% power at {alpha*100:.0f}% significance?"""
 
     # Generate the actual reproducible code with detailed study context
     code = f"""{study_summary}
@@ -358,7 +361,7 @@ def generate_cli_code_cluster_binary(params):
     p1 = params.get('p1', 0.3)
     p2 = params.get('p2', 0.5)
     alpha = params.get('alpha', 0.05)
-    power = params.get('power', 0.8)
+    power = params.get('power', 0.8)  # May be None for power calculations
     
     # Cluster size variation
     cv_cluster_size = params.get('cv_cluster_size', 0.0)
@@ -517,6 +520,9 @@ def generate_cli_code_cluster_binary(params):
     design_effect = 1 + (cluster_size - 1) * icc
     total_individuals = n_clusters * cluster_size * 2 if calc_type == "Sample Size" else n_clusters * cluster_size * 2
     
+    # Safe power formatting for binary
+    power_text = f"{power*100:.0f}" if power is not None else "TBD (being calculated)"
+    
     study_summary = f"""# STUDY DESIGN SUMMARY:
 # Design: Cluster Randomized Controlled Trial
 # Outcome Type: Binary (proportion analysis)
@@ -531,7 +537,7 @@ def generate_cli_code_cluster_binary(params):
 # - Average cluster size: {cluster_size} individuals
 # - Intracluster correlation (ICC): {icc:.3f}
 # - Design effect: {design_effect:.2f}
-# - Desired statistical power: {power*100:.0f}%
+# - Desired statistical power: {power_text}%
 # - Significance level (alpha): {alpha*100:.0f}%
 #
 # CLUSTERING IMPACT:
@@ -544,7 +550,7 @@ def generate_cli_code_cluster_binary(params):
     if calc_type == "Sample Size":
         study_summary += f"""
 # How many clusters are needed to detect a difference in proportions from
-# {p1:.3f} to {p2:.3f} with {power*100:.0f}% power at {alpha*100:.0f}% significance level?"""
+# {p1:.3f} to {p2:.3f} with {power_text}% power at {alpha*100:.0f}% significance level?"""
     elif calc_type == "Power":
         study_summary += f"""
 # With {n_clusters} clusters per arm ({cluster_size} individuals each), what is the
@@ -552,7 +558,7 @@ def generate_cli_code_cluster_binary(params):
     else:  # MDE
         study_summary += f"""
 # With {n_clusters} clusters per arm ({cluster_size} individuals each), what is the
-# smallest difference in proportions detectable with {power*100:.0f}% power at {alpha*100:.0f}% significance?"""
+# smallest difference in proportions detectable with {power_text}% power at {alpha*100:.0f}% significance?"""
 
     # Generate the actual reproducible code with detailed study context
     code = f"""{study_summary}

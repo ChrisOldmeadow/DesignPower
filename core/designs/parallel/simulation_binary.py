@@ -275,7 +275,7 @@ def power_binary_sim(n1, n2, p1, p2, alpha=0.05, nsim=1000, test_type="Normal Ap
     }
 
 def sample_size_binary_sim(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, nsim=1000, 
-                        min_n=10, max_n=1000, step=10, test_type="Normal Approximation"):
+                        min_n=10, max_n=1000, step=10, test_type="Normal Approximation", seed=None):
     """
     Calculate sample size required for detecting a difference in proportions using simulation.
     
@@ -301,6 +301,8 @@ def sample_size_binary_sim(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, 
         Step size for incrementing sample size, by default 10
     test_type : str, optional
         Type of statistical test to use, by default "Normal Approximation"
+    seed : int, optional
+        Random seed for reproducibility, by default None
     
     Returns
     -------
@@ -336,7 +338,8 @@ def sample_size_binary_sim(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, 
             p2=p2,
             nsim=nsim,
             alpha=alpha,
-            test_type=test_type_normalized
+            test_type=test_type_normalized,
+            seed=seed
         )
         
         # Extract achieved power
@@ -369,7 +372,7 @@ def sample_size_binary_sim(p1, p2, power=0.8, alpha=0.05, allocation_ratio=1.0, 
     }
 
 def min_detectable_effect_binary_sim(n1, n2, p1, power=0.8, nsim=1000, alpha=0.05, 
-                                  precision=0.01, test_type="Normal Approximation"):
+                                  precision=0.01, test_type="Normal Approximation", seed=None):
     """
     Calculate minimum detectable effect for binary outcomes using simulation-based approach.
     
@@ -391,6 +394,8 @@ def min_detectable_effect_binary_sim(n1, n2, p1, power=0.8, nsim=1000, alpha=0.0
         Desired precision for the effect size, by default 0.01
     test_type : str, optional
         Type of statistical test to use, by default "Normal Approximation"
+    seed : int, optional
+        Random seed for reproducibility, by default None
     
     Returns
     -------
@@ -424,7 +429,8 @@ def min_detectable_effect_binary_sim(n1, n2, p1, power=0.8, nsim=1000, alpha=0.0
             p2=p2,
             nsim=nsim,
             alpha=alpha,
-            test_type=test_type_normalized
+            test_type=test_type_normalized,
+            seed=seed
         )
         
         # Check if achieved power meets target
@@ -453,7 +459,8 @@ def min_detectable_effect_binary_sim(n1, n2, p1, power=0.8, nsim=1000, alpha=0.0
         p2=p2,
         nsim=nsim,
         alpha=alpha,
-        test_type=test_type_normalized
+        test_type=test_type_normalized,
+        seed=seed
     )
     
     # Calculate minimum detectable effect

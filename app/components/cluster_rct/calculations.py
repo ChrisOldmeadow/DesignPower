@@ -32,20 +32,57 @@ def calculate_cluster_continuous(params):
     try:
         # Check for required parameters based on calculation type
         if calc_type == "Sample Size":
-            required_params = ["mean1", "mean2", "std_dev", "icc", "power", "alpha"]
+            if params.get("hypothesis_type") == "Non-Inferiority":
+                required_params = ["mean1", "non_inferiority_margin", "assumed_difference", "std_dev", "icc", "power", "alpha"]
+            else:
+                required_params = ["mean1", "mean2", "std_dev", "icc", "power", "alpha"]
             if params.get("determine_ss_param") == "Number of Clusters (k)":
                 required_params.append("cluster_size_input_for_k_calc")
             elif params.get("determine_ss_param") == "Average Cluster Size (m)":
                 required_params.append("n_clusters_input_for_m_calc")
         elif calc_type == "Power":
-            required_params = ["n_clusters", "cluster_size", "icc", "mean1", "mean2", "std_dev", "alpha"]
+            if params.get("hypothesis_type") == "Non-Inferiority":
+                required_params = ["n_clusters", "cluster_size", "icc", "mean1", "non_inferiority_margin", "assumed_difference", "std_dev", "alpha"]
+            else:
+                required_params = ["n_clusters", "cluster_size", "icc", "mean1", "mean2", "std_dev", "alpha"]
         elif calc_type == "Minimum Detectable Effect":
-            required_params = ["n_clusters", "cluster_size", "icc", "mean1", "std_dev", "power", "alpha"]
+            if params.get("hypothesis_type") == "Non-Inferiority":
+                required_params = ["n_clusters", "cluster_size", "icc", "mean1", "non_inferiority_margin", "assumed_difference", "std_dev", "power", "alpha"]
+            else:
+                required_params = ["n_clusters", "cluster_size", "icc", "mean1", "std_dev", "power", "alpha"]
         
         # Validate required parameters
         for param in required_params:
             if params.get(param) is None:
                 return {"error": f"Missing required parameter: {param}"}
+        
+        # Calculate mean2 for non-inferiority scenarios
+        if params.get("hypothesis_type") == "Non-Inferiority" and calc_type in ["Power", "Sample Size", "Minimum Detectable Effect"]:
+            mean1 = params["mean1"]
+            non_inferiority_margin = params["non_inferiority_margin"]
+            assumed_difference = params["assumed_difference"]
+            direction = params.get("non_inferiority_direction", "lower")
+            
+            # Calculate mean2 based on non-inferiority parameters
+            # For proper non-inferiority sample size calculation, we need to use the effective delta
+            if calc_type == "Sample Size":
+                # For sample size, calculate the difference we need to detect
+                if direction == "lower":
+                    # Testing that new treatment is not worse than control by more than margin
+                    # Effective delta = assumed_difference + non_inferiority_margin
+                    effective_difference = assumed_difference + non_inferiority_margin
+                else:
+                    # Testing that new treatment is not better than control by more than margin
+                    # Effective delta = non_inferiority_margin - assumed_difference
+                    effective_difference = non_inferiority_margin - assumed_difference
+                
+                mean2 = mean1 + effective_difference
+            else:
+                # For power and MDE calculations, use the assumed difference
+                mean2 = mean1 + assumed_difference
+            
+            # Add calculated mean2 to params for use in function calls
+            params["mean2"] = mean2
         
         # Call appropriate function based on calculation type and method
         if calc_type == "Sample Size":
@@ -279,6 +316,30 @@ def calculate_cluster_continuous(params):
         
         # Add calculation method and design method to results
         results["design_method"] = "Cluster RCT"
+        
+        # Check for infinity results and enhance warnings
+        import math
+        main_result_keys = ['n_clusters', 'cluster_size', 'power', 'mde']
+        has_infinity = any(
+            key in results and isinstance(results[key], (int, float)) and math.isinf(results[key])
+            for key in main_result_keys
+        )
+        
+        if has_infinity and 'warning' in results:
+            # Make the warning more prominent for infinity cases
+            results['calculation_status'] = 'warning'
+            results['warning_level'] = 'high'
+            # Add a user-friendly summary
+            if calc_type == "Sample Size" and params.get("determine_ss_param") == "Average Cluster Size (m)":
+                results['user_message'] = (
+                    f"Cannot determine cluster size with the given constraints. "
+                    f"The required cluster size would be infinite. See detailed guidance below."
+                )
+            elif calc_type == "Sample Size":
+                results['user_message'] = (
+                    f"Cannot determine number of clusters with the given constraints. "
+                    f"The required number of clusters would be infinite. See detailed guidance below."
+                )
         
         return results
     

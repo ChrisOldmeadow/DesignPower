@@ -395,14 +395,69 @@ def generate_power_report(results, params, design_type, outcome_type):
         else:
             sd_text += " (pooled or per group)"
 
+        # Handle None effect size gracefully
+        if actual_effect_size is not None:
+            effect_size_text = f"The standardized effect size (Cohen's d) for this scenario is {actual_effect_size:.2f}."
+        else:
+            # Calculate effect size manually if not provided
+            std_dev = params.get('std_dev', sd1)  # Use std_dev if available, fallback to sd1
+            if std_dev and std_dev != 0:
+                calculated_effect_size = difference / std_dev
+                effect_size_text = f"The standardized effect size (Cohen's d) for this scenario is {calculated_effect_size:.2f}."
+            else:
+                effect_size_text = "Effect size calculation not available."
+
         report_text = textwrap.dedent(f"""
         Power Calculation Report (Parallel RCT - Continuous Outcome):
 
-        For a study designed to compare two parallel groups with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), targeting a difference between means of {difference:.2f} (group 1 mean: {mean1:.2f}, group 2 mean: {mean2:.2f}), and assuming standard deviation(s) of {sd_text}, the estimated statistical power is {power * 100:.1f}%. This calculation uses a Type I error rate (alpha) of {alpha*100:.0f}%. The standardized effect size (Cohen's d) for this scenario is {actual_effect_size:.2f}.
+        For a study designed to compare two parallel groups with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), targeting a difference between means of {difference:.2f} (group 1 mean: {mean1:.2f}, group 2 mean: {mean2:.2f}), and assuming standard deviation(s) of {sd_text}, the estimated statistical power is {power * 100:.1f}%. This calculation uses a Type I error rate (alpha) of {alpha*100:.0f}%. {effect_size_text}
         """)
         # Add reference
         ref_details = get_method_reference('continuous', method=method, design=None) # Standard parallel design
         report_text += f"\n\nMethod Reference: {ref_details['citation']} ({ref_details['doi']})"
+        
+    elif design_type == 'Parallel RCT' and 'Binary' in outcome_type:
+        # Enhanced binary outcome power reporting
+        p1 = params.get('p1', 0)
+        p2 = params.get('p2', 0)
+        test_type = params.get('test_type', 'Normal Approximation')
+        correction = params.get('correction', False)
+        odds_ratio = results.get('odds_ratio')
+        relative_risk = results.get('relative_risk') 
+        absolute_difference = abs(p2 - p1)
+        
+        # Calculate odds ratio and relative risk if not in results
+        if odds_ratio is None and p1 > 0 and p2 > 0 and p1 < 1 and p2 < 1:
+            odds_ratio = (p2 / (1 - p2)) / (p1 / (1 - p1))
+        if relative_risk is None and p1 > 0:
+            relative_risk = p2 / p1
+        
+        # Format odds ratio and relative risk safely
+        or_text = f" (odds ratio = {odds_ratio:.2f})" if odds_ratio is not None else ""
+        rr_text = f" (relative risk = {relative_risk:.2f})" if relative_risk is not None else ""
+        
+        # Create method text based on simulation vs analytical
+        if method == "simulation":
+            nsim = params.get("nsim", 1000)
+            seed = params.get("seed")
+            seed_text = f", random seed {seed}" if seed is not None else ""
+            method_text = f"using Monte Carlo simulation ({nsim:,} simulations{seed_text}) with {test_type}"
+        else:
+            method_text = f"using {test_type}"
+        
+        if correction:
+            method_text += " with continuity correction"
+        
+        report_text = textwrap.dedent(f"""
+        Power Calculation Report (Parallel RCT - Binary Outcome):
+
+        For a study designed to compare two parallel groups with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), targeting a difference in proportions from {p1:.3f} ({p1*100:.1f}%) in group 1 to {p2:.3f} ({p2*100:.1f}%) in group 2 (absolute difference = {absolute_difference:.3f}{or_text}{rr_text}), the estimated statistical power is {power * 100:.1f}%. This calculation uses {method_text} with a Type I error rate (alpha) of {alpha*100:.0f}%.
+        """)
+        
+        # Add reference
+        ref_details = get_method_reference('binary', test_type, method)
+        report_text += f"\n\nMethod Reference: {ref_details['citation']} ({ref_details['doi']})"
+        
     else:
         # Default report for other types
         report_text = textwrap.dedent(f"""
@@ -458,10 +513,18 @@ def generate_mde_report(results, params, design_type, outcome_type):
         else:
             sd_text += " (pooled or per group)"
         
+        # Handle None values gracefully
+        if mde_val is not None and cohen_d_val is not None:
+            effect_text = f"the minimum detectable difference in means is {mde_val:.2f}. This corresponds to a standardized effect size (Cohen's d) of {cohen_d_val:.2f}."
+        elif mde_val is not None:
+            effect_text = f"the minimum detectable difference in means is {mde_val:.2f}."
+        else:
+            effect_text = "the minimum detectable effect calculation is not available."
+        
         report_text = textwrap.dedent(f"""
         Minimum Detectable Effect Report (Parallel RCT - Continuous Outcome):
 
-        For a study with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), aiming for {power * 100:.0f}% statistical power, and assuming standard deviation(s) of {sd_text}, the minimum detectable difference in means is {mde_val:.2f}. This corresponds to a standardized effect size (Cohen's d) of {cohen_d_val:.2f}. This calculation uses a Type I error rate (alpha) of {alpha*100:.0f}%.
+        For a study with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), aiming for {power * 100:.0f}% statistical power, and assuming standard deviation(s) of {sd_text}, {effect_text} This calculation uses a Type I error rate (alpha) of {alpha*100:.0f}%.
         """)
         # Add reference
         ref_details = get_method_reference('continuous', method=method, design=None) # Standard parallel design

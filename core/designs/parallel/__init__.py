@@ -93,8 +93,6 @@ __all__ = [
     'continuous',
     'analytical',
     'simulation',
-    'binary_simulation',
-    'binary_tests',
     
     # Binary outcome functions (analytical)
     'sample_size_binary',

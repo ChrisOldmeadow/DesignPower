@@ -441,7 +441,7 @@ def simulate_binary(n1, n2, p1, p2, nsim=1000, alpha=0.05, test_type="Normal App
         time.sleep(2)  # 2 second delay to demonstrate computational cost
     
     # Import binary tests module to get test-specific implementations
-    from core.designs.parallel.binary_tests import perform_binary_test
+    from core.designs.parallel.analytical_binary import perform_binary_test
     
     # Map test type to internal format
     test_type_map = {

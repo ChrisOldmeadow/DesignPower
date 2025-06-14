@@ -1,381 +1,273 @@
 # DesignPower Testing Strategy
 
-This document outlines a comprehensive testing strategy for the DesignPower application, focusing on ensuring correctness, reliability, and maintainability of the refactored codebase.
-
-## Testing Levels
-
-### 1. Unit Testing
-
-Unit tests focus on testing individual functions in isolation to verify their correctness.
-
-- [ ] **Setup Testing Environment**
-  - [x] Create a `tests/` directory structure mirroring the core structure
-  - [x] Set up a test runner and configuration
-  - [x] Configure coverage reporting
-
-- [ ] **Binary Outcomes Testing**
-  - [x] Test analytical methods
-    - [x] `power_binary()`
-    - [x] `sample_size_binary()`
-    - [x] `min_detectable_effect_binary()`
-    - [x] `power_binary_non_inferiority()`
-    - [x] `sample_size_binary_non_inferiority()`
-  - [ ] Test simulation methods
-    - [x] `power_binary_sim()`
-    - [x] `sample_size_binary_sim()`
-    - [x] `min_detectable_effect_binary_sim()`
-    - [x] `sample_size_binary_non_inferiority_sim()`
-    - [x] `min_detectable_binary_non_inferiority_margin_sim()`
-    - [x] `simulate_binary_trial()`
-    - [x] `simulate_binary_non_inferiority()`
-
-- [ ] **Cluster RCT Testing**
-  - [ ] Test analytical methods (Binary)
-    - [x] `power_cluster_binary()` 
-    - [x] `sample_size_cluster_binary()` 
-    - [x] `mde_cluster_binary()` 
-    - [ ] Non-inferiority functions if applicable (None found for analytical binary)
-  - [ ] Test analytical methods (Continuous)
-    - [x] `power_cluster_continuous()` (Implemented, tested)
-    - [x] `sample_size_cluster_continuous()` (Implemented, tested)
-    - [x] `mde_cluster_continuous()` (Implemented, tested)
-    - [ ] Non-inferiority functions if applicable (None found for analytical continuous)
-  - [ ] Test simulation methods (Binary)
-    - [x] `power_cluster_binary_sim()` (Implemented, tested)
-    - [x] `sample_size_cluster_binary_sim()` (Implemented, tested)
-    - [x] `mde_cluster_binary_sim()` (Implemented, tested)
-    - [ ] Non-inferiority functions if applicable
-    - [x] `simulate_cluster_binary_trial()` (Helper, tested)
-  - [X] Test simulation methods (Continuous)
-    - [X] `power_cluster_continuous_sim()` (Implemented, tested)
-    - [X] `sample_size_cluster_continuous_sim()` (Implemented, tested)
-    - [X] `mde_cluster_continuous_sim()` (Implemented, tested)
-    - [ ] Non-inferiority functions if applicable (None found for simulation continuous)
-    - [X] `simulate_cluster_continuous_trial()` (Helper, formally tested)
-
-- [ ] **Continuous Outcomes Testing**
-  - [ ] Test analytical methods
-    - [x] `power_continuous()`
-    - [x] `sample_size_continuous()`
-    - [x] `min_detectable_effect_continuous()`
-    - [x] `power_continuous_non_inferiority()`
-    - [x] `sample_size_continuous_non_inferiority()`
-  - [ ] Test simulation methods
-    - [x] `power_continuous_sim()`
-    - [x] `sample_size_continuous_sim()`
-    - [x] `min_detectable_effect_continuous_sim()`
-    - [x] `power_continuous_non_inferiority_sim()`
-      - [x] With repeated measures (change score & ANCOVA)
-    - [x] `sample_size_continuous_non_inferiority_sim()`
-      - [x] With repeated measures (change score & ANCOVA)
-    - [x] `simulate_continuous_trial()`
-    - [x] `simulate_continuous_non_inferiority()`
-
-- [ ] **Survival Outcomes Testing**
-  - [ ] Test analytical methods
-    - [x] `power_survival()`
-    - [x] `sample_size_survival()`
-    - [x] `min_detectable_effect_survival()`
-    - [x] `power_survival_non_inferiority()`
-    - [x] `sample_size_survival_non_inferiority()`
-  - [ ] Test simulation methods
-    - [x] `power_survival_sim()`
-    - [x] `sample_size_survival_sim()`
-    - [x] `min_detectable_effect_survival_sim()`
-    - [x] `power_survival_non_inferiority_sim()`
-    - [x] `sample_size_survival_non_inferiority_sim()`
-    - [x] `simulate_survival_trial()`
-    - [x] `simulate_survival_non_inferiority()`
-
-### 2. Integration Testing
-
-Integration tests verify that modules work together correctly.
-
-- [ ] **Core Logic Integration**
-  - [ ] Test analytical vs. simulation consistency
-    - [ ] Binary outcomes
-    - [ ] Continuous outcomes
-    - [ ] Survival outcomes
-  - [ ] Test legacy compatibility
-    - [ ] Binary module compatibility
-    - [ ] Continuous module compatibility
-    - [ ] Survival module compatibility
-
-- [ ] **Application Component Logic Testing**
-  - [ ] **Location**: `tests/app/components/`
-  - [ ] **Purpose**: Test the internal logic of modules in `app/components/` (e.g., `parallel_rct.py`, `cluster_rct.py`). These components often act as an orchestration layer between the UI and the core statistical functions. Tests in this category focus on:
-    - Correct parameter mapping and transformation from UI-like input structures (e.g., dictionaries).
-    - Conditional logic for selecting and calling appropriate core statistical functions from `core/designs/` (e.g., choosing between analytical vs. simulation, superiority vs. non-inferiority, different outcome types).
-    - Accurate aggregation and formatting of results returned by the component for UI display.
-    - Handling of component-specific logic, such as deriving intermediate parameters or error conditions.
-  - [ ] **Methodology**: Directly import and call functions within `app/components/` modules (e.g., `calculate_parallel_survival`) with various input parameter dictionaries. Assertions are made on the returned values, structure of the results, and any side effects if applicable (though typically these should be minimal for calculation functions).
-  - [ ] **Examples**:
-    - [ ] `tests/app/components/test_parallel_rct.py` (for `app/components/parallel_rct.py`)
-    - [x] `tests/app/components/test_cluster_rct.py` (for `app/components/cluster_rct.py`)
-        - Covers `calculate_cluster_continuous` (analytical power, sample size, MDE; simulation power, sample size, MDE including Bayesian fallback; parameter validation).
-        - Covers `calculate_cluster_binary` (analytical power, sample size, MDE; ICC logit conversion; simulation power, sample size, MDE; parameter validation).
-
-- [ ] **UI and Core Calculation Flow Testing**
-  - [ ] **Location**: `tests/ui/`
-  - [ ] **Purpose**: Test the end-to-end flow from simulated UI interactions, through the main application logic (`designpower_app.py`), to the invocation of core statistical functions. These tests verify:
-    - Correct parameter collection by UI rendering functions (e.g., `designpower_app.render_parallel_survival` which uses Streamlit components).
-    - Proper hand-off of parameters from UI rendering functions to application component functions (e.g., `designpower_app.calculate_parallel_survival` which in turn calls functions from `app/components/`).
-    - That the correct core statistical functions in `core/designs/` are ultimately called with the correctly transformed arguments.
-  - [ ] **Methodology**: Mock Streamlit UI components (`st.*`), simulate user inputs by controlling the return values of these mocks, call `designpower_app.py` rendering and calculation functions, and assert that the underlying core statistical functions (from `core/designs/`) are called as expected using `unittest.mock.patch` and `assert_called_once_with` or similar.
-  - [ ] **Examples**:
-    - [x] `tests/ui/test_survival_ui_integration.py`
-    - [x] `tests/ui/test_ui_integration.py`
-
-### 3. Regression Testing
-
-Regression tests ensure that changes don't break existing functionality.
-
-- [ ] **Benchmark Test Suite**
-  - [ ] Create benchmark cases with known outcomes
-    - [ ] Binary outcomes benchmarks
-    - [ ] Continuous outcomes benchmarks
-    - [ ] Survival outcomes benchmarks
-  - [ ] Implement automated regression testing
-    - [ ] Set up automated comparison with benchmarks
-    - [ ] Create regression test runner
-
-### 4. Parameterized Testing
-
-Parameterized tests cover a wide range of inputs to ensure robustness.
-
-- [ ] **Binary Outcomes**
-  - [ ] Parameterized tests for `sample_size_binary()`
-  - [ ] Parameterized tests for `power_binary()`
-  - [ ] Parameterized tests for non-inferiority functions
-
-- [ ] **Continuous Outcomes**
-  - [ ] Parameterized tests for `sample_size_continuous()`
-  - [ ] Parameterized tests for `power_continuous()`
-  - [ ] Parameterized tests for non-inferiority functions
-
-- [ ] **Survival Outcomes**
-  - [ ] Parameterized tests for `sample_size_survival()`
-  - [ ] Parameterized tests for `power_survival()`
-  - [ ] Parameterized tests for non-inferiority functions
-
-### 5. Property-Based Testing
-
-Property-based tests verify that certain properties hold across all valid inputs.
-
-- [ ] **Universal Properties**
-  - [ ] Power increases with sample size
-  - [ ] Power increases with effect size
-  - [ ] Sample size decreases with effect size
-  - [ ] Sample size increases with power
-  - [ ] Non-inferiority margin affects power/sample size
-
-- [ ] **Simulation Properties**
-  - [ ] Simulation results converge with more simulations
-  - [ ] Simulation variance decreases with more simulations
-  - [ ] Simulation matches analytical results asymptotically
-
-### 6. Edge Case Testing
-
-Edge case tests focus on boundary conditions and extreme inputs.
-
-- [ ] **Binary Outcomes Edge Cases**
-  - [ ] Very small proportions (near 0)
-  - [ ] Very large proportions (near 1)
-  - [ ] Very small effect size
-  - [ ] Equal proportions
-  - [ ] Extreme sample sizes
-
-- [ ] **Continuous Outcomes Edge Cases**
-  - [ ] Very small effect size
-  - [ ] Very large effect size
-  - [ ] Very small/large standard deviations
-  - [ ] Equal means
-  - [ ] Extreme sample sizes
-
-- [ ] **Survival Outcomes Edge Cases**
-  - [ ] Very short/long median survival times
-  - [ ] Very small/large hazard ratios
-  - [ ] Equal survival times
-  - [ ] Extreme enrollment/follow-up periods
-  - [ ] High dropout rates
-
-### 7. Comparison with External Tools
-
-Tests that compare results with established external statistical tools.
-
-- [ ] **Binary Outcomes Comparisons**
-  - [ ] Compare with G*Power
-  - [ ] Compare with published results from literature
-  - [ ] Compare with R packages (e.g., pwr)
-
-- [ ] **Continuous Outcomes Comparisons**
-  - [ ] Compare with G*Power
-  - [ ] Compare with published results from literature
-  - [ ] Compare with R packages (e.g., pwr)
-
-- [ ] **Survival Outcomes Comparisons**
-  - [ ] Compare with published survival analysis tools
-  - [ ] Compare with R packages (e.g., powerSurvEpi)
-  - [ ] Compare with PASS software results
-
-### 8. Simulation Validation
-
-Tests that validate the statistical properties of simulation methods.
-
-- [ ] **Simulation Methodology Tests**
-  - [ ] Test simulation convergence
-  - [ ] Test simulation variance
-  - [ ] Test simulation bias
-  - [ ] Test sensitivity to seed values
-
-- [ ] **Binary Simulation Validation**
-  - [ ] Validate `simulate_binary_trial()` output distribution
-  - [ ] Validate Type I error rate
-  - [ ] Validate power estimation accuracy
-
-- [ ] **Continuous Simulation Validation**
-  - [ ] Validate `simulate_continuous_trial()` output distribution
-  - [ ] Validate Type I error rate
-  - [ ] Validate power estimation accuracy
-
-- [ ] **Survival Simulation Validation**
-  - [ ] Validate `simulate_survival_trial()` output distribution
-  - [ ] Validate Type I error rate
-  - [ ] Validate power estimation accuracy
-
-### 9. UI Component Testing
-
-Tests for UI components that ensure they correctly use backend functions.
-
-- [ ] **Binary UI Components**
-  - [ ] Test `render_parallel_binary()` 
-  - [ ] Test `calculate_parallel_binary()`
-  - [ ] Test UI toggle for analytical/simulation methods
-  - [ ] Test non-inferiority UI options
-
-- [ ] **Continuous UI Components**
-  - [ ] Test `render_parallel_continuous()`
-  - [ ] Test `calculate_parallel_continuous()`
-  - [ ] Test UI toggle for analytical/simulation methods
-  - [ ] Test non-inferiority UI options
-
-- [ ] **Survival UI Components**
-  - [ ] Test `render_parallel_survival()`
-  - [ ] Test `calculate_parallel_survival()`
-  - [ ] Test UI toggle for analytical/simulation methods
-  - [ ] Test non-inferiority UI options
-
-### 10. Performance Testing
-
-Tests to ensure computational efficiency, particularly for simulation methods.
-
-- [ ] **Computational Performance**
-  - [ ] Benchmark simulation performance
-  - [ ] Identify performance bottlenecks
-  - [ ] Test with large numbers of simulations
-  - [ ] Test with extreme sample sizes
-
-- [ ] **Memory Usage**
-  - [ ] Test memory consumption during simulations
-  - [ ] Identify memory leaks or inefficiencies
-  - [ ] Optimize memory usage for large simulations
-
-## Implementation Phases
-
-### Phase 1: Core Unit Tests
-
-- [ ] Set up testing framework and directory structure
-- [ ] Implement unit tests for analytical functions
-- [ ] Set up continuous integration for automated testing
-- [ ] Achieve minimum code coverage target (80%)
-
-### Phase 2: Integration and Regression Tests
-
-- [ ] Develop integration tests between modules
-- [ ] Create regression test suite with benchmark cases
-- [ ] Implement property-based tests for key invariants
-- [ ] Set up automated regression testing pipeline
-
-### Phase 3: Advanced Testing
-
-- [ ] Add edge case tests and boundary testing
-- [ ] Implement simulation validation tests
-- [ ] Create comparison tests with external tools
-- [ ] Extend code coverage to 90%+
-
-### Phase 4: UI and End-to-End Testing
-
-- [ ] Develop tests for UI components
-- [ ] Create end-to-end tests for complete workflows
-- [ ] Implement performance testing for simulation methods
-- [ ] Set up automated UI testing
-
-## Best Practices
-
-1. **Test Documentation**: Each test should have a clear purpose documented in the test function docstring.
-2. **Test Independence**: Tests should not depend on each other's state.
-3. **Test Organization**: Organize tests in a logical hierarchy mirroring the code structure.
-4. **Realistic Inputs**: Use realistic input values that reflect actual usage.
-5. **Test Fixtures**: Use fixtures for common setup/teardown procedures.
-6. **Avoid Randomness**: Use fixed seeds for randomized tests to ensure reproducibility.
-7. **Test Coverage**: Aim for comprehensive coverage, especially of complex logic branches.
-8. **Readable Tests**: Make tests readable and maintainable with clear naming.
-9. **Automated Testing**: Run tests automatically on code changes.
-10. **Continuous Improvement**: Regularly review and improve the test suite.
-
-## Test Examples
-
-### Unit Test Example
-
-```python
-import unittest
-from core.designs.parallel import analytical_binary
-
-class TestAnalyticalBinary(unittest.TestCase):
-    
-    def test_power_binary(self):
-        """Test that power calculation gives expected results"""
-        result = analytical_binary.power_binary(
-            n1=100, n2=100, p1=0.3, p2=0.5, alpha=0.05
-        )
-        self.assertAlmostEqual(result["power"], 0.94, places=2)
+This document outlines the comprehensive testing strategy for the DesignPower application, focusing on ensuring correctness, reliability, and maintainability across statistical functions, UI components, and user workflows.
+
+## Testing Architecture Overview
+
+The testing strategy follows a three-tier approach:
+
+1. **Unit Tests** - Test individual statistical functions in isolation
+2. **Integration Tests** - Test complete user workflows from UI to results
+3. **Validation Tests** - Compare results against authoritative benchmarks
+
+## Test Directory Structure
+
+```
+tests/
+├── core/                           # Unit tests for statistical functions
+│   └── designs/
+│       ├── parallel/              # Parallel group RCT tests
+│       └── cluster_rct/           # Cluster RCT tests
+├── integration/                   # End-to-end integration tests
+│   ├── test_ui_calculation_flow.py    # Main UI→calculation→result flow
+│   └── test_cluster_calculation_flow.py  # Cluster RCT specific flows
+├── validation/                    # Benchmark validation tests
+│   ├── test_fishers_exact_validation.py
+│   ├── test_cluster_rct_icc_validation.py
+│   └── authoritative_benchmarks.py
+└── app/                          # Legacy component tests (to be phased out)
+    └── components/
 ```
 
-### Integration Test Example
+## 1. Unit Testing
 
-```python
-def test_analytical_vs_simulation_consistency(self):
-    """Test that analytical and simulation methods give consistent results"""
-    # Parameters
-    p1, p2 = 0.3, 0.5
-    n1, n2 = 100, 100
-    
-    # Get analytical power
-    analytical_result = analytical_binary.power_binary(
-        n1=n1, n2=n2, p1=p1, p2=p2, alpha=0.05
-    )
-    
-    # Get simulation power with many simulations for accuracy
-    sim_result = simulation_binary.power_binary_sim(
-        n1=n1, n2=n2, p1=p1, p2=p2, alpha=0.05, nsim=10000
-    )
-    
-    # Results should be within a reasonable margin (e.g., 5%)
-    self.assertLess(abs(analytical_result["power"] - sim_result["power"]), 0.05)
-```
+**Purpose**: Test individual statistical functions in isolation to verify mathematical correctness.
 
-## Running Tests
+**Location**: `tests/core/designs/`
 
-To run the tests, use:
+**Coverage**:
+- ✅ Parallel RCT analytical methods (binary, continuous, survival)
+- ✅ Parallel RCT simulation methods (binary, continuous, survival)
+- ✅ Cluster RCT analytical methods (binary, continuous)
+- ✅ Cluster RCT simulation methods (binary, continuous)
+- ✅ Non-inferiority calculations for all designs
+- ✅ Permutation tests for cluster RCTs
+
+**Key Test Files**:
+- `tests/core/designs/parallel/test_analytical_binary.py` 
+- `tests/core/designs/parallel/test_analytical_continuous.py`
+- `tests/core/designs/parallel/test_analytical_survival.py`
+- `tests/core/designs/parallel/test_simulation_binary.py`
+- `tests/core/designs/parallel/test_simulation_continuous.py`
+- `tests/core/designs/parallel/test_simulation_survival.py`
+- `tests/core/designs/cluster_rct/test_analytical_binary.py`
+- `tests/core/designs/cluster_rct/test_analytical_continuous.py`
+- `tests/core/designs/cluster_rct/test_simulation_binary.py`
+- `tests/core/designs/cluster_rct/test_simulation_continuous.py`
+
+**Best Practices**:
+- Test with realistic clinical trial parameters
+- Verify mathematical relationships (e.g., power increases with sample size)
+- Test edge cases (very small/large effect sizes, extreme sample sizes)
+- Use fixed seeds for reproducible simulation tests
+
+## 2. Integration Testing
+
+**Purpose**: Test complete user workflows from UI input through calculation to final results.
+
+**Location**: `tests/integration/`
+
+**Philosophy**: Replace mocked component tests with real end-to-end integration tests that validate the actual user experience.
+
+### 2.1 Main Integration Tests
+
+**File**: `tests/integration/test_ui_calculation_flow.py` (564 lines)
+
+**Coverage**:
+- ✅ Binary outcome calculations (analytical & simulation)
+- ✅ Continuous outcome calculations (analytical & simulation)
+- ✅ Survival outcome calculations (analytical & simulation)
+- ✅ Non-inferiority calculations for all outcomes
+- ✅ Parameter validation and error handling
+- ✅ Consistency between analytical and simulation methods
+
+**Test Classes**:
+- `TestBinaryCalculationFlow` - Complete binary calculation workflows
+- `TestContinuousCalculationFlow` - Complete continuous calculation workflows
+- `TestSurvivalCalculationFlow` - Complete survival calculation workflows
+- `TestParameterValidationFlow` - Error handling and validation
+- `TestConsistencyBetweenMethods` - Analytical vs simulation consistency
+
+### 2.2 Cluster RCT Integration Tests
+
+**File**: `tests/integration/test_cluster_calculation_flow.py` (334 lines)
+
+**Coverage**:
+- ✅ Cluster binary calculations (analytical & simulation)
+- ✅ Cluster continuous calculations (analytical & simulation)
+- ✅ ICC effects on sample size requirements
+- ✅ Parameter validation for cluster designs
+- ✅ Consistency between analytical and simulation methods
+
+**Test Classes**:
+- `TestClusterBinaryCalculationFlow`
+- `TestClusterContinuousCalculationFlow`
+- `TestClusterParameterValidation`
+- `TestClusterConsistencyChecks`
+
+### Integration Test Benefits
+
+1. **Real Workflow Testing**: Tests actual parameter flow from UI through calculations
+2. **Parameter Mapping Validation**: Ensures UI parameters correctly map to function calls
+3. **Result Structure Verification**: Validates results are properly formatted for display
+4. **Error Handling**: Tests invalid inputs and edge cases
+5. **Method Consistency**: Compares analytical vs simulation results
+
+**Current Status**: 23/32 integration tests passing (72% success rate)
+
+## 3. Validation Testing
+
+**Purpose**: Validate statistical calculations against authoritative external benchmarks.
+
+**Location**: `tests/validation/`
+
+**Methodology**: 
+- Compare results with established statistical software (R, SAS, PASS)
+- Test against published literature examples
+- Validate exact methods (Fisher's exact test, permutation tests)
+
+**Key Files**:
+- `tests/validation/test_fishers_exact_validation.py` - Fisher's exact test validation
+- `tests/validation/test_cluster_rct_icc_validation.py` - Cluster RCT ICC calculations
+- `tests/validation/authoritative_benchmarks.py` - Reference values
+- `tests/validation/comprehensive_validation.py` - Full validation suite
+
+**Validation Sources**:
+- R packages: `pwr`, `clusterPower`, `survival`
+- Literature examples from statistical textbooks
+- PASS software results
+- Hand-calculated exact solutions
+
+## 4. Legacy Test Cleanup
+
+### Files to Phase Out
+
+**Old Mocked Component Tests** (replace with integration tests):
+- `tests/app/components/test_parallel_rct.py` (1940 lines) - **Too large, mock-heavy**
+- `tests/app/components/test_parallel_rct_binary.py` - **Redundant with integration tests**
+- `tests/app/components/test_parallel_rct_survival.py` - **Redundant with integration tests**
+- `tests/app/components/test_parallel_rct_fixed.py` - **Temp fix file**
+- `tests/app/components/test_parallel_rct_comprehensive_fix.py` - **Temp fix file**
+
+**Old UI Tests** (replace with integration tests):
+- `tests/ui/test_ui_integration.py` (1013 lines) - **Too large, mock-heavy**
+- `tests/ui/test_survival_ui_integration.py` - **Redundant with integration tests**
+- `tests/ui/simplified_ui_tests.py` - **Incomplete/outdated**
+
+### Files to Keep
+
+**Core Unit Tests** - Essential for mathematical validation:
+- All files in `tests/core/designs/` - Keep all unit tests
+
+**Validation Tests** - Critical for correctness:
+- All files in `tests/validation/` - Keep all validation tests
+
+**Integration Tests** - New comprehensive approach:
+- All files in `tests/integration/` - Keep and expand
+
+**Useful Component Tests**:
+- `tests/app/components/test_cluster_rct.py` - Keep if still relevant after review
+
+## 5. Running Tests
+
+### Quick Test Commands
 
 ```bash
-# Run all tests
-python -m unittest discover tests
+# Run all unit tests
+python -m pytest tests/core/ -v
 
-# Run a specific test file
-python -m unittest tests.designs.parallel.test_analytical_binary
+# Run all integration tests  
+python -m pytest tests/integration/ -v
+
+# Run all validation tests
+python -m pytest tests/validation/ -v
 
 # Run tests with coverage
-coverage run -m unittest discover
-coverage report -m
-coverage html  # Generate HTML report
+python -m pytest tests/ --cov=core --cov=app --cov-report=html
+
+# Run specific test classes
+python -m pytest tests/integration/test_ui_calculation_flow.py::TestBinaryCalculationFlow -v
+```
+
+### Continuous Integration
+
+```bash
+# Full test suite (for CI)
+python -m pytest tests/core/ tests/integration/ tests/validation/ --cov=core --cov=app
+```
+
+## 6. Test Development Guidelines
+
+### Integration Test Design Principles
+
+1. **Test Real Workflows**: Use actual calculation functions, not mocks
+2. **Validate Parameter Flow**: Ensure UI parameters correctly reach core functions
+3. **Check Result Structure**: Verify results contain expected keys and values
+4. **Test Error Handling**: Include tests for invalid inputs and edge cases
+5. **Verify Consistency**: Compare analytical vs simulation methods
+
+### Unit Test Best Practices
+
+1. **Isolated Testing**: Each function tested independently
+2. **Realistic Parameters**: Use clinically relevant test values
+3. **Mathematical Verification**: Test known relationships and properties
+4. **Edge Case Coverage**: Test boundary conditions and extremes
+5. **Reproducible Results**: Use fixed seeds for randomized tests
+
+### Validation Test Requirements
+
+1. **Authoritative Sources**: Compare against established tools/literature
+2. **Documented Benchmarks**: Clear source citation for expected values
+3. **Tolerance Specification**: Define acceptable differences for comparisons
+4. **Method Documentation**: Document validation methodology
+
+## 7. Current Test Status
+
+### ✅ Completed
+- **Unit Tests**: Comprehensive coverage of core statistical functions
+- **Integration Tests**: Complete UI→calculation→result flow testing
+- **Validation Tests**: Fisher's exact, cluster RCT ICC, literature benchmarks
+- **Permutation Tests**: Exact permutation test implementations
+
+### 🔄 In Progress
+- **Test Documentation**: Updating strategy documentation
+- **Test Cleanup**: Removing obsolete mock-based tests
+- **Integration Test Expansion**: Fixing remaining 9 failing integration tests
+
+### 📋 Planned
+- **Performance Tests**: Simulation speed and memory usage testing
+- **Property-Based Tests**: Automated testing of mathematical relationships
+- **UI Component Tests**: Direct Streamlit component testing (if needed)
+
+## 8. Quality Metrics
+
+### Test Coverage Targets
+- **Core Functions**: >90% line coverage
+- **Integration Workflows**: 100% of user-facing calculation types
+- **Validation Coverage**: All major statistical methods validated
+
+### Success Criteria
+- **Unit Tests**: All core statistical functions pass mathematical validation
+- **Integration Tests**: >95% pass rate for complete user workflows  
+- **Validation Tests**: Results within acceptable tolerance of benchmarks
+- **Performance**: Simulation tests complete within reasonable time limits
+
+## 9. Maintenance Strategy
+
+### Regular Activities
+1. **Test Review**: Monthly review of test failures and coverage
+2. **Benchmark Updates**: Annual validation against latest software versions
+3. **Documentation Sync**: Keep test docs aligned with code changes
+4. **Performance Monitoring**: Track test execution times and optimize slow tests
+
+### Continuous Improvement
+1. Add new tests for bug fixes and feature additions
+2. Refactor tests to improve readability and maintainability
+3. Update validation benchmarks with new authoritative sources
+4. Optimize test suite performance for faster CI/CD cycles
+
+---
+
+## Conclusion
+
+This testing strategy emphasizes **real integration testing** over mocked component tests, **comprehensive validation** against authoritative benchmarks, and **maintainable unit tests** for core statistical functions. The approach ensures both mathematical correctness and end-to-end user workflow validation while keeping the test suite fast and reliable.

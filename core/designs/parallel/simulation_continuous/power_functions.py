@@ -73,7 +73,7 @@ def power_continuous_sim(n1, n2, mean1, mean2, sd1, sd2=None, alpha=0.05, nsim=1
 
 
 def min_detectable_effect_continuous_sim(n1, n2, std_dev, power=0.8, nsim=1000, alpha=0.05, precision=0.01, 
-                                      repeated_measures=False, correlation=0.5, method="change_score"):
+                                      repeated_measures=False, correlation=0.5, method="change_score", seed=None):
     """
     Calculate minimum detectable effect size using simulation-based approach and optimization.
     
@@ -100,6 +100,8 @@ def min_detectable_effect_continuous_sim(n1, n2, std_dev, power=0.8, nsim=1000, 
         Correlation between baseline and follow-up measurements, by default 0.5
     method : str, optional
         Analysis method for repeated measures: "change_score" or "ancova", by default "change_score"
+    seed : int, optional
+        Random seed for reproducibility, by default None
     
     Returns
     -------
@@ -125,7 +127,8 @@ def min_detectable_effect_continuous_sim(n1, n2, std_dev, power=0.8, nsim=1000, 
                 sd1=std_dev,
                 sd2=std_dev,
                 nsim=nsim,
-                alpha=alpha
+                alpha=alpha,
+                seed=seed
             )
             return sim_result["empirical_power"] - power
         else:

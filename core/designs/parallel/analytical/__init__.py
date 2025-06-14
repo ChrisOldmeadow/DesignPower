@@ -11,10 +11,13 @@ from .continuous_outcomes import (
     power_continuous
 )
 
-# Import binary outcome functions
-from .binary_outcomes import (
+# Import binary outcome functions from main analytical_binary module
+from ..analytical_binary import (
     sample_size_binary,
-    power_binary
+    power_binary,
+    sample_size_binary_non_inferiority,
+    power_binary_non_inferiority,
+    min_detectable_effect_binary
 )
 
 # Import repeated measures functions
@@ -46,6 +49,7 @@ __all__ = [
     # Binary outcomes
     'sample_size_binary',
     'power_binary',
+    'min_detectable_effect_binary',
     
     # Repeated measures
     'sample_size_repeated_measures',

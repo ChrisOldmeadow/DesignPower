@@ -1,8 +1,8 @@
-# Cluster RCT Quick Reference Card
+# Cluster RCT Analysis Guide
 
-*Fast method selection for cluster randomized controlled trials*
+*Comprehensive guide for cluster randomized controlled trials in DesignPower*
 
-## 🚀 Quick Decision Tree
+## Quick Decision Tree
 
 ```
 How many clusters per arm do you have?
@@ -39,9 +39,9 @@ How many clusters per arm do you have?
       ✓ Use for decision-theoretic frameworks
 ```
 
-## 📋 Method Parameters Cheat Sheet
+## Method Parameters
 
-### Cluster-Level Analysis (Very Small: 5-8 clusters/arm)
+### Cluster-Level Analysis (5-8 clusters/arm)
 ```python
 analysis_model="ttest"
 # ✓ No additional parameters needed
@@ -49,16 +49,15 @@ analysis_model="ttest"
 # ✓ Handles any ICC value robustly
 ```
 
-### Exact Permutation Tests (Very Small: 5-10 clusters/arm)
+### Permutation Tests (5-10 clusters/arm)
 ```python
 analysis_model="permutation"
 # ✓ Exact inference without distributional assumptions
 # ✓ Automatic exact vs Monte Carlo selection
 # ✓ Confidence intervals via permutation
-# ✓ Handles any outcome distribution
 ```
 
-### Bias-Corrected GEE (Small: 9-15 clusters/arm)
+### Bias-Corrected GEE (9-15 clusters/arm)
 ```python
 analysis_model="gee"
 use_bias_correction=True  # Essential for small clusters
@@ -66,42 +65,111 @@ use_bias_correction=True  # Essential for small clusters
 # ✓ Robust to correlation mis-specification
 ```
 
-### Mixed Models with Corrections (Medium: 16-30 clusters/arm)
+### Mixed Models (16+ clusters/arm)
 ```python
 analysis_model="mixedlm"
 use_satterthwaite=True    # Better degrees of freedom
 lmm_reml=True            # Unbiased variance estimates
-# ✓ Optimal efficiency with small-sample awareness
-```
-
-### Standard Mixed Models (Large: 30+ clusters/arm)
-```python
-analysis_model="mixedlm"
-lmm_reml=True            # REML for variance estimation
-# ✓ Standard approach, all corrections optional
 ```
 
 ### Bayesian Analysis (Complex scenarios)
 ```python
 analysis_model="bayes"
-bayes_backend="stan"         # Most robust - use for challenging scenarios
-bayes_backend="pymc"         # Modern interface - good diagnostics  
-bayes_backend="variational"  # Fast approximation - large studies
-bayes_prior_icc="normal"     # Weakly informative (default)
-# ✓ Use when: convergence issues, informative priors, complex structures
+bayes_backend="stan"         # Most robust
+bayes_backend="pymc"         # Modern interface  
+bayes_backend="variational"  # Fast approximation
 ```
 
-## ⚠️ Warning Interpretation Guide
+## Practical Examples
+
+### Example 1: Very Small Cluster Trial
+**Scenario**: 7 primary care clinics per arm, binary outcome
+
+```python
+from core.designs.cluster_rct.simulation_binary import simulate_cluster_binary
+
+params = {
+    'n_clusters': 7,           # Very small number
+    'cluster_size': 200,       # Large clinic size
+    'p1': 0.40,               # Baseline adherence rate
+    'p2': 0.55,               # Target improved rate
+    'icc': 0.03,              # Moderate clustering
+    'analysis_model': 'ttest', # Gold standard for small clusters
+    'alpha': 0.05,
+    'n_simulations': 1000
+}
+
+result = simulate_cluster_binary(params)
+```
+
+**Why this approach?**
+- Cluster-level analysis is the gold standard for very small clusters
+- Robust method not affected by distribution assumptions
+- Simple interpretation with clear degrees of freedom (14 - 2 = 12)
+
+### Example 2: Small Cluster Trial  
+**Scenario**: 12 schools per arm, continuous outcome
+
+```python
+from core.designs.cluster_rct.simulation_continuous import simulate_cluster_continuous
+
+params = {
+    'n_clusters': 12,              # Small but sufficient for GEE
+    'cluster_size': 50,            # Average class size
+    'mean1': 0.0,                  # Control group (no change)
+    'mean2': -0.5,                 # Intervention group (reduction)
+    'sd1': 2.0,                    # Standard deviation
+    'icc': 0.05,                   # Typical for schools
+    'analysis_model': 'gee',       # Optimal for this size
+    'use_bias_correction': True,   # Essential for small clusters
+    'alpha': 0.05,
+    'n_simulations': 1000
+}
+
+result = simulate_cluster_continuous(params)
+```
+
+**Why this approach?**
+- GEE with bias correction optimal for 9-15 clusters
+- Validated for small clusters by Li et al. (2018)
+- More efficient than cluster-level analysis
+
+### Example 3: Medium Cluster Trial
+**Scenario**: 20 workplaces per arm, binary outcome
+
+```python
+params = {
+    'n_clusters': 20,              # Medium cluster size
+    'cluster_size': 75,            # Average workplace size
+    'p1': 0.15,                    # Baseline cessation rate
+    'p2': 0.23,                    # Target improved rate
+    'icc': 0.02,                   # Low clustering for behavior
+    'analysis_model': 'mixedlm',   # Standard approach
+    'use_satterthwaite': True,     # Small-sample correction
+    'lmm_reml': True,             # REML estimation
+    'alpha': 0.05,
+    'n_simulations': 1000
+}
+
+result = simulate_cluster_binary(params)
+```
+
+**Why this approach?**
+- Mixed models with corrections optimal for medium clusters
+- Satterthwaite approximation provides better degrees of freedom
+- Standard practice widely accepted in literature
+
+## Warning Interpretation
 
 | Warning Message | Meaning | Action |
 |----------------|---------|--------|
-| **"< 40 clusters total"** | General caution | Use recommended corrections (already built-in) |
+| **"< 40 clusters total"** | General caution | Use recommended corrections (built-in) |
 | **"< 30 clusters total"** | Consider exact methods | Methods automatically adjusted |
 | **"< 20 clusters total"** | High Type I error risk | Consider increasing sample size |
 | **"Boundary condition detected"** | ICC ≈ 0 | Automatic fallback to cluster-robust OLS |
 | **"Convergence issues"** | Optimization failed | Automatic fallback hierarchy activated |
 
-## 🎯 Special Scenarios
+## Special Scenarios
 
 ### Binary Outcomes
 ```python
@@ -133,18 +201,7 @@ analysis_model="bayes"
 bayes_backend="stan"
 ```
 
-## 🔧 Troubleshooting Quick Fixes
-
-| Problem | Quick Fix |
-|---------|-----------|
-| **"Model didn't converge"** | Trust automatic fallback OR use `analysis_model="bayes"` |
-| **"ICC estimate is 0"** | Normal - DesignPower handles automatically |
-| **"Very large standard errors"** | Check for data issues OR use `analysis_model="ttest"` |
-| **"Unrealistic results"** | Try `analysis_model="bayes"` with `bayes_backend="stan"` |
-| **"Rare outcome convergence"** | Use `analysis_model="bayes"` with `bayes_backend="stan"` |
-| **"Complex correlation structure"** | Use `analysis_model="bayes"` with hierarchical modeling |
-
-## 📊 Method Comparison Summary
+## Method Comparison Summary
 
 | Method | Clusters/Arm | Pros | Cons | When to Use |
 |--------|--------------|------|------|-------------|
@@ -155,9 +212,18 @@ bayes_backend="stan"
 | **Standard mixed models** | 30+ | Maximum efficiency | Large-sample theory | Large clusters |
 | **Bayesian (Stan)** | 5-8 | Handles convergence issues | Slower computation | Challenging small clusters |
 | **Bayesian (PyMC)** | 9-30 | Full uncertainty quantification | Complex interpretation | Non-standard scenarios |
-| **Bayesian (Variational)** | 30+ | Fast approximation | Less accurate | Decision theory contexts |
 
-## ✅ Quality Checklist
+## Troubleshooting
+
+| Problem | Quick Fix |
+|---------|-----------|
+| **"Model didn't converge"** | Trust automatic fallback OR use `analysis_model="bayes"` |
+| **"ICC estimate is 0"** | Normal - DesignPower handles automatically |
+| **"Very large standard errors"** | Check for data issues OR use `analysis_model="ttest"` |
+| **"Unrealistic results"** | Try `analysis_model="bayes"` with `bayes_backend="stan"` |
+| **"Rare outcome convergence"** | Use `analysis_model="bayes"` with `bayes_backend="stan"` |
+
+## Quality Checklist
 
 - [ ] **Check cluster count**: Use appropriate method for cluster size
 - [ ] **Review warnings**: Address any methodological concerns  
@@ -165,12 +231,12 @@ bayes_backend="stan"
 - [ ] **Check convergence**: Verify successful model fitting
 - [ ] **Consider alternatives**: Try multiple approaches for robustness
 
-## 🔗 Full Documentation
+## Key Principles
 
-- **Complete guide**: [Method Selection Guide](CLUSTER_RCT_METHOD_SELECTION_GUIDE.md)
-- **Technical details**: [Small Clusters Analysis](CLUSTER_RCT_SMALL_CLUSTERS_ANALYSIS.md)
-- **Implementation plan**: [Action Plan](CLUSTER_RCT_ACTION_PLAN.md)
-- **Validation status**: [Roadmap Tracking](../VALIDATION_ROADMAP_TRACKING.md)
+1. **Conservative is better**: Especially with small clusters
+2. **Use built-in corrections**: DesignPower handles small-sample issues
+3. **Trust the validation**: Built-in warnings guide appropriate use
+4. **Document approach**: Justify method selection in analysis plan
 
 ---
 

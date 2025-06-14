@@ -26,8 +26,14 @@ class MetricConfig:
     
     def format_value(self, value: Any) -> str:
         """Format the value for display."""
+        import math
+        
         if value is None or value == 'N/A':
             return 'N/A'
+        
+        # Handle infinity values specially
+        if isinstance(value, (int, float)) and math.isinf(value):
+            return '∞ (Not achievable)'
         
         if self.format_func:
             return self.format_func(value)
@@ -102,6 +108,14 @@ class UnifiedResultsDisplay:
         if isinstance(results, dict) and "error" in results:
             st.error(results["error"])
             return
+        
+        # Check for high-priority warnings (like infinity results)
+        if isinstance(results, dict):
+            if results.get('warning_level') == 'high' and 'user_message' in results:
+                st.error(f"⚠️ **Calculation Issue**: {results['user_message']}")
+            
+            if 'warning' in results:
+                st.warning(f"⚠️ **Warning**: {results['warning']}")
         
         # Ensure hypothesis_type and calculation_type are available in params for report generation
         params = params.copy()  # Don't modify the original
