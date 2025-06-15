@@ -25,6 +25,7 @@ import hashlib
 
 # Import component modules
 from core.utils.report_generator import generate_report
+from app.components.survival_converter import survival_converter_page
 from app.components.parallel_rct import (
     render_parallel_continuous, render_parallel_binary, render_parallel_survival,
     calculate_parallel_continuous, calculate_parallel_binary, calculate_parallel_survival,
@@ -155,10 +156,26 @@ register_all_configs(unified_display)
 
 # Add app title
 st.title("DesignPower: Power and Sample Size Calculator")
-st.write("""
-    This app calculates power and sample size for various study designs.
-    Select a design type and outcome type from the sidebar.
-""")
+
+if page == "📊 Study Design Calculator":
+    st.write("""
+        This app calculates power and sample size for various study designs.
+        Select a design type and outcome type from the sidebar.
+    """)
+    
+    # Add info about survival converter
+    with st.expander("🔄 New: Survival Parameter Converter", expanded=False):
+        st.write("""
+        **Convert between survival analysis parameters:**
+        - Median survival ↔ Hazard rate ↔ Survival fraction ↔ Event rate
+        - Hazard ratio scenarios for clinical trial planning
+        - Time unit conversions (days/weeks/months/years)
+        
+        Select "🔄 Survival Parameter Converter" in the sidebar to access this tool.
+        """)
+else:
+    # This content will be replaced by survival_converter_page()
+    pass
 
 # Initialize session state variables if not already set
 if "design_type" not in st.session_state:
@@ -189,7 +206,22 @@ with st.sidebar.expander("ℹ️ About DesignPower", expanded=False):
     for feature in features:
         st.write(f"• {feature}")
 
-# Sidebar for design selection
+# Sidebar navigation
+st.sidebar.header("Navigation")
+
+# Add page selection
+page = st.sidebar.radio(
+    "Select Page",
+    ["📊 Study Design Calculator", "🔄 Survival Parameter Converter"],
+    index=0
+)
+
+# Handle page routing
+if page == "🔄 Survival Parameter Converter":
+    survival_converter_page()
+    st.stop()  # Stop execution here for survival converter page
+
+# Continue with study design if not survival converter
 st.sidebar.header("Study Design")
 
 # Design type selection
