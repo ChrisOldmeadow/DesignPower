@@ -66,11 +66,12 @@ def _single_parameter_converter():
         param_type = st.selectbox(
             "Parameter Type",
             ["Median Survival", "Hazard Rate", "Survival Fraction", "Event Rate"],
-            help="Choose which parameter you know"
+            help="Choose which parameter you know",
+            key="single_param_type"
         )
         
         # Time settings
-        time_unit = st.selectbox("Time Unit", ["months", "years", "weeks", "days"])
+        time_unit = st.selectbox("Time Unit", ["months", "years", "weeks", "days"], key="single_time_unit")
         
         if param_type in ["Survival Fraction", "Event Rate"]:
             time_point = st.number_input(
@@ -78,7 +79,8 @@ def _single_parameter_converter():
                 min_value=0.1,
                 value=12.0 if time_unit == "months" else 1.0,
                 step=0.1,
-                help="Time at which survival fraction/event rate is measured"
+                help="Time at which survival fraction/event rate is measured",
+                key="single_time_point"
             )
         else:
             time_point = 12.0 if time_unit == "months" else 1.0
@@ -89,7 +91,8 @@ def _single_parameter_converter():
                 f"Median Survival ({time_unit})",
                 min_value=0.1,
                 value=12.0 if time_unit == "months" else 1.0,
-                step=0.1
+                step=0.1,
+                key="single_median_value"
             )
             kwargs = {"median_survival": value}
             
@@ -99,7 +102,8 @@ def _single_parameter_converter():
                 min_value=0.001,
                 value=0.058 if time_unit == "months" else 0.693,
                 step=0.001,
-                format="%.4f"
+                format="%.4f",
+                key="single_hazard_value"
             )
             kwargs = {"hazard_rate": value}
             
@@ -110,7 +114,8 @@ def _single_parameter_converter():
                 max_value=0.99,
                 value=0.70,
                 step=0.01,
-                format="%.2f"
+                format="%.2f",
+                key="single_survival_fraction"
             )
             kwargs = {"survival_fraction": value}
             
@@ -121,7 +126,8 @@ def _single_parameter_converter():
                 max_value=0.99,
                 value=0.30,
                 step=0.01,
-                format="%.2f"
+                format="%.2f",
+                key="single_event_rate"
             )
             kwargs = {"event_rate": value}
         
@@ -171,28 +177,31 @@ def _hazard_ratio_converter():
             max_value=5.0,
             value=0.67,
             step=0.01,
-            help="HR < 1 favors treatment, HR > 1 favors control"
+            help="HR < 1 favors treatment, HR > 1 favors control",
+            key="hr_hazard_ratio"
         )
         
-        time_unit = st.selectbox("Time Unit", ["months", "years", "weeks", "days"], key="hr_unit")
+        time_unit = st.selectbox("Time Unit", ["months", "years", "weeks", "days"], key="hr_time_unit")
         
         time_point = st.number_input(
             f"Time Point for Fractions ({time_unit})",
             min_value=0.1,
             value=12.0 if time_unit == "months" else 1.0,
-            step=0.1
+            step=0.1,
+            key="hr_time_point"
         )
         
         # Group parameter input
-        input_group = st.selectbox("Provide parameter for:", ["Control Group", "Treatment Group"])
-        param_type = st.selectbox("Parameter Type", ["Median Survival", "Hazard Rate"])
+        input_group = st.selectbox("Provide parameter for:", ["Control Group", "Treatment Group"], key="hr_input_group")
+        param_type = st.selectbox("Parameter Type", ["Median Survival", "Hazard Rate"], key="hr_param_type")
         
         if param_type == "Median Survival":
             value = st.number_input(
                 f"{input_group} Median Survival ({time_unit})",
                 min_value=0.1,
                 value=12.0 if time_unit == "months" else 1.0,
-                step=0.1
+                step=0.1,
+                key="hr_median_value"
             )
             if input_group == "Control Group":
                 kwargs = {"control_median": value}
@@ -204,7 +213,8 @@ def _hazard_ratio_converter():
                 min_value=0.001,
                 value=0.058 if time_unit == "months" else 0.693,
                 step=0.001,
-                format="%.4f"
+                format="%.4f",
+                key="hr_hazard_value"
             )
             if input_group == "Control Group":
                 kwargs = {"control_hazard": value}
@@ -262,14 +272,15 @@ def _unit_converter():
     with col1:
         st.subheader("Input")
         
-        value = st.number_input("Value", value=1.0, step=0.1)
+        value = st.number_input("Value", value=1.0, step=0.1, key="unit_value")
         param_type = st.selectbox(
             "Parameter Type",
             ["median", "hazard"],
-            format_func=lambda x: "Median Survival" if x == "median" else "Hazard Rate"
+            format_func=lambda x: "Median Survival" if x == "median" else "Hazard Rate",
+            key="unit_param_type"
         )
-        from_unit = st.selectbox("From Unit", ["days", "weeks", "months", "years"])
-        to_unit = st.selectbox("To Unit", ["days", "weeks", "months", "years"])
+        from_unit = st.selectbox("From Unit", ["days", "weeks", "months", "years"], key="unit_from_unit")
+        to_unit = st.selectbox("To Unit", ["days", "weeks", "months", "years"], key="unit_to_unit")
     
     with col2:
         st.subheader("Conversion Result")
