@@ -8,13 +8,20 @@ fractions, and event rates.
 
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
 import numpy as np
 from core.utils.survival_converters import (
     convert_survival_parameters,
     convert_hazard_ratio_scenario,
     convert_time_units
 )
+
+# Lazy import for plotly to avoid import errors
+try:
+    import plotly.graph_objects as go
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
+    go = None
 
 
 def survival_converter_page():
@@ -366,6 +373,10 @@ def _examples_and_help():
 def _plot_survival_curve(params: dict, time_unit: str):
     """Plot survival curve from parameters."""
     
+    if not PLOTLY_AVAILABLE:
+        st.warning("Plotly not available. Install plotly for visualization: `pip install plotly`")
+        return
+    
     # Generate time points
     max_time = params['median_survival'] * 3
     time_points = np.linspace(0, max_time, 100)
@@ -416,6 +427,10 @@ def _plot_survival_curve(params: dict, time_unit: str):
 
 def _plot_survival_comparison(result: dict, time_unit: str):
     """Plot survival curves for both groups in hazard ratio scenario."""
+    
+    if not PLOTLY_AVAILABLE:
+        st.warning("Plotly not available. Install plotly for visualization: `pip install plotly`")
+        return
     
     control = result['control']
     treatment = result['treatment']
