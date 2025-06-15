@@ -33,9 +33,46 @@ def survival_converter_page():
     Provide any parameter to get all equivalent values.
     """)
     
+    # Add assumptions section
+    with st.expander("📋 Statistical Assumptions", expanded=False):
+        st.markdown("""
+        **Exponential Distribution Assumptions:**
+        
+        All conversions assume an **exponential survival distribution** with the following properties:
+        
+        - **Constant hazard rate (λ)**: The instantaneous risk of event occurrence remains constant over time
+        - **Memoryless property**: The probability of survival for additional time is independent of time already survived  
+        - **Survival function**: S(t) = exp(-λt)
+        - **Hazard function**: h(t) = λ (constant)
+        - **Probability density**: f(t) = λ × exp(-λt)
+        
+        **Key Relationships:**
+        - Median survival = ln(2) / λ ≈ 0.693 / λ
+        - Mean survival = 1 / λ
+        - Survival at time t: S(t) = exp(-λt)
+        - Event rate by time t: 1 - S(t) = 1 - exp(-λt)
+        
+        **When to use:**
+        ✅ Early-phase trials with limited follow-up data  
+        ✅ Scenarios where hazard rate can be assumed constant  
+        ✅ Initial sample size planning with simple assumptions  
+        
+        **Limitations:**
+        ⚠️ Does not account for changing hazard rates over time  
+        ⚠️ May not fit complex survival patterns (e.g., cure fractions)  
+        ⚠️ Less appropriate for long-term studies with varying risks  
+        
+        **Parameter Definitions:**
+        - **Median Survival**: Time at which 50% of subjects have experienced the event
+        - **Hazard Rate**: Instantaneous risk of event occurrence (λ in exponential distribution)
+        - **Survival Fraction**: Proportion surviving to a specific time point
+        - **Event Rate**: Proportion experiencing event by a specific time point
+        - **Hazard Ratio**: Ratio of hazard rates between treatment and control groups
+        """)
+    
     # Create tabs for different conversion types
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "Single Parameter", "Hazard Ratio Scenario", "Unit Conversion", "Examples"
+    tab1, tab2, tab3 = st.tabs([
+        "Single Parameter", "Hazard Ratio Scenario", "Unit Conversion"
     ])
     
     with tab1:
@@ -46,9 +83,6 @@ def survival_converter_page():
     
     with tab3:
         _unit_converter()
-    
-    with tab4:
-        _examples_and_help()
 
 
 def _single_parameter_converter():
@@ -56,6 +90,7 @@ def _single_parameter_converter():
     
     st.header("Convert Single Parameter")
     st.markdown("Provide any one survival parameter to get all equivalent parameters.")
+    st.info("⚠️ **Assumption**: Exponential survival distribution with constant hazard rate")
     
     col1, col2 = st.columns([1, 1])
     
@@ -165,6 +200,7 @@ def _hazard_ratio_converter():
     
     st.header("Hazard Ratio Scenario")
     st.markdown("Convert hazard ratio scenario to complete parameter sets for both groups.")
+    st.info("⚠️ **Assumption**: Exponential survival distribution with constant hazard rate")
     
     col1, col2 = st.columns([1, 1])
     
@@ -266,6 +302,7 @@ def _unit_converter():
     
     st.header("Time Unit Conversion")
     st.markdown("Convert survival parameters between different time units.")
+    st.info("⚠️ **Assumption**: Exponential survival distribution with constant hazard rate")
     
     col1, col2 = st.columns([1, 1])
     
@@ -311,74 +348,6 @@ def _unit_converter():
         else:
             st.info("Select different units for conversion")
 
-
-def _examples_and_help():
-    """Examples and help interface."""
-    
-    st.header("Examples & Use Cases")
-    
-    examples = [
-        {
-            "title": "🏥 Cancer Trial Planning",
-            "scenario": "You have control median = 12 months, target HR = 0.7",
-            "need": "Treatment median, event rates, hazard rates",
-            "example": {
-                "hazard_ratio": 0.7,
-                "control_median": 12,
-                "time_point": 24
-            }
-        },
-        {
-            "title": "📚 Literature Meta-Analysis", 
-            "scenario": "Study reports '60% 5-year survival'",
-            "need": "Median survival, hazard rate for power calculation",
-            "example": {
-                "survival_fraction": 0.6,
-                "time_point": 60
-            }
-        },
-        {
-            "title": "📋 Protocol Development",
-            "scenario": "Historical event rate of 40% at 2 years",
-            "need": "Median survival for sample size calculation",
-            "example": {
-                "event_rate": 0.4,
-                "time_point": 24
-            }
-        }
-    ]
-    
-    for i, ex in enumerate(examples):
-        with st.expander(ex["title"]):
-            st.markdown(f"**Scenario:** {ex['scenario']}")
-            st.markdown(f"**Need:** {ex['need']}")
-            
-            if st.button(f"Run Example {i+1}", key=f"example_{i}"):
-                try:
-                    if "hazard_ratio" in ex["example"]:
-                        result = convert_hazard_ratio_scenario(**ex["example"])
-                        st.success("Hazard Ratio Scenario Results:")
-                        st.json(result)
-                    else:
-                        result = convert_survival_parameters(**ex["example"])
-                        st.success("Parameter Conversion Results:")
-                        st.json(result)
-                except Exception as e:
-                    st.error(f"Error: {e}")
-    
-    # Help section
-    st.header("📖 Parameter Definitions")
-    
-    definitions = {
-        "Median Survival": "Time at which 50% of subjects have experienced the event",
-        "Hazard Rate": "Instantaneous risk of event occurrence (λ in exponential distribution)",
-        "Survival Fraction": "Proportion surviving to a specific time point",
-        "Event Rate": "Proportion experiencing event by a specific time point",
-        "Hazard Ratio": "Ratio of hazard rates between treatment and control groups"
-    }
-    
-    for term, definition in definitions.items():
-        st.markdown(f"**{term}:** {definition}")
 
 
 def _plot_survival_curve(params: dict, time_unit: str):
