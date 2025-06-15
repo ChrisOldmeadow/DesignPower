@@ -5,7 +5,7 @@ This replaces the oversized cli.py with a more modular structure.
 """
 import typer
 from cli.shared import console
-from cli.commands import parallel, cluster, single_arm, survival, utilities
+from cli.commands import parallel, cluster, single_arm, survival, utilities, survival_converter
 
 app = typer.Typer(help="DesignPower: Sample Size and Power Calculation Tool")
 
@@ -15,6 +15,7 @@ app.add_typer(cluster.app, name="cluster", help="Cluster randomized trial calcul
 app.add_typer(single_arm.app, name="single-arm", help="Single-arm trial calculations")
 app.add_typer(survival.app, name="survival", help="Survival analysis calculations")
 app.add_typer(utilities.app, name="utils", help="Utility commands")
+app.add_typer(survival_converter.app, name="survival-converter", help="Survival parameter conversion utilities")
 
 @app.callback()
 def main():
