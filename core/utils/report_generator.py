@@ -237,9 +237,9 @@ def generate_sample_size_report(results, params, design_type, outcome_type):
             if hypothesis_type == 'Superiority':
                 # Create the variance assumption text based on whether unequal variance was used
                 if unequal_var:
-                    variance_text = f"assuming unequal variances with standard deviations of {std_dev:.2f} in group 1 and {std_dev2:.2f} in group 2"
+                    variance_text = f"unequal variances with standard deviations of {std_dev:.2f} in group 1 and {std_dev2:.2f} in group 2"
                 else:
-                    variance_text = f"assuming equal variances with a standard deviation of {std_dev:.2f}"
+                    variance_text = f"equal variances with a standard deviation of {std_dev:.2f}"
                 
                 # Check if repeated measures design is being used
                 repeated_measures = params.get("repeated_measures", False)
@@ -248,35 +248,111 @@ def generate_sample_size_report(results, params, design_type, outcome_type):
                 if method == "simulation":
                     nsim = params.get("nsim", 1000)
                     seed = params.get("seed", 42)
-                    if repeated_measures:
-                        method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}) with a paired t-test"
-                    else:
-                        method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}) with a two-sided two-sample t-test"
+                    method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed})"
                 else:
-                    if repeated_measures:
-                        method_text = "using a paired t-test"
-                    else:
-                        method_text = "using a two-sided two-sample t-test"
+                    method_text = "using analytical methods"
                 
-                # Create special text for repeated measures if applicable
-                if repeated_measures:
-                    correlation = params.get("correlation", 0)
-                    repeated_text = f"This is a repeated measures design with a correlation of {correlation:.2f} between measurements."
-                else:
-                    repeated_text = ""
-                
-                report_text = textwrap.dedent(f"""
-                Sample Size Calculation Report:
-                
-                A sample size of {n1} participants in group 1 and {n2} participants in group 2 
-                (total N = {n1 + n2}) will provide {power * 100:.0f}% power to detect a difference 
-                in means of {abs(mean2 - mean1):.2f} (effect size d = {effect_size:.2f}) between 
-                groups, {variance_text}, {method_text} with a Type I error rate of {alpha * 100:.0f}%.
-                {repeated_text if repeated_text else ''}
-                
-                Reference: {reference['citation']}
-                DOI: {reference['doi']}
-                """)
+                # Create HTML report similar to cluster RCT style
+                report_html = f"""
+<div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">
+
+<h2 style="color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;">
+📊 Parallel RCT - Sample Size Calculation Report
+</h2>
+
+<h3 style="color: #495057;">📏 Required Sample Size</h3>
+<div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2E86AB;">
+    <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+        <td style="padding: 8px;"><strong>Sample Size Group 1:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{n1}</strong></td>
+        <td style="padding: 8px;"><strong>Sample Size Group 2:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{n2}</strong></td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Total Sample Size:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{n1 + n2}</strong></td>
+        <td style="padding: 8px;"><strong>Allocation Ratio:</strong></td>
+        <td style="padding: 8px;">{n1}:{n2}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Target Power:</strong></td>
+        <td style="padding: 8px;">{power * 100:.0f}%</td>
+        <td style="padding: 8px;"><strong>Significance Level (α):</strong></td>
+        <td style="padding: 8px;">{alpha:.3f}</td>
+    </tr>
+    </table>
+</div>
+
+<h3 style="color: #495057;">📈 Effect Size & Study Parameters</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Target Difference:</strong> {abs(mean2 - mean1):.2f} units (Mean₁ = {mean1:.2f}, Mean₂ = {mean2:.2f})</p>
+    <p><strong>Standardized Effect Size:</strong> Cohen's d = {effect_size:.3f}</p>
+    <p><strong>Standard Deviation:</strong> {std_dev:.2f}{' (unequal variances: SD₁=' + str(std_dev) + ', SD₂=' + str(std_dev2) + ')' if unequal_var else ''}</p>
+    <p><strong>Analysis Method:</strong> {method_text}</p>
+    {'<p><strong>Repeated Measures:</strong> Yes (correlation = ' + str(correlation) + ')</p>' if repeated_measures else ''}
+</div>
+
+<div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
+    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">📝 Methodological Description</h4>
+    <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #cce7ff;">
+        <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
+        A sample size of {n1} participants in group 1 and {n2} participants in group 2 
+        (total N = {n1 + n2}) will provide {power * 100:.0f}% power to detect a difference 
+        in means of {abs(mean2 - mean1):.2f} (effect size d = {effect_size:.2f}) between 
+        groups, assuming {variance_text}, {method_text} with a Type I error rate of {alpha * 100:.0f}%.
+        {'This is a repeated measures design with a correlation of ' + str(correlation) + ' between measurements.' if repeated_measures else ''}
+        </p>
+    </div>
+    <p style="font-size: 0.9em; color: #666; margin-top: 10px; margin-bottom: 0;">
+    <strong>Tip:</strong> Copy the text above directly into your grant application or study protocol.
+    </p>
+</div>
+
+<div style="background-color: #fffacd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd700; margin: 15px 0;">
+    <h4 style="color: #856404; margin-top: 0;">💡 Sample Size Interpretation</h4>
+    <p style="color: #856404; margin-bottom: 10px;">
+    The calculated sample size ensures:
+    </p>
+    <ul style="color: #856404; margin-bottom: 0;">
+    <li>{power * 100:.0f}% probability of detecting the effect if it truly exists</li>
+    <li>Type II error rate (β) = {(1-power)*100:.0f}%</li>
+    <li>Effect size of {effect_size:.3f} is {'small' if effect_size < 0.5 else 'medium' if effect_size < 0.8 else 'large'} (Cohen's guidelines)</li>
+    <li>Consider adding 10-20% for potential dropout/attrition</li>
+    </ul>
+</div>
+
+<h3 style="color: #495057;">📚 Methodological References</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Primary Reference:</strong></p>
+    <p style="font-style: italic; margin: 10px 0;">{reference['citation']}</p>
+    <p><strong>DOI:</strong> <a href="{reference['doi']}" target="_blank" style="color: #2E86AB;">{reference['doi']}</a></p>
+    
+    <p style="margin-top: 15px;"><strong>Additional Key References:</strong></p>
+    <ul style="margin-top: 10px;">
+    <li>Chow SC, Shao J, Wang H, Lokhnygina Y. (2017). Sample Size Calculations in Clinical Research. 3rd Edition. CRC Press.</li>
+    <li>Julious SA. (2010). Sample Sizes for Clinical Trials. CRC Press.</li>
+    <li>Machin D, Campbell MJ, Tan SB, Tan SH. (2018). Sample Sizes for Clinical, Laboratory and Epidemiology Studies. 4th Edition. Wiley-Blackwell.</li>
+    </ul>
+</div>
+
+<div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 15px 0;">
+    <h4 style="color: #0c5460; margin-top: 0;">⚠️ Important Considerations</h4>
+    <ul style="color: #0c5460; margin-bottom: 0;">
+    <li><strong>Assumptions:</strong> Results assume normal distributions and {variance_text}</li>
+    <li><strong>Effect Size:</strong> Ensure {abs(mean2 - mean1):.2f} units is clinically meaningful</li>
+    <li><strong>Attrition:</strong> Consider inflating sample size by 10-20% for expected dropout</li>
+    <li><strong>Interim Analysis:</strong> If planned, adjust sample size for multiple testing</li>
+    </ul>
+</div>
+
+<hr style="margin: 20px 0; border: none; border-top: 1px solid #dee2e6;">
+<p style="font-size: 0.9em; color: #6c757d; text-align: center; margin: 10px 0;">
+Report generated by DesignPower • Parallel RCT Module • Continuous Outcome
+</p>
+</div>
+                """
+                return report_html.strip()
             else:  # Non-inferiority
                 nim = params.get('nim', 0)
                 direction = params.get('direction', 'Higher is better')
@@ -310,21 +386,130 @@ def generate_sample_size_report(results, params, design_type, outcome_type):
                 if method == "simulation":
                     nsim = params.get("nsim", 1000)
                     seed = params.get("seed", 42)
-                    method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}) with a {test_type}{' with continuity correction' if correction else ''}"
+                    method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}) with {test_type}"
                 else:
-                    method_text = f"using a {test_type}{' with continuity correction' if correction else ''}"
+                    method_text = f"using {test_type}"
                 
-                report_text = textwrap.dedent(f"""
-                Sample Size Calculation Report:
+                if correction:
+                    method_text += " with continuity correction"
                 
-                A sample size of {n1} participants in group 1 and {n2} participants in group 2 
-                (total N = {n1 + n2}) will provide {power * 100:.0f}% power to detect a difference 
-                in proportions from {p1:.2f} in group 1 to {p2:.2f} in group 2 (odds ratio = {odds_ratio:.2f}), 
-                {method_text}, with a Type I error rate of {alpha * 100:.0f}%.
+                # Calculate additional metrics
+                risk_diff = abs(p2 - p1)
+                if p1 > 0 and p1 < 1 and p2 < 1:
+                    if p2 > 0:
+                        calc_odds_ratio = (p2 / (1 - p2)) / (p1 / (1 - p1))
+                    else:
+                        calc_odds_ratio = 0
+                else:
+                    calc_odds_ratio = odds_ratio
+                    
+                if p1 > 0:
+                    relative_risk = p2 / p1
+                else:
+                    relative_risk = None
                 
-                Reference: {reference['citation']}
-                DOI: {reference['doi']}
-                """)
+                # Create HTML report
+                report_html = f"""
+<div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">
+
+<h2 style="color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;">
+📊 Parallel RCT - Sample Size Calculation Report
+</h2>
+
+<h3 style="color: #495057;">📏 Required Sample Size</h3>
+<div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2E86AB;">
+    <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+        <td style="padding: 8px;"><strong>Sample Size Group 1:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{n1}</strong></td>
+        <td style="padding: 8px;"><strong>Sample Size Group 2:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{n2}</strong></td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Total Sample Size:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{n1 + n2}</strong></td>
+        <td style="padding: 8px;"><strong>Allocation Ratio:</strong></td>
+        <td style="padding: 8px;">{n1}:{n2}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Target Power:</strong></td>
+        <td style="padding: 8px;">{power * 100:.0f}%</td>
+        <td style="padding: 8px;"><strong>Significance Level (α):</strong></td>
+        <td style="padding: 8px;">{alpha:.3f}</td>
+    </tr>
+    </table>
+</div>
+
+<h3 style="color: #495057;">📈 Effect Size & Study Parameters</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Control Group Proportion:</strong> {p1:.3f} ({p1*100:.1f}%)</p>
+    <p><strong>Treatment Group Proportion:</strong> {p2:.3f} ({p2*100:.1f}%)</p>
+    <p><strong>Risk Difference:</strong> {risk_diff:.3f} ({risk_diff*100:.1f} percentage points)</p>
+    <p><strong>Risk Ratio:</strong> {f'{relative_risk:.3f}' if relative_risk is not None else 'N/A'}</p>
+    <p><strong>Odds Ratio:</strong> {calc_odds_ratio:.3f}</p>
+    <p><strong>Analysis Method:</strong> {method_text}</p>
+</div>
+
+<div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
+    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">📝 Methodological Description</h4>
+    <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #cce7ff;">
+        <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
+        A sample size of {n1} participants in group 1 and {n2} participants in group 2 
+        (total N = {n1 + n2}) will provide {power * 100:.0f}% power to detect a difference 
+        in proportions from {p1:.2f} ({p1*100:.1f}%) to {p2:.2f} ({p2*100:.1f}%), 
+        corresponding to a risk difference of {risk_diff:.3f} and odds ratio of {calc_odds_ratio:.2f}, 
+        {method_text}, with a Type I error rate of {alpha * 100:.0f}%.
+        </p>
+    </div>
+    <p style="font-size: 0.9em; color: #666; margin-top: 10px; margin-bottom: 0;">
+    <strong>Tip:</strong> Copy the text above directly into your grant application or study protocol.
+    </p>
+</div>
+
+<div style="background-color: #fffacd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd700; margin: 15px 0;">
+    <h4 style="color: #856404; margin-top: 0;">💡 Sample Size Interpretation</h4>
+    <p style="color: #856404; margin-bottom: 10px;">
+    The calculated sample size ensures:
+    </p>
+    <ul style="color: #856404; margin-bottom: 0;">
+    <li>{power * 100:.0f}% probability of detecting the effect if it truly exists</li>
+    <li>Type II error rate (β) = {(1-power)*100:.0f}%</li>
+    <li>Number Needed to Treat (NNT) = {int(1/risk_diff) if risk_diff > 0 else 'N/A'}</li>
+    <li>Consider 10-20% inflation for potential dropout</li>
+    </ul>
+</div>
+
+<h3 style="color: #495057;">📚 Methodological References</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Primary Reference:</strong></p>
+    <p style="font-style: italic; margin: 10px 0;">{reference['citation']}</p>
+    <p><strong>DOI:</strong> <a href="{reference['doi']}" target="_blank" style="color: #2E86AB;">{reference['doi']}</a></p>
+    
+    <p style="margin-top: 15px;"><strong>Additional Key References:</strong></p>
+    <ul style="margin-top: 10px;">
+    <li>Fleiss JL, Tytun A, Ury HK. (1980). A simple approximation for calculating sample sizes for comparing independent proportions. Biometrics, 36(2), 343-346.</li>
+    <li>Casagrande JT, Pike MC, Smith PG. (1978). An improved approximate formula for calculating sample sizes for comparing two binomial distributions. Biometrics, 34(3), 483-486.</li>
+    <li>Farrington CP, Manning G. (1990). Test statistics and sample size formulae for comparative binomial trials with null hypothesis of non-zero risk difference or non-unity relative risk. Statistics in Medicine, 9(12), 1447-1454.</li>
+    </ul>
+</div>
+
+<div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 15px 0;">
+    <h4 style="color: #0c5460; margin-top: 0;">⚠️ Important Considerations</h4>
+    <ul style="color: #0c5460; margin-bottom: 0;">
+    <li><strong>Test Selection:</strong> {test_type} {'is exact for small samples' if 'exact' in test_type.lower() else 'uses normal approximation'}</li>
+    <li><strong>Rare Events:</strong> {'Consider exact methods' if min(p1, p2) < 0.1 else 'Normal approximation appropriate'}</li>
+    <li><strong>Sample Size Balance:</strong> {'Groups are balanced' if n1 == n2 else f'Unbalanced design (ratio {n1/n2:.2f}:1)'}</li>
+    <li><strong>Clinical Significance:</strong> Ensure {risk_diff*100:.1f} percentage point difference is meaningful</li>
+    </ul>
+</div>
+
+<hr style="margin: 20px 0; border: none; border-top: 1px solid #dee2e6;">
+<p style="font-size: 0.9em; color: #6c757d; text-align: center; margin: 10px 0;">
+Report generated by DesignPower • Parallel RCT Module • Binary Outcome
+</p>
+</div>
+                """
+                return report_html.strip()
             else:  # Non-inferiority
                 nim = params.get('nim', 0)
                 report_text = textwrap.dedent(f"""
@@ -393,21 +578,123 @@ def generate_sample_size_report(results, params, design_type, outcome_type):
                         else:
                             comparison_text += "Methods show substantial differences; consider study design complexity."
 
-                report_text = textwrap.dedent(f"""
-                Advanced Survival Analysis - Sample Size Calculation Report:
+                # Get median survival for treatment group
+                median_survival2 = median_survival1 / hr if hr > 0 else float('inf')
                 
-                A sample size of {n1} participants in group 1 and {n2} participants in group 2 
-                (total N = {n1 + n2}) will provide {power * 100:.0f}% power to detect a hazard ratio 
-                of {hr:.2f}, assuming a median survival time of {median_survival1:.1f} months in the 
-                reference group. The calculation uses the {method_desc}{accrual_desc}. 
+                # Expected events
+                events = results.get('events', 0)
                 
-                Study Design: Exponential survival distributions with accrual period of {accrual_time:.1f} months, 
-                follow-up period of {follow_up_time:.1f} months, and anticipated dropout rate of {dropout_rate*100:.1f}%. 
-                Analysis will use a log-rank test with a Type I error rate of {alpha * 100:.0f}%.{comparison_text}
-                
-                Primary Reference: {reference['citation']}
-                DOI: {reference['doi']}
-                """)
+                # Create HTML report
+                report_html = f"""
+<div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">
+
+<h2 style="color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;">
+📊 Parallel RCT - Sample Size Calculation Report (Survival Analysis)
+</h2>
+
+<h3 style="color: #495057;">📏 Required Sample Size</h3>
+<div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2E86AB;">
+    <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+        <td style="padding: 8px;"><strong>Sample Size Group 1:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{n1}</strong></td>
+        <td style="padding: 8px;"><strong>Sample Size Group 2:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{n2}</strong></td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Total Sample Size:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{n1 + n2}</strong></td>
+        <td style="padding: 8px;"><strong>Expected Events:</strong></td>
+        <td style="padding: 8px; font-size: 1.1em;">{events:.0f}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Target Power:</strong></td>
+        <td style="padding: 8px;">{power * 100:.0f}%</td>
+        <td style="padding: 8px;"><strong>Significance Level (α):</strong></td>
+        <td style="padding: 8px;">{alpha:.3f}</td>
+    </tr>
+    </table>
+</div>
+
+<h3 style="color: #495057;">📈 Effect Size & Study Parameters</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Target Hazard Ratio:</strong> {hr:.3f}</p>
+    <p><strong>Median Survival (Control):</strong> {median_survival1:.1f} months</p>
+    <p><strong>Median Survival (Treatment):</strong> {f'{median_survival2:.1f}' if median_survival2 != float('inf') else '∞'} months</p>
+    <p><strong>Accrual Period:</strong> {accrual_time:.1f} months</p>
+    <p><strong>Follow-up Period:</strong> {follow_up_time:.1f} months</p>
+    <p><strong>Dropout Rate:</strong> {dropout_rate*100:.1f}%</p>
+    <p><strong>Analysis Method:</strong> {method_desc}</p>
+</div>
+
+<div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
+    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">📝 Methodological Description</h4>
+    <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #cce7ff;">
+        <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
+        A sample size of {n1} participants in group 1 and {n2} participants in group 2 
+        (total N = {n1 + n2}) will provide {power * 100:.0f}% power to detect a hazard ratio 
+        of {hr:.2f}, assuming a median survival time of {median_survival1:.1f} months in the 
+        reference group. {'This corresponds to a median survival of ' + f'{median_survival2:.1f}' + ' months in the treatment group.' if median_survival2 != float('inf') else ''} 
+        The calculation uses the {method_desc}{accrual_desc}. Study assumes exponential survival distributions with 
+        accrual period of {accrual_time:.1f} months, follow-up period of {follow_up_time:.1f} months, 
+        and anticipated dropout rate of {dropout_rate*100:.1f}%. Expected number of events is {events:.0f}. 
+        Analysis will use a log-rank test with a Type I error rate of {alpha * 100:.0f}%.
+        </p>
+    </div>
+    <p style="font-size: 0.9em; color: #666; margin-top: 10px; margin-bottom: 0;">
+    <strong>Tip:</strong> Copy the text above directly into your grant application or study protocol.
+    </p>
+</div>
+
+{f'''<div style="background-color: #e8f4fd; padding: 15px; border-radius: 8px; border-left: 4px solid #2E86AB; margin: 15px 0;">
+    <h4 style="color: #0052a3; margin-top: 0;">🔍 Method Comparison</h4>
+    <p style="color: #0052a3;">{comparison_text.strip()}</p>
+</div>''' if comparison_text else ''}
+
+<div style="background-color: #fffacd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd700; margin: 15px 0;">
+    <h4 style="color: #856404; margin-top: 0;">💡 Sample Size Interpretation</h4>
+    <p style="color: #856404; margin-bottom: 10px;">
+    The calculated sample size ensures:
+    </p>
+    <ul style="color: #856404; margin-bottom: 0;">
+    <li>{power * 100:.0f}% probability of detecting HR = {hr:.3f} if it truly exists</li>
+    <li>Type II error rate (β) = {(1-power)*100:.0f}%</li>
+    <li>Expected {events:.0f} events provides {'good' if events > 50 else 'marginal' if events > 30 else 'limited'} precision</li>
+    <li>Events per arm: ~{events/2:.0f} (assuming balanced design)</li>
+    </ul>
+</div>
+
+<h3 style="color: #495057;">📚 Methodological References</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Primary Reference:</strong></p>
+    <p style="font-style: italic; margin: 10px 0;">{reference['citation']}</p>
+    <p><strong>DOI:</strong> <a href="{reference['doi']}" target="_blank" style="color: #2E86AB;">{reference['doi']}</a></p>
+    
+    <p style="margin-top: 15px;"><strong>Additional Key References:</strong></p>
+    <ul style="margin-top: 10px;">
+    <li>Collett D. (2015). Modelling Survival Data in Medical Research. 3rd Edition. CRC Press.</li>
+    <li>Machin D, Campbell MJ, Tan SB, Tan SH. (2018). Sample Sizes for Clinical, Laboratory and Epidemiology Studies. 4th Edition. Wiley-Blackwell.</li>
+    <li>Hsieh FY, Lavori PW. (2000). Sample-size calculations for the Cox proportional hazards regression model with nonbinary covariates. Controlled Clinical Trials, 21(6), 552-560.</li>
+    </ul>
+</div>
+
+<div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 15px 0;">
+    <h4 style="color: #0c5460; margin-top: 0;">⚠️ Important Considerations</h4>
+    <ul style="color: #0c5460; margin-bottom: 0;">
+    <li><strong>Proportional Hazards:</strong> Results assume constant hazard ratio over time</li>
+    <li><strong>Censoring Pattern:</strong> Calculations assume administrative censoring only</li>
+    <li><strong>Accrual Pattern:</strong> {current_accrual_pattern.replace('_', ' ').title()} accrual assumed</li>
+    <li><strong>Sample Size Balance:</strong> {'Groups are balanced' if n1 == n2 else f'Unbalanced design (ratio {n1/n2:.2f}:1)'}</li>
+    </ul>
+</div>
+
+<hr style="margin: 20px 0; border: none; border-top: 1px solid #dee2e6;">
+<p style="font-size: 0.9em; color: #6c757d; text-align: center; margin: 10px 0;">
+Report generated by DesignPower • Parallel RCT Module • Survival Outcome
+</p>
+</div>
+                """
+                return report_html.strip()
             else:  # Non-inferiority
                 nim = params.get('non_inferiority_margin_hr', params.get('nim', 0))
                 assumed_hr = params.get('assumed_true_hr', 1.0)
@@ -953,55 +1240,374 @@ def generate_mde_report(results, params, design_type, outcome_type):
     if design_type == 'Parallel RCT' and 'Continuous' in outcome_type:
         mde_val = results.get('mde')
         cohen_d_val = results.get('cohen_d')
-        sd1 = params.get('sd1', 1)
-        sd2 = params.get('sd2', params.get('sd1', 1))
-
-        # Determine if sd2 was explicitly provided and different from sd1 for reporting
-        sd_text = f"{sd1:.2f}"
-        if params.get('sd2') is not None and sd1 != sd2:
-            sd_text += f" in group 1 and {sd2:.2f} in group 2"
-        else:
-            sd_text += " (pooled or per group)"
+        sd1 = params.get('sd1', params.get('std_dev', 1))
+        sd2 = params.get('sd2', params.get('std_dev2', sd1))
         
-        # Handle None values gracefully
-        if mde_val is not None and cohen_d_val is not None:
-            effect_text = f"the minimum detectable difference in means is {mde_val:.2f}. This corresponds to a standardized effect size (Cohen's d) of {cohen_d_val:.2f}."
-        elif mde_val is not None:
-            effect_text = f"the minimum detectable difference in means is {mde_val:.2f}."
-        else:
-            effect_text = "the minimum detectable effect calculation is not available."
+        # Get reference
+        reference = get_method_reference('continuous', method=method, design=None)
         
-        report_text = textwrap.dedent(f"""
-        Minimum Detectable Effect Report (Parallel RCT - Continuous Outcome):
+        # Method text
+        if method == "simulation":
+            nsim = params.get("nsim", 1000)
+            seed = params.get("seed", 42)
+            method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed})"
+        else:
+            method_text = "using analytical methods"
+        
+        # Create HTML report
+        report_html = f"""
+<div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">
 
-        For a study with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), aiming for {power * 100:.0f}% statistical power, and assuming standard deviation(s) of {sd_text}, {effect_text} This calculation uses a Type I error rate (alpha) of {alpha*100:.0f}%.
-        """)
-        # Add reference
-        ref_details = get_method_reference('continuous', method=method, design=None) # Standard parallel design
-        report_text += f"\n\nMethod Reference: {ref_details['citation']} ({ref_details['doi']})"
+<h2 style="color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;">
+📊 Parallel RCT - Minimum Detectable Effect Report
+</h2>
+
+<h3 style="color: #495057;">🎯 MDE Results</h3>
+<div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2E86AB;">
+    <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+        <td style="padding: 8px;"><strong>Minimum Detectable Difference:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{mde_val:.3f if mde_val is not None else 'N/A'} units</strong></td>
+        <td style="padding: 8px;"><strong>Standardized Effect Size:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>d = {cohen_d_val:.3f if cohen_d_val is not None else 'N/A'}</strong></td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Effect Size Category:</strong></td>
+        <td style="padding: 8px;">{('Small' if cohen_d_val and cohen_d_val < 0.5 else 'Medium' if cohen_d_val and cohen_d_val < 0.8 else 'Large' if cohen_d_val else 'N/A')}</td>
+        <td style="padding: 8px;"><strong>Analysis Method:</strong></td>
+        <td style="padding: 8px;">{method_text}</td>
+    </tr>
+    </table>
+</div>
+
+<h3 style="color: #495057;">📈 Study Parameters</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Sample Size Group 1:</strong> {n1}</p>
+    <p><strong>Sample Size Group 2:</strong> {n2}</p>
+    <p><strong>Total Sample Size:</strong> {n1 + n2}</p>
+    <p><strong>Standard Deviation:</strong> {sd1:.2f}{' (unequal variances: SD₁=' + str(sd1) + ', SD₂=' + str(sd2) + ')' if sd1 != sd2 else ''}</p>
+    <p><strong>Target Power:</strong> {power * 100:.0f}%</p>
+    <p><strong>Significance Level (α):</strong> {alpha:.3f}</p>
+</div>
+
+<div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
+    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">📝 Methodological Description</h4>
+    <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #cce7ff;">
+        <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
+        For a study with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), 
+        aiming for {power * 100:.0f}% statistical power, the minimum detectable difference in means is 
+        {mde_val:.3f if mde_val is not None else 'N/A'} units. This corresponds to a standardized effect size 
+        (Cohen's d) of {cohen_d_val:.3f if cohen_d_val is not None else 'N/A'}. The calculation assumes 
+        {'equal variances with standard deviation ' + str(sd1) if sd1 == sd2 else 'unequal variances (SD₁=' + str(sd1) + ', SD₂=' + str(sd2) + ')'} 
+        and was performed {method_text} with a Type I error rate of {alpha*100:.0f}%.
+        </p>
+    </div>
+    <p style="font-size: 0.9em; color: #666; margin-top: 10px; margin-bottom: 0;">
+    <strong>Tip:</strong> Copy the text above directly into your grant application or study protocol.
+    </p>
+</div>
+
+<div style="background-color: #fffacd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd700; margin: 15px 0;">
+    <h4 style="color: #856404; margin-top: 0;">💡 MDE Interpretation</h4>
+    <p style="color: #856404; margin-bottom: 10px;">
+    Understanding your minimum detectable effect:
+    </p>
+    <ul style="color: #856404; margin-bottom: 0;">
+    <li>The study can reliably detect differences of {mde_val:.3f if mde_val is not None else 'N/A'} units or larger</li>
+    <li>Smaller differences may exist but would not be detected with {power*100:.0f}% power</li>
+    <li>Effect size d = {cohen_d_val:.3f if cohen_d_val is not None else 'N/A'} is {('small (may require larger sample for clinical relevance)' if cohen_d_val and cohen_d_val < 0.5 else 'medium (typically clinically meaningful)' if cohen_d_val and cohen_d_val < 0.8 else 'large (easily detectable)' if cohen_d_val else 'not calculated')}</li>
+    <li>Consider if this MDE aligns with clinically important differences</li>
+    </ul>
+</div>
+
+<h3 style="color: #495057;">📚 Methodological References</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Primary Reference:</strong></p>
+    <p style="font-style: italic; margin: 10px 0;">{reference['citation']}</p>
+    <p><strong>DOI:</strong> <a href="{reference['doi']}" target="_blank" style="color: #2E86AB;">{reference['doi']}</a></p>
+    
+    <p style="margin-top: 15px;"><strong>Additional Key References:</strong></p>
+    <ul style="margin-top: 10px;">
+    <li>Cohen J. (1992). A power primer. Psychological Bulletin, 112(1), 155-159.</li>
+    <li>Faul F, Erdfelder E, Lang AG, Buchner A. (2007). G*Power 3: A flexible statistical power analysis program for the social, behavioral, and biomedical sciences. Behavior Research Methods, 39(2), 175-191.</li>
+    <li>Lipsey MW, Wilson DB. (1993). The efficacy of psychological, educational, and behavioral treatment: Confirmation from meta-analysis. American Psychologist, 48(12), 1181-1209.</li>
+    </ul>
+</div>
+
+<div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 15px 0;">
+    <h4 style="color: #0c5460; margin-top: 0;">⚠️ Important Considerations</h4>
+    <ul style="color: #0c5460; margin-bottom: 0;">
+    <li><strong>Clinical vs Statistical Significance:</strong> Ensure MDE is clinically meaningful</li>
+    <li><strong>Sample Size Trade-offs:</strong> Larger samples detect smaller effects</li>
+    <li><strong>Publication Bias:</strong> Studies may miss important small effects</li>
+    <li><strong>Effect Size Guidelines:</strong> Cohen's d: 0.2=small, 0.5=medium, 0.8=large</li>
+    </ul>
+</div>
+
+<hr style="margin: 20px 0; border: none; border-top: 1px solid #dee2e6;">
+<p style="font-size: 0.9em; color: #6c757d; text-align: center; margin: 10px 0;">
+Report generated by DesignPower • Parallel RCT Module • Continuous Outcome
+</p>
+</div>
+        """
+        return report_html.strip()
+    elif design_type == 'Parallel RCT' and 'Binary' in outcome_type:
+        # Binary MDE reporting
+        mde_val = results.get('mde')
+        p1 = params.get('p1', 0.5)
+        test_type = params.get('test_type', 'Normal Approximation')
+        
+        # Get reference
+        reference = get_method_reference('binary', test_type, method)
+        
+        # Calculate effect measures
+        if mde_val is not None:
+            p2_mde = p1 + mde_val
+            risk_diff = abs(mde_val)
+            if p1 > 0:
+                relative_risk = p2_mde / p1
+            else:
+                relative_risk = None
+            if p1 > 0 and p1 < 1 and p2_mde < 1 and p2_mde > 0:
+                odds_ratio = (p2_mde / (1 - p2_mde)) / (p1 / (1 - p1))
+            else:
+                odds_ratio = None
+        else:
+            p2_mde = risk_diff = relative_risk = odds_ratio = None
+        
+        # Method text
+        if method == "simulation":
+            nsim = params.get("nsim", 1000)
+            seed = params.get("seed", 42)
+            method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed})"
+        else:
+            method_text = f"using {test_type}"
+        
+        # Create HTML report
+        report_html = f"""
+<div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">
+
+<h2 style="color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;">
+📊 Parallel RCT - Minimum Detectable Effect Report
+</h2>
+
+<h3 style="color: #495057;">🎯 MDE Results</h3>
+<div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2E86AB;">
+    <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+        <td style="padding: 8px;"><strong>Minimum Detectable Risk Difference:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{f'{risk_diff:.3f}' if risk_diff is not None else 'N/A'} ({f'{risk_diff*100:.1f}' if risk_diff is not None else 'N/A'} percentage points)</strong></td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Control Group Proportion:</strong></td>
+        <td style="padding: 8px;">{p1:.3f} ({p1*100:.1f}%)</td>
+        <td style="padding: 8px;"><strong>Detectable Treatment Proportion:</strong></td>
+        <td style="padding: 8px;">{f'{p2_mde:.3f} ({p2_mde*100:.1f}%)' if p2_mde is not None else 'N/A'}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Minimum Detectable Odds Ratio:</strong></td>
+        <td style="padding: 8px;">{f'{odds_ratio:.3f}' if odds_ratio is not None else 'N/A'}</td>
+        <td style="padding: 8px;"><strong>Minimum Detectable Risk Ratio:</strong></td>
+        <td style="padding: 8px;">{f'{relative_risk:.3f}' if relative_risk is not None else 'N/A'}</td>
+    </tr>
+    </table>
+</div>
+
+<h3 style="color: #495057;">📈 Study Parameters</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Sample Size Group 1:</strong> {n1}</p>
+    <p><strong>Sample Size Group 2:</strong> {n2}</p>
+    <p><strong>Total Sample Size:</strong> {n1 + n2}</p>
+    <p><strong>Target Power:</strong> {power * 100:.0f}%</p>
+    <p><strong>Significance Level (α):</strong> {alpha:.3f}</p>
+    <p><strong>Analysis Method:</strong> {method_text}</p>
+</div>
+
+<div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
+    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">📝 Methodological Description</h4>
+    <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #cce7ff;">
+        <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
+        For a study with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), 
+        aiming for {power * 100:.0f}% statistical power, the minimum detectable risk difference is 
+        {f'{risk_diff:.3f}' if risk_diff is not None else 'N/A'} ({f'{risk_diff*100:.1f}' if risk_diff is not None else 'N/A'} percentage points). 
+        With a control group proportion of {p1:.3f}, the study can detect changes to 
+        {f'{p2_mde:.3f}' if p2_mde is not None else 'N/A'} or beyond. The calculation was performed 
+        {method_text} with a Type I error rate of {alpha*100:.0f}%.
+        </p>
+    </div>
+    <p style="font-size: 0.9em; color: #666; margin-top: 10px; margin-bottom: 0;">
+    <strong>Tip:</strong> Copy the text above directly into your grant application or study protocol.
+    </p>
+</div>
+
+<div style="background-color: #fffacd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd700; margin: 15px 0;">
+    <h4 style="color: #856404; margin-top: 0;">💡 MDE Interpretation</h4>
+    <p style="color: #856404; margin-bottom: 10px;">
+    Understanding your minimum detectable effect:
+    </p>
+    <ul style="color: #856404; margin-bottom: 0;">
+    <li>The study can detect differences of {f'{risk_diff*100:.1f}' if risk_diff is not None else 'N/A'} percentage points or larger</li>
+    <li>Number Needed to Treat (NNT) for MDE: {int(1/risk_diff) if risk_diff and risk_diff > 0 else 'N/A'}</li>
+    <li>{'This is a clinically meaningful difference' if risk_diff and risk_diff > 0.1 else 'Consider if this difference is clinically meaningful' if risk_diff else ''}</li>
+    <li>Smaller differences may exist but would require larger sample sizes</li>
+    </ul>
+</div>
+
+<h3 style="color: #495057;">📚 Methodological References</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Primary Reference:</strong></p>
+    <p style="font-style: italic; margin: 10px 0;">{reference['citation']}</p>
+    <p><strong>DOI:</strong> <a href="{reference['doi']}" target="_blank" style="color: #2E86AB;">{reference['doi']}</a></p>
+    
+    <p style="margin-top: 15px;"><strong>Additional Key References:</strong></p>
+    <ul style="margin-top: 10px;">
+    <li>Pocock SJ. (1983). Clinical Trials: A Practical Approach. John Wiley & Sons.</li>
+    <li>Sealed Envelope Ltd. (2012). Power calculators for binary outcome superiority trial. Available from: https://www.sealedenvelope.com/power/binary-superiority/</li>
+    <li>Noordzij M, Tripepi G, Dekker FW, Zoccali C, Tanck MW, Jager KJ. (2010). Sample size calculations: basic principles and common pitfalls. Nephrology Dialysis Transplantation, 25(5), 1388-1393.</li>
+    </ul>
+</div>
+
+<div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 15px 0;">
+    <h4 style="color: #0c5460; margin-top: 0;">⚠️ Important Considerations</h4>
+    <ul style="color: #0c5460; margin-bottom: 0;">
+    <li><strong>Base Rate:</strong> MDE depends on control group proportion ({p1*100:.1f}%)</li>
+    <li><strong>Clinical Relevance:</strong> Statistical detectability ≠ clinical importance</li>
+    <li><strong>Test Assumptions:</strong> {test_type} {'appropriate for these sample sizes' if n1 + n2 > 40 else 'may need exact methods for small samples'}</li>
+    <li><strong>Multiple Comparisons:</strong> Adjust α if testing multiple endpoints</li>
+    </ul>
+</div>
+
+<hr style="margin: 20px 0; border: none; border-top: 1px solid #dee2e6;">
+<p style="font-size: 0.9em; color: #6c757d; text-align: center; margin: 10px 0;">
+Report generated by DesignPower • Parallel RCT Module • Binary Outcome
+</p>
+</div>
+        """
+        return report_html.strip()
+        
     elif design_type == 'Parallel RCT' and 'Survival' in outcome_type:
         # Enhanced survival MDE reporting
         mde_hr = results.get('mde')
         median_survival1 = params.get('median_survival1', 12.0)
         advanced_method = params.get('advanced_method', 'schoenfeld')
         events = results.get('events', 0)
+        accrual_time = params.get('accrual_time', 12.0)
+        follow_up_time = params.get('follow_up_time', 24.0)
+        dropout_rate = params.get('dropout_rate', 0.1)
+        
+        # Get reference
+        reference = get_method_reference('survival', method=method, advanced_method=advanced_method)
         
         if mde_hr:
-            median_survival2_mde = median_survival1 / mde_hr
+            median_survival2_mde = median_survival1 / mde_hr if mde_hr > 0 else float('inf')
             
-            report_text = textwrap.dedent(f"""
-            Survival Analysis - Minimum Detectable Effect Report:
+            # Create HTML report
+            report_html = f"""
+<div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">
 
-            For a study with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), aiming for {power * 100:.0f}% statistical power, the minimum detectable hazard ratio is {mde_hr:.3f}. This corresponds to detecting a difference between median survival times of {median_survival1:.1f} months (control) vs {median_survival2_mde:.1f} months (treatment). Expected number of events: {events:.0f}.
-            
-            The calculation uses the {advanced_method.title()} method with a Type I error rate of {alpha*100:.0f}%.
-            """)
-            
-            # Add reference
-            ref_details = get_method_reference('survival', method=method, advanced_method=advanced_method)
-            report_text += f"\n\nMethod Reference: {ref_details['citation']} ({ref_details['doi']})"
+<h2 style="color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;">
+📊 Parallel RCT - Minimum Detectable Effect Report (Survival Analysis)
+</h2>
+
+<h3 style="color: #495057;">🎯 MDE Results</h3>
+<div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2E86AB;">
+    <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+        <td style="padding: 8px;"><strong>Minimum Detectable Hazard Ratio:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{mde_hr:.3f}</strong></td>
+        <td style="padding: 8px;"><strong>Expected Events:</strong></td>
+        <td style="padding: 8px; font-size: 1.1em;">{events:.0f}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Control Median Survival:</strong></td>
+        <td style="padding: 8px;">{median_survival1:.1f} months</td>
+        <td style="padding: 8px;"><strong>Detectable Treatment Median:</strong></td>
+        <td style="padding: 8px;">{f'{median_survival2_mde:.1f}' if median_survival2_mde != float('inf') else '∞'} months</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Survival Improvement:</strong></td>
+        <td style="padding: 8px;" colspan="3">{f'{(median_survival2_mde/median_survival1 - 1)*100:.1f}%' if median_survival2_mde != float('inf') and median_survival1 > 0 else 'N/A'}</td>
+    </tr>
+    </table>
+</div>
+
+<h3 style="color: #495057;">📈 Study Parameters</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Sample Size Group 1:</strong> {n1}</p>
+    <p><strong>Sample Size Group 2:</strong> {n2}</p>
+    <p><strong>Total Sample Size:</strong> {n1 + n2}</p>
+    <p><strong>Target Power:</strong> {power * 100:.0f}%</p>
+    <p><strong>Significance Level (α):</strong> {alpha:.3f}</p>
+    <p><strong>Accrual Period:</strong> {accrual_time:.1f} months</p>
+    <p><strong>Follow-up Period:</strong> {follow_up_time:.1f} months</p>
+    <p><strong>Dropout Rate:</strong> {dropout_rate*100:.1f}%</p>
+    <p><strong>Analysis Method:</strong> {advanced_method.title()} method</p>
+</div>
+
+<div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
+    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">📝 Methodological Description</h4>
+    <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #cce7ff;">
+        <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
+        For a study with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), 
+        aiming for {power * 100:.0f}% statistical power, the minimum detectable hazard ratio is {mde_hr:.3f}. 
+        This corresponds to detecting a difference between median survival times of {median_survival1:.1f} months 
+        (control) versus {f'{median_survival2_mde:.1f}' if median_survival2_mde != float('inf') else '∞'} months (treatment). 
+        Expected number of events is {events:.0f}. The calculation uses the {advanced_method.title()} method 
+        with exponential survival assumptions, {accrual_time:.1f} months accrual, {follow_up_time:.1f} months 
+        follow-up, {dropout_rate*100:.1f}% dropout rate, and a Type I error rate of {alpha*100:.0f}%.
+        </p>
+    </div>
+    <p style="font-size: 0.9em; color: #666; margin-top: 10px; margin-bottom: 0;">
+    <strong>Tip:</strong> Copy the text above directly into your grant application or study protocol.
+    </p>
+</div>
+
+<div style="background-color: #fffacd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd700; margin: 15px 0;">
+    <h4 style="color: #856404; margin-top: 0;">💡 MDE Interpretation</h4>
+    <p style="color: #856404; margin-bottom: 10px;">
+    Understanding your minimum detectable effect:
+    </p>
+    <ul style="color: #856404; margin-bottom: 0;">
+    <li>The study can detect HR ≤ {mde_hr:.3f} (or ≥ {1/mde_hr:.3f if mde_hr > 0 else 'N/A'})</li>
+    <li>Corresponds to {f'{(1-mde_hr)*100:.1f}%' if mde_hr < 1 else f'{(mde_hr-1)*100:.1f}% increase' if mde_hr > 1 else '0%'} reduction in hazard</li>
+    <li>Expected {events:.0f} events provides {'good' if events > 50 else 'marginal' if events > 30 else 'limited'} precision</li>
+    <li>{'Consider longer follow-up for more events' if events < 50 else 'Event count appears adequate'}</li>
+    </ul>
+</div>
+
+<h3 style="color: #495057;">📚 Methodological References</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Primary Reference:</strong></p>
+    <p style="font-style: italic; margin: 10px 0;">{reference['citation']}</p>
+    <p><strong>DOI:</strong> <a href="{reference['doi']}" target="_blank" style="color: #2E86AB;">{reference['doi']}</a></p>
+    
+    <p style="margin-top: 15px;"><strong>Additional Key References:</strong></p>
+    <ul style="margin-top: 10px;">
+    <li>Collett D. (2015). Modelling Survival Data in Medical Research. 3rd Edition. CRC Press.</li>
+    <li>Machin D, Campbell MJ, Tan SB, Tan SH. (2018). Sample Sizes for Clinical, Laboratory and Epidemiology Studies. 4th Edition. Wiley-Blackwell.</li>
+    <li>Latouche A, Porcher R, Chevret S. (2004). Sample size formula for proportional hazards modelling of competing risks. Statistics in Medicine, 23(21), 3263-3274.</li>
+    </ul>
+</div>
+
+<div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 15px 0;">
+    <h4 style="color: #0c5460; margin-top: 0;">⚠️ Important Considerations</h4>
+    <ul style="color: #0c5460; margin-bottom: 0;">
+    <li><strong>Proportional Hazards:</strong> MDE assumes constant HR over time</li>
+    <li><strong>Censoring Impact:</strong> Heavy censoring reduces detectable effects</li>
+    <li><strong>Event-Driven:</strong> Power depends on events, not just sample size</li>
+    <li><strong>Clinical Relevance:</strong> HR of {mde_hr:.3f} {'is a modest effect' if 0.7 < mde_hr < 1.3 else 'is a substantial effect'}</li>
+    </ul>
+</div>
+
+<hr style="margin: 20px 0; border: none; border-top: 1px solid #dee2e6;">
+<p style="font-size: 0.9em; color: #6c757d; text-align: center; margin: 10px 0;">
+Report generated by DesignPower • Parallel RCT Module • Survival Outcome
+</p>
+</div>
+            """
+            return report_html.strip()
         else:
-            report_text = "Minimum detectable effect calculation for survival outcomes is not available."
+            return "Minimum detectable effect calculation for survival outcomes is not available."
     else:
         # Default report for other types
         report_text = textwrap.dedent(f"""
