@@ -243,11 +243,18 @@ def generate_sample_size_report(results, params, design_type, outcome_type):
                 # Create the variance assumption text based on whether unequal variance was used
                 if unequal_var:
                     variance_text = f"unequal variances with standard deviations of {std_dev:.2f} in group 1 and {std_dev2:.2f} in group 2"
+                    variance_display = f" (unequal variances: SD₁={std_dev:.2f}, SD₂={std_dev2:.2f})"
                 else:
                     variance_text = f"equal variances with a standard deviation of {std_dev:.2f}"
+                    variance_display = ""
                 
                 # Check if repeated measures design is being used
                 repeated_measures = params.get("repeated_measures", False)
+                repeated_measures_text = ""
+                repeated_measures_param = ""
+                if repeated_measures:
+                    repeated_measures_text = f" This is a repeated measures design with a correlation of {correlation:.2f} between measurements."
+                    repeated_measures_param = f"<p><strong>Repeated Measures:</strong> Yes (correlation = {correlation:.2f})</p>"
                 
                 # Check if simulation method was used
                 if method == "simulation":
@@ -293,9 +300,9 @@ def generate_sample_size_report(results, params, design_type, outcome_type):
 <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
     <p><strong>Target Difference:</strong> {abs(mean2 - mean1):.2f} units (Mean₁ = {mean1:.2f}, Mean₂ = {mean2:.2f})</p>
     <p><strong>Standardized Effect Size:</strong> Cohen's d = {effect_size:.3f}</p>
-    <p><strong>Standard Deviation:</strong> {std_dev:.2f}{(' (unequal variances: SD₁=' + f'{std_dev:.2f}' + ', SD₂=' + f'{std_dev2:.2f}' + ')') if unequal_var else ''}</p>
+    <p><strong>Standard Deviation:</strong> {std_dev:.2f}{variance_display}</p>
     <p><strong>Analysis Method:</strong> {method_text}</p>
-    {('<p><strong>Repeated Measures:</strong> Yes (correlation = ' + f'{correlation:.2f}' + ')</p>') if repeated_measures else ''}
+    {repeated_measures_param}
 </div>
 
 <div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
@@ -305,8 +312,7 @@ def generate_sample_size_report(results, params, design_type, outcome_type):
         A sample size of {n1} participants in group 1 and {n2} participants in group 2 
         (total N = {n1 + n2}) will provide {power * 100:.0f}% power to detect a difference 
         in means of {abs(mean2 - mean1):.2f} (effect size d = {effect_size:.2f}) between 
-        groups, assuming {variance_text}, {method_text} with a Type I error rate of {alpha * 100:.0f}%.
-        {('This is a repeated measures design with a correlation of ' + f'{correlation:.2f}' + ' between measurements.') if repeated_measures else ''}
+        groups, assuming {variance_text}, {method_text} with a Type I error rate of {alpha * 100:.0f}%.{repeated_measures_text}
         </p>
     </div>
     <p style="font-size: 0.9em; color: #666; margin-top: 10px; margin-bottom: 0;">
