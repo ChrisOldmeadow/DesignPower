@@ -476,38 +476,137 @@ def generate_power_report(results, params, design_type, outcome_type):
     if design_type == 'Parallel RCT' and 'Continuous' in outcome_type:
         mean1 = params.get('mean1', 0)
         mean2 = params.get('mean2', 0)
-        sd1 = params.get('sd1', 1)
-        sd2 = params.get('sd2', params.get('sd1', 1)) # Use sd1 if sd2 is not present
-        actual_effect_size = results.get('effect_size') # From power_continuous results
+        sd1 = params.get('sd1', params.get('std_dev', 1))
+        sd2 = params.get('sd2', params.get('std_dev2', sd1))
+        std_dev = params.get('std_dev', sd1)
+        actual_effect_size = results.get('effect_size')
         difference = abs(mean1 - mean2)
-
-        # Determine if sd2 was explicitly provided and different from sd1 for reporting
-        sd_text = f"{sd1:.2f}" 
-        if params.get('sd2') is not None and sd1 != sd2:
-            sd_text += f" in group 1 and {sd2:.2f} in group 2"
+        
+        # Calculate effect size if not provided
+        if actual_effect_size is None and std_dev and std_dev != 0:
+            actual_effect_size = difference / std_dev
+        
+        # Power interpretation
+        if power >= 0.9:
+            power_adequacy = "excellent power"
+        elif power >= 0.8:
+            power_adequacy = "adequate power"
+        elif power >= 0.7:
+            power_adequacy = "marginal power"
         else:
-            sd_text += " (pooled or per group)"
-
-        # Handle None effect size gracefully
-        if actual_effect_size is not None:
-            effect_size_text = f"The standardized effect size (Cohen's d) for this scenario is {actual_effect_size:.2f}."
+            power_adequacy = "insufficient power"
+        
+        # Method text
+        if method == "simulation":
+            nsim = params.get("nsim", 1000)
+            seed = params.get("seed", 42)
+            method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed})"
         else:
-            # Calculate effect size manually if not provided
-            std_dev = params.get('std_dev', sd1)  # Use std_dev if available, fallback to sd1
-            if std_dev and std_dev != 0:
-                calculated_effect_size = difference / std_dev
-                effect_size_text = f"The standardized effect size (Cohen's d) for this scenario is {calculated_effect_size:.2f}."
-            else:
-                effect_size_text = "Effect size calculation not available."
+            method_text = "using analytical methods"
+        
+        # Get appropriate reference
+        reference = get_method_reference('continuous', method=method, design=None)
+        
+        report_html = f"""
+<div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">
 
-        report_text = textwrap.dedent(f"""
-        Power Calculation Report (Parallel RCT - Continuous Outcome):
+<h2 style="color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;">
+📊 Parallel RCT - Power Calculation Report
+</h2>
 
-        For a study designed to compare two parallel groups with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), targeting a difference between means of {difference:.2f} (group 1 mean: {mean1:.2f}, group 2 mean: {mean2:.2f}), and assuming standard deviation(s) of {sd_text}, the estimated statistical power is {power * 100:.1f}%. This calculation uses a Type I error rate (alpha) of {alpha*100:.0f}%. {effect_size_text}
-        """)
-        # Add reference
-        ref_details = get_method_reference('continuous', method=method, design=None) # Standard parallel design
-        report_text += f"\n\nMethod Reference: {ref_details['citation']} ({ref_details['doi']})"
+<h3 style="color: #495057;">⚡ Statistical Power Results</h3>
+<div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2E86AB;">
+    <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+        <td style="padding: 8px;"><strong>Statistical Power:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{power * 100:.1f}%</strong></td>
+        <td style="padding: 8px;"><strong>Power Assessment:</strong></td>
+        <td style="padding: 8px;">{power_adequacy.capitalize()}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Sample Size Group 1:</strong></td>
+        <td style="padding: 8px;">{n1}</td>
+        <td style="padding: 8px;"><strong>Sample Size Group 2:</strong></td>
+        <td style="padding: 8px;">{n2}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Total Sample Size:</strong></td>
+        <td style="padding: 8px;">{n1 + n2}</td>
+        <td style="padding: 8px;"><strong>Significance Level (α):</strong></td>
+        <td style="padding: 8px;">{alpha:.3f}</td>
+    </tr>
+    </table>
+</div>
+
+<h3 style="color: #495057;">📈 Effect Size & Study Parameters</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Target Difference:</strong> {difference:.2f} units (Mean₁ = {mean1:.2f}, Mean₂ = {mean2:.2f})</p>
+    <p><strong>Standardized Effect Size:</strong> Cohen's d = {actual_effect_size:.3f if actual_effect_size is not None else 'N/A'}</p>
+    <p><strong>Standard Deviation:</strong> {std_dev:.2f}{' (unequal variances: SD₁=' + str(sd1) + ', SD₂=' + str(sd2) + ')' if sd1 != sd2 else ''}</p>
+    <p><strong>Analysis Method:</strong> {method_text}</p>
+</div>
+
+<div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
+    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">📝 Methodological Description</h4>
+    <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #cce7ff;">
+        <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
+        For a study with {n1} participants in group 1 and {n2} participants in group 2 
+        (total N = {n1 + n2}), targeting a difference in means of {difference:.2f} units 
+        (from {mean1:.2f} to {mean2:.2f}), the estimated statistical power is {power * 100:.1f}%. 
+        This represents a {actual_effect_size:.3f if actual_effect_size is not None else 'N/A'} standardized effect size. 
+        The calculation assumes {'equal variances with standard deviation ' + str(std_dev) if sd1 == sd2 else 'unequal variances (SD₁=' + str(sd1) + ', SD₂=' + str(sd2) + ')'} 
+        and was performed {method_text} with a Type I error rate of {alpha*100:.0f}%.
+        </p>
+    </div>
+    <p style="font-size: 0.9em; color: #666; margin-top: 10px; margin-bottom: 0;">
+    <strong>Tip:</strong> Copy the text above directly into your grant application or study protocol.
+    </p>
+</div>
+
+<div style="background-color: #fffacd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd700; margin: 15px 0;">
+    <h4 style="color: #856404; margin-top: 0;">💡 Power Interpretation</h4>
+    <p style="color: #856404; margin-bottom: 10px;">
+    With {power * 100:.0f}% power, this study has {power_adequacy}:
+    </p>
+    <ul style="color: #856404; margin-bottom: 0;">
+    <li>There is a {power * 100:.0f}% probability of detecting the effect if it truly exists</li>
+    <li>Type II error rate (β) = {(1-power)*100:.0f}% (probability of missing a true effect)</li>
+    <li>{'Consider increasing sample size' if power < 0.8 else 'Sample size appears adequate'} for this effect size</li>
+    <li>{'This represents a ' + ('small' if actual_effect_size and actual_effect_size < 0.5 else 'medium' if actual_effect_size and actual_effect_size < 0.8 else 'large' if actual_effect_size else 'N/A') + ' effect size' if actual_effect_size else 'Effect size not calculated'}</li>
+    </ul>
+</div>
+
+<h3 style="color: #495057;">📚 Methodological References</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Primary Reference:</strong></p>
+    <p style="font-style: italic; margin: 10px 0;">{reference['citation']}</p>
+    <p><strong>DOI:</strong> <a href="{reference['doi']}" target="_blank" style="color: #2E86AB;">{reference['doi']}</a></p>
+    
+    <p style="margin-top: 15px;"><strong>Additional Key References:</strong></p>
+    <ul style="margin-top: 10px;">
+    <li>Chow SC, Shao J, Wang H, Lokhnygina Y. (2017). Sample Size Calculations in Clinical Research. 3rd Edition. CRC Press.</li>
+    <li>Julious SA. (2010). Sample Sizes for Clinical Trials. CRC Press.</li>
+    <li>Machin D, Campbell MJ, Tan SB, Tan SH. (2018). Sample Sizes for Clinical, Laboratory and Epidemiology Studies. 4th Edition. Wiley-Blackwell.</li>
+    </ul>
+</div>
+
+<div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 15px 0;">
+    <h4 style="color: #0c5460; margin-top: 0;">⚠️ Important Considerations</h4>
+    <ul style="color: #0c5460; margin-bottom: 0;">
+    <li><strong>Assumptions:</strong> Results assume normal distributions and {'equal' if sd1 == sd2 else 'unequal'} variances</li>
+    <li><strong>Effect Size Context:</strong> Ensure {difference:.2f} units is clinically meaningful</li>
+    <li><strong>Sample Size Balance:</strong> {'Groups are balanced' if n1 == n2 else f'Unbalanced design (ratio {n1/n2:.2f}:1)'}</li>
+    <li><strong>Dropout Allowance:</strong> Consider inflating sample size for expected attrition</li>
+    </ul>
+</div>
+
+<hr style="margin: 20px 0; border: none; border-top: 1px solid #dee2e6;">
+<p style="font-size: 0.9em; color: #6c757d; text-align: center; margin: 10px 0;">
+Report generated by DesignPower • Parallel RCT Module • Continuous Outcome
+</p>
+</div>
+        """
+        return report_html.strip()
         
     elif design_type == 'Parallel RCT' and 'Binary' in outcome_type:
         # Enhanced binary outcome power reporting
@@ -515,41 +614,146 @@ def generate_power_report(results, params, design_type, outcome_type):
         p2 = params.get('p2', 0)
         test_type = params.get('test_type', 'Normal Approximation')
         correction = params.get('correction', False)
-        odds_ratio = results.get('odds_ratio')
-        relative_risk = results.get('relative_risk') 
-        absolute_difference = abs(p2 - p1)
+        risk_diff = abs(p2 - p1)
         
-        # Calculate odds ratio and relative risk if not in results
-        if odds_ratio is None and p1 > 0 and p2 > 0 and p1 < 1 and p2 < 1:
-            odds_ratio = (p2 / (1 - p2)) / (p1 / (1 - p1))
-        if relative_risk is None and p1 > 0:
+        # Calculate odds ratio and relative risk
+        if p1 > 0 and p1 < 1 and p2 < 1:
+            odds_ratio = (p2 / (1 - p2)) / (p1 / (1 - p1)) if p2 > 0 else 0
+        else:
+            odds_ratio = None
+            
+        if p1 > 0:
             relative_risk = p2 / p1
+        else:
+            relative_risk = None
         
-        # Format odds ratio and relative risk safely
-        or_text = f" (odds ratio = {odds_ratio:.2f})" if odds_ratio is not None else ""
-        rr_text = f" (relative risk = {relative_risk:.2f})" if relative_risk is not None else ""
+        # Power interpretation
+        if power >= 0.9:
+            power_adequacy = "excellent power"
+        elif power >= 0.8:
+            power_adequacy = "adequate power"
+        elif power >= 0.7:
+            power_adequacy = "marginal power"
+        else:
+            power_adequacy = "insufficient power"
         
-        # Create method text based on simulation vs analytical
+        # Method text
         if method == "simulation":
             nsim = params.get("nsim", 1000)
-            seed = params.get("seed")
-            seed_text = f", random seed {seed}" if seed is not None else ""
-            method_text = f"using Monte Carlo simulation ({nsim:,} simulations{seed_text}) with {test_type}"
+            seed = params.get("seed", 42)
+            method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed}) with {test_type}"
         else:
             method_text = f"using {test_type}"
         
         if correction:
             method_text += " with continuity correction"
         
-        report_text = textwrap.dedent(f"""
-        Power Calculation Report (Parallel RCT - Binary Outcome):
-
-        For a study designed to compare two parallel groups with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), targeting a difference in proportions from {p1:.3f} ({p1*100:.1f}%) in group 1 to {p2:.3f} ({p2*100:.1f}%) in group 2 (absolute difference = {absolute_difference:.3f}{or_text}{rr_text}), the estimated statistical power is {power * 100:.1f}%. This calculation uses {method_text} with a Type I error rate (alpha) of {alpha*100:.0f}%.
-        """)
+        # Get appropriate reference
+        reference = get_method_reference('binary', test_type, method)
         
-        # Add reference
-        ref_details = get_method_reference('binary', test_type, method)
-        report_text += f"\n\nMethod Reference: {ref_details['citation']} ({ref_details['doi']})"
+        report_html = f"""
+<div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">
+
+<h2 style="color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;">
+📊 Parallel RCT - Power Calculation Report
+</h2>
+
+<h3 style="color: #495057;">⚡ Statistical Power Results</h3>
+<div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2E86AB;">
+    <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+        <td style="padding: 8px;"><strong>Statistical Power:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{power * 100:.1f}%</strong></td>
+        <td style="padding: 8px;"><strong>Power Assessment:</strong></td>
+        <td style="padding: 8px;">{power_adequacy.capitalize()}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Sample Size Group 1:</strong></td>
+        <td style="padding: 8px;">{n1}</td>
+        <td style="padding: 8px;"><strong>Sample Size Group 2:</strong></td>
+        <td style="padding: 8px;">{n2}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Total Sample Size:</strong></td>
+        <td style="padding: 8px;">{n1 + n2}</td>
+        <td style="padding: 8px;"><strong>Significance Level (α):</strong></td>
+        <td style="padding: 8px;">{alpha:.3f}</td>
+    </tr>
+    </table>
+</div>
+
+<h3 style="color: #495057;">📈 Effect Size & Study Parameters</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Control Group Proportion:</strong> {p1:.3f} ({p1*100:.1f}%)</p>
+    <p><strong>Treatment Group Proportion:</strong> {p2:.3f} ({p2*100:.1f}%)</p>
+    <p><strong>Risk Difference:</strong> {risk_diff:.3f} ({risk_diff*100:.1f} percentage points)</p>
+    <p><strong>Risk Ratio:</strong> {relative_risk:.3f if relative_risk is not None else 'N/A'}</p>
+    <p><strong>Odds Ratio:</strong> {odds_ratio:.3f if odds_ratio is not None else 'N/A'}</p>
+    <p><strong>Analysis Method:</strong> {method_text}</p>
+</div>
+
+<div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
+    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">📝 Methodological Description</h4>
+    <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #cce7ff;">
+        <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
+        For a study with {n1} participants in group 1 and {n2} participants in group 2 
+        (total N = {n1 + n2}), targeting a change in proportion from {p1:.3f} ({p1*100:.1f}%) 
+        to {p2:.3f} ({p2*100:.1f}%), the estimated statistical power is {power * 100:.1f}%. 
+        This represents a risk difference of {risk_diff:.3f} ({risk_diff*100:.1f} percentage points)
+        {f', risk ratio of {relative_risk:.2f}' if relative_risk is not None else ''}
+        {f', and odds ratio of {odds_ratio:.2f}' if odds_ratio is not None else ''}. 
+        The calculation was performed {method_text} with a Type I error rate of {alpha*100:.0f}%.
+        </p>
+    </div>
+    <p style="font-size: 0.9em; color: #666; margin-top: 10px; margin-bottom: 0;">
+    <strong>Tip:</strong> Copy the text above directly into your grant application or study protocol.
+    </p>
+</div>
+
+<div style="background-color: #fffacd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd700; margin: 15px 0;">
+    <h4 style="color: #856404; margin-top: 0;">💡 Power Interpretation</h4>
+    <p style="color: #856404; margin-bottom: 10px;">
+    With {power * 100:.0f}% power, this study has {power_adequacy}:
+    </p>
+    <ul style="color: #856404; margin-bottom: 0;">
+    <li>There is a {power * 100:.0f}% probability of detecting the effect if it truly exists</li>
+    <li>Type II error rate (β) = {(1-power)*100:.0f}% (probability of missing a true effect)</li>
+    <li>{'Consider increasing sample size' if power < 0.8 else 'Sample size appears adequate'} for this effect size</li>
+    <li>Number Needed to Treat (NNT) = {int(1/risk_diff) if risk_diff > 0 else 'N/A'}</li>
+    </ul>
+</div>
+
+<h3 style="color: #495057;">📚 Methodological References</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Primary Reference:</strong></p>
+    <p style="font-style: italic; margin: 10px 0;">{reference['citation']}</p>
+    <p><strong>DOI:</strong> <a href="{reference['doi']}" target="_blank" style="color: #2E86AB;">{reference['doi']}</a></p>
+    
+    <p style="margin-top: 15px;"><strong>Additional Key References:</strong></p>
+    <ul style="margin-top: 10px;">
+    <li>Fleiss JL, Tytun A, Ury HK. (1980). A simple approximation for calculating sample sizes for comparing independent proportions. Biometrics, 36(2), 343-346.</li>
+    <li>Casagrande JT, Pike MC, Smith PG. (1978). An improved approximate formula for calculating sample sizes for comparing two binomial distributions. Biometrics, 34(3), 483-486.</li>
+    <li>Farrington CP, Manning G. (1990). Test statistics and sample size formulae for comparative binomial trials with null hypothesis of non-zero risk difference or non-unity relative risk. Statistics in Medicine, 9(12), 1447-1454.</li>
+    </ul>
+</div>
+
+<div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 15px 0;">
+    <h4 style="color: #0c5460; margin-top: 0;">⚠️ Important Considerations</h4>
+    <ul style="color: #0c5460; margin-bottom: 0;">
+    <li><strong>Test Selection:</strong> {test_type} {'is exact for small samples' if 'exact' in test_type.lower() else 'uses normal approximation'}</li>
+    <li><strong>Rare Events:</strong> {'Consider exact methods' if min(p1, p2) < 0.1 else 'Normal approximation appropriate'}</li>
+    <li><strong>Sample Size Balance:</strong> {'Groups are balanced' if n1 == n2 else f'Unbalanced design (ratio {n1/n2:.2f}:1)'}</li>
+    <li><strong>Clinical Significance:</strong> Ensure {risk_diff*100:.1f} percentage point difference is meaningful</li>
+    </ul>
+</div>
+
+<hr style="margin: 20px 0; border: none; border-top: 1px solid #dee2e6;">
+<p style="font-size: 0.9em; color: #6c757d; text-align: center; margin: 10px 0;">
+Report generated by DesignPower • Parallel RCT Module • Binary Outcome
+</p>
+</div>
+        """
+        return report_html.strip()
         
     elif design_type == 'Parallel RCT' and 'Survival' in outcome_type:
         # Enhanced survival outcome power reporting
@@ -567,28 +771,142 @@ def generate_power_report(results, params, design_type, outcome_type):
         # Get median survival for treatment group
         median_survival2 = median_survival1 / hr if hr > 0 else float('inf')
         
-        report_text = textwrap.dedent(f"""
-        Advanced Survival Analysis - Power Calculation Report:
+        # Power interpretation
+        if power >= 0.9:
+            power_adequacy = "excellent power"
+        elif power >= 0.8:
+            power_adequacy = "adequate power"
+        elif power >= 0.7:
+            power_adequacy = "marginal power"
+        else:
+            power_adequacy = "insufficient power"
+        
+        # Method description
+        if method_used == 'schoenfeld':
+            method_desc = "Schoenfeld (1983) - standard log-rank test formula"
+        elif method_used == 'freedman':
+            method_desc = "Freedman (1982) - alternative censoring assumptions"
+        elif method_used == 'lakatos':
+            method_desc = "Lakatos (1988) - complex accrual patterns"
+        else:
+            method_desc = method_used.title()
+        
+        # Get appropriate reference
+        reference = get_method_reference('survival', method=method, advanced_method=method_used)
+        
+        report_html = f"""
+<div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">
 
-        For a study designed to compare two parallel groups with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), targeting a hazard ratio of {hr:.2f} (median survival: control = {median_survival1:.1f} months, treatment = {median_survival2:.1f} months), the estimated statistical power is {power * 100:.1f}%. 
-        
-        Study Design: The calculation uses the {method_used.title()} method with exponential survival distributions, accrual period of {accrual_time:.1f} months, follow-up period of {follow_up_time:.1f} months, and anticipated dropout rate of {dropout_rate*100:.1f}%. Expected number of events: {events:.0f}. Analysis will use a log-rank test with a Type I error rate of {alpha*100:.0f}%.
-        """)
-        
-        # Add method comparison if available
-        if results.get('comparison'):
-            comparison = results['comparison']
-            max_diff = comparison.get('max_percent_difference', 0)
-            if max_diff > 0:
-                report_text += f"\n\nMethod Validation: Cross-method comparison shows {max_diff:.1f}% maximum difference, "
-                if max_diff < 5:
-                    report_text += "indicating excellent methodological agreement."
-                else:
-                    report_text += "suggesting methodological sensitivity to study design assumptions."
-        
-        # Add reference
-        ref_details = get_method_reference('survival', method=method, advanced_method=advanced_method)
-        report_text += f"\n\nMethod Reference: {ref_details['citation']} ({ref_details['doi']})"
+<h2 style="color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;">
+📊 Parallel RCT - Power Calculation Report (Survival Analysis)
+</h2>
+
+<h3 style="color: #495057;">⚡ Statistical Power Results</h3>
+<div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2E86AB;">
+    <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+        <td style="padding: 8px;"><strong>Statistical Power:</strong></td>
+        <td style="padding: 8px; font-size: 1.2em; color: #2E86AB;"><strong>{power * 100:.1f}%</strong></td>
+        <td style="padding: 8px;"><strong>Power Assessment:</strong></td>
+        <td style="padding: 8px;">{power_adequacy.capitalize()}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Sample Size Group 1:</strong></td>
+        <td style="padding: 8px;">{n1}</td>
+        <td style="padding: 8px;"><strong>Sample Size Group 2:</strong></td>
+        <td style="padding: 8px;">{n2}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px;"><strong>Total Sample Size:</strong></td>
+        <td style="padding: 8px;">{n1 + n2}</td>
+        <td style="padding: 8px;"><strong>Expected Events:</strong></td>
+        <td style="padding: 8px;">{events:.0f}</td>
+    </tr>
+    </table>
+</div>
+
+<h3 style="color: #495057;">📈 Effect Size & Study Parameters</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Target Hazard Ratio:</strong> {hr:.3f}</p>
+    <p><strong>Median Survival (Control):</strong> {median_survival1:.1f} months</p>
+    <p><strong>Median Survival (Treatment):</strong> {median_survival2:.1f if median_survival2 != float('inf') else '∞'} months</p>
+    <p><strong>Accrual Period:</strong> {accrual_time:.1f} months</p>
+    <p><strong>Follow-up Period:</strong> {follow_up_time:.1f} months</p>
+    <p><strong>Dropout Rate:</strong> {dropout_rate*100:.1f}%</p>
+    <p><strong>Analysis Method:</strong> {method_desc}</p>
+    <p><strong>Significance Level (α):</strong> {alpha:.3f}</p>
+</div>
+
+<div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
+    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">📝 Methodological Description</h4>
+    <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #cce7ff;">
+        <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
+        For a survival study with {n1} participants in group 1 and {n2} participants in group 2 
+        (total N = {n1 + n2}), targeting a hazard ratio of {hr:.3f}, the estimated statistical 
+        power is {power * 100:.1f}%. With median survival of {median_survival1:.1f} months in 
+        the control group, this corresponds to detecting a {'reduction' if hr < 1 else 'increase'} 
+        in median survival to {median_survival2:.1f if median_survival2 != float('inf') else '∞'} months. 
+        The calculation uses the {method_desc} method assuming exponential survival distributions, 
+        {accrual_time:.1f} months accrual, {follow_up_time:.1f} months follow-up, and {dropout_rate*100:.1f}% 
+        dropout rate. Expected number of events is {events:.0f}. Analysis will use a log-rank test 
+        with Type I error rate of {alpha*100:.0f}%.
+        </p>
+    </div>
+    <p style="font-size: 0.9em; color: #666; margin-top: 10px; margin-bottom: 0;">
+    <strong>Tip:</strong> Copy the text above directly into your grant application or study protocol.
+    </p>
+</div>
+
+{f'''<div style="background-color: #e8f4fd; padding: 15px; border-radius: 8px; border-left: 4px solid #2E86AB; margin: 15px 0;">
+    <h4 style="color: #0052a3; margin-top: 0;">🔍 Method Comparison</h4>
+    <p style="color: #0052a3;">Cross-method validation shows {results["comparison"]["max_percent_difference"]:.1f}% maximum difference between methods, 
+    {"indicating excellent methodological agreement." if results["comparison"]["max_percent_difference"] < 5 else "suggesting sensitivity to study design assumptions."}</p>
+</div>''' if results.get('comparison') else ''}
+
+<div style="background-color: #fffacd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd700; margin: 15px 0;">
+    <h4 style="color: #856404; margin-top: 0;">💡 Power Interpretation</h4>
+    <p style="color: #856404; margin-bottom: 10px;">
+    With {power * 100:.0f}% power, this study has {power_adequacy}:
+    </p>
+    <ul style="color: #856404; margin-bottom: 0;">
+    <li>There is a {power * 100:.0f}% probability of detecting HR = {hr:.3f} if it truly exists</li>
+    <li>Type II error rate (β) = {(1-power)*100:.0f}% (probability of missing the effect)</li>
+    <li>Expected {events:.0f} events provides {'good' if events > 50 else 'marginal' if events > 30 else 'limited'} precision</li>
+    <li>{'Consider increasing sample size or follow-up' if power < 0.8 else 'Sample size appears adequate'}</li>
+    </ul>
+</div>
+
+<h3 style="color: #495057;">📚 Methodological References</h3>
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <p><strong>Primary Reference:</strong></p>
+    <p style="font-style: italic; margin: 10px 0;">{reference['citation']}</p>
+    <p><strong>DOI:</strong> <a href="{reference['doi']}" target="_blank" style="color: #2E86AB;">{reference['doi']}</a></p>
+    
+    <p style="margin-top: 15px;"><strong>Additional Key References:</strong></p>
+    <ul style="margin-top: 10px;">
+    <li>Collett D. (2015). Modelling Survival Data in Medical Research. 3rd Edition. CRC Press.</li>
+    <li>Machin D, Campbell MJ, Tan SB, Tan SH. (2018). Sample Sizes for Clinical, Laboratory and Epidemiology Studies. 4th Edition. Wiley-Blackwell.</li>
+    <li>Hsieh FY, Lavori PW. (2000). Sample-size calculations for the Cox proportional hazards regression model with nonbinary covariates. Controlled Clinical Trials, 21(6), 552-560.</li>
+    </ul>
+</div>
+
+<div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 15px 0;">
+    <h4 style="color: #0c5460; margin-top: 0;">⚠️ Important Considerations</h4>
+    <ul style="color: #0c5460; margin-bottom: 0;">
+    <li><strong>Proportional Hazards:</strong> Results assume constant hazard ratio over time</li>
+    <li><strong>Censoring Pattern:</strong> Calculations assume administrative censoring only</li>
+    <li><strong>Accrual Pattern:</strong> {'Uniform accrual assumed' if not params.get('accrual_pattern') or params.get('accrual_pattern') == 'uniform' else 'Non-uniform accrual pattern applied'}</li>
+    <li><strong>Sample Size Balance:</strong> {'Groups are balanced' if n1 == n2 else f'Unbalanced design (ratio {n1/n2:.2f}:1)'}</li>
+    </ul>
+</div>
+
+<hr style="margin: 20px 0; border: none; border-top: 1px solid #dee2e6;">
+<p style="font-size: 0.9em; color: #6c757d; text-align: center; margin: 10px 0;">
+Report generated by DesignPower • Parallel RCT Module • Survival Outcome
+</p>
+</div>
+        """
+        return report_html.strip()
         
     else:
         # Default report for other types
