@@ -218,12 +218,17 @@ def generate_sample_size_report(results, params, design_type, outcome_type):
     # Extract outcome-specific parameters
     if 'Continuous' in outcome_type:
         # For continuous outcomes
-        effect_size = results.get('effect_size', 0)
         mean1 = params.get('mean1', 0)
         mean2 = params.get('mean2', 0)
         std_dev = params.get('std_dev', 1)
         unequal_var = params.get('unequal_var', False)
         std_dev2 = params.get('std_dev2', std_dev) if unequal_var else std_dev
+        
+        # Calculate effect size if not provided
+        effect_size = results.get('effect_size', 0)
+        if effect_size == 0 and std_dev > 0:
+            # Calculate Cohen's d
+            effect_size = abs(mean2 - mean1) / std_dev
         
         # Check if this is a repeated measures design
         repeated_measures = params.get('repeated_measures', False)

@@ -243,6 +243,9 @@ def calculate_parallel_continuous(params):
                  final_results["mean_difference"] = params.get("mean2", 1) - params.get("mean1", 0)
             elif "delta" in results_dict: 
                  final_results["mean_difference"] = results_dict.get("delta")
+            # Add effect_size if available
+            if "effect_size" in results_dict:
+                final_results["effect_size"] = results_dict["effect_size"]
 
         elif calc_type == "Power":
             final_results["power"] = round(results_dict.get("power", results_dict.get("empirical_power", 0)), 3)
