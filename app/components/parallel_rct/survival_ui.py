@@ -81,6 +81,35 @@ def render_parallel_survival(calc_type, hypothesis_type):
             else: # Default if not sample size and n1/n2 not set (e.g. MDE without n1/n2 yet)
                 params["allocation_ratio"] = 1.0 # Default, might be overridden if n1/n2 are set for MDE
 
+    # Method guidance display
+    if params.get("advanced_method") and params["advanced_method"] != "auto":
+        with st.expander("📚 Method Guidance", expanded=False):
+            method_name = params["advanced_method"]
+            if method_name == "schoenfeld":
+                st.markdown("""
+                **Schoenfeld (1983) Method:**
+                - Standard log-rank test formula, widely used in statistical software
+                - Best for uniform accrual and simple study designs
+                - Assumes exponential survival and proportional hazards
+                - Quick and reliable for initial sample size estimates
+                """)
+            elif method_name == "freedman":
+                st.markdown("""
+                **Freedman (1982) Method:**
+                - Alternative approach with different censoring assumptions
+                - Useful for validation or when Schoenfeld seems inappropriate
+                - May give slightly different results from Schoenfeld
+                - Less commonly used in modern practice
+                """)
+            elif method_name == "lakatos":
+                st.markdown("""
+                **Lakatos (1988) Method:**
+                - Most sophisticated method for complex study designs
+                - Accounts for non-uniform accrual patterns and varying follow-up
+                - Best when enrollment rate changes over time
+                - Higher computational complexity but maximum precision
+                """)
+    
     # Advanced parameters UI
     with st.expander("Advanced Parameters", expanded=False):
         col_adv1, col_adv2 = st.columns(2)
@@ -109,11 +138,61 @@ def render_parallel_survival(calc_type, hypothesis_type):
                                         min_value=0.0, max_value=0.5, value=0.1, step=0.01,
                                         key="dropout_slider_survival")
 
+        # Advanced method selection
+        advanced_method_options = ["Auto", "Schoenfeld", "Freedman", "Lakatos"]
+        selected_advanced_method = st.selectbox(
+            "Statistical Method",
+            options=advanced_method_options,
+            index=0,
+            help="Auto selects the most appropriate method based on study design",
+            key="advanced_method_survival_selectbox"
+        )
+        params["advanced_method"] = selected_advanced_method.lower()
+        
+        # Accrual pattern selection (for Lakatos)
+        if selected_advanced_method == "Lakatos":
+            accrual_options = ["Uniform", "Ramp Up", "Exponential", "Piecewise"]
+            selected_accrual = st.selectbox(
+                "Accrual Pattern",
+                options=accrual_options,
+                index=0,
+                help="Uniform: constant enrollment rate; Ramp Up: increasing rate; Exponential: exponential growth",
+                key="accrual_pattern_selectbox"
+            )
+            params["accrual_pattern"] = selected_accrual.lower().replace(" ", "_")
+            
+            # Accrual parameters for non-uniform patterns
+            if selected_accrual != "Uniform":
+                if selected_accrual == "Ramp Up":
+                    params["ramp_factor"] = st.number_input(
+                        "Ramp Factor",
+                        min_value=1.1,
+                        max_value=5.0,
+                        value=2.0,
+                        step=0.1,
+                        help="Final enrollment rate relative to initial rate",
+                        key="ramp_factor_input"
+                    )
+                elif selected_accrual == "Exponential":
+                    params["growth_rate"] = st.number_input(
+                        "Growth Rate",
+                        min_value=0.01,
+                        max_value=0.5,
+                        value=0.1,
+                        step=0.01,
+                        help="Monthly growth rate for exponential enrollment",
+                        key="growth_rate_input"
+                    )
+        else:
+            params["accrual_pattern"] = "uniform"
+            
+        # Implementation method selection
         method_options = ["Analytical", "Simulation"]
         selected_method = st.selectbox(
-            "Calculation Method",
+            "Implementation Method",
             options=method_options,
             index=method_options.index(params.get("method", "Analytical")), 
+            help="Analytical: closed-form formulas; Simulation: Monte Carlo",
             key="method_survival_selectbox"
         )
         params["method"] = selected_method
@@ -167,6 +246,16 @@ def display_survival_results(result, calculation_type, hypothesis_type, use_simu
     if not result:
         st.error("No results to display.")
         return
+    
+    # Display method information if available
+    if result.get("method_used") and result.get("method_guidance"):
+        method_used = result["method_used"].title()
+        st.info(f"✅ **Method Used:** {method_used}")
+        
+        # Show brief method description
+        guidance = result["method_guidance"]
+        if guidance.get("when_to_use"):
+            st.caption(f"📖 {guidance['when_to_use']}")
 
     # Display based on calculation type
     if calculation_type == "Sample Size":
@@ -235,7 +324,27 @@ def display_survival_results(result, calculation_type, hypothesis_type, use_simu
 
     if use_simulation:
         st.info("Results obtained using simulation.")
+    elif result.get("method_used"):
+        st.info(f"Results obtained using {result['method_used'].title()} analytical method.")
 
+    # Display advanced method comparison if available
+    if result.get("comparison") and calculation_type == "Sample Size":
+        with st.expander("🔍 Method Comparison", expanded=False):
+            comparison = result["comparison"]
+            if comparison.get("sample_sizes"):
+                st.markdown("**Sample Size Comparison Across Methods:**")
+                for method, size in comparison["sample_sizes"].items():
+                    st.write(f"- {method.title()}: {size}")
+                
+                if comparison.get("max_percent_difference"):
+                    pct_diff = comparison["max_percent_difference"]
+                    if pct_diff < 5:
+                        st.success(f"✅ Methods agree closely (max difference: {pct_diff:.1f}%)")
+                    elif pct_diff < 15:
+                        st.warning(f"⚠️ Moderate method differences (max difference: {pct_diff:.1f}%)")
+                    else:
+                        st.error(f"❌ Large method differences (max difference: {pct_diff:.1f}%)")
+    
     # Display non-inferiority specific information
     if hypothesis_type == "Non-Inferiority":
         st.markdown("#### Non-Inferiority Interpretation")

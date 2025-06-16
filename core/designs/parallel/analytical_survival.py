@@ -3,13 +3,243 @@ Analytical methods for survival outcomes in parallel group randomized controlled
 
 This module provides analytical (closed-form) functions for power analysis and
 sample size calculation for parallel group RCTs with survival (time-to-event) outcomes.
+
+Includes advanced methods: Schoenfeld (1983), Freedman (1982), and Lakatos (1988).
 """
 
 import numpy as np
 import math
 from scipy import stats
+from .survival_power_methods import (
+    schoenfeld_sample_size, schoenfeld_power,
+    freedman_sample_size, freedman_power,
+    lakatos_sample_size, 
+    compare_methods, get_method_guidance, list_available_methods,
+    METHODS_GUIDANCE
+)
 
-# ===== Main Functions =====
+# ===== Advanced Survival Power Methods =====
+
+def sample_size_survival_advanced(hazard_ratio, power=0.8, alpha=0.05, allocation_ratio=1.0, sides=2,
+                                 enrollment_period=12.0, follow_up_period=12.0,
+                                 median_control=None, hazard_control=None, dropout_rate=0.0,
+                                 method="schoenfeld", accrual_pattern="uniform", 
+                                 accrual_parameters=None, compare_all=False):
+    """
+    Calculate sample size using advanced survival power methods.
+    
+    This function provides access to three established methods for survival
+    sample size calculations with guidance on when each is appropriate.
+    
+    Parameters
+    ----------
+    hazard_ratio : float
+        Hazard ratio (treatment/control)
+    power : float, default 0.8
+        Desired statistical power (1 - β)
+    alpha : float, default 0.05
+        Type I error rate
+    allocation_ratio : float, default 1.0
+        Ratio of treatment to control sample sizes (n_treatment/n_control)
+    sides : int, default 2
+        1 for one-sided test, 2 for two-sided test
+    enrollment_period : float, default 12.0
+        Duration of patient enrollment (months)
+    follow_up_period : float, default 12.0
+        Additional follow-up after enrollment ends (months)
+    median_control : float, optional
+        Median survival in control group (months)
+    hazard_control : float, optional
+        Hazard rate in control group (per month)
+    dropout_rate : float, default 0.0
+        Proportion of patients lost to follow-up
+    method : str, default "schoenfeld"
+        Method to use: "schoenfeld", "freedman", "lakatos", or "auto"
+    accrual_pattern : str, default "uniform"
+        For Lakatos method: "uniform", "ramp_up", "exponential", "piecewise"
+    accrual_parameters : dict, optional
+        Additional parameters for complex accrual patterns
+    compare_all : bool, default False
+        If True, return results from all methods for comparison
+        
+    Returns
+    -------
+    dict
+        Sample size calculation results including method guidance
+        
+    Examples
+    --------
+    >>> # Standard calculation with automatic method selection
+    >>> result = sample_size_survival_advanced(
+    ...     hazard_ratio=0.67, power=0.8, median_control=12,
+    ...     method="auto"
+    ... )
+    
+    >>> # Compare all methods
+    >>> comparison = sample_size_survival_advanced(
+    ...     hazard_ratio=0.67, power=0.8, median_control=12,
+    ...     compare_all=True
+    ... )
+    
+    >>> # Lakatos method for non-uniform accrual
+    >>> result = sample_size_survival_advanced(
+    ...     hazard_ratio=0.67, power=0.8, median_control=12,
+    ...     method="lakatos", accrual_pattern="ramp_up",
+    ...     accrual_parameters={"ramp_factor": 3.0}
+    ... )
+    """
+    
+    # Parameter validation
+    if hazard_ratio <= 0:
+        raise ValueError("Hazard ratio must be positive")
+    if not 0 < power < 1:
+        raise ValueError("Power must be between 0 and 1")
+    if not 0 < alpha < 1:
+        raise ValueError("Alpha must be between 0 and 1")
+    if allocation_ratio <= 0:
+        raise ValueError("Allocation ratio must be positive")
+    if sides not in [1, 2]:
+        raise ValueError("Sides must be 1 or 2")
+    if enrollment_period <= 0 or follow_up_period <= 0:
+        raise ValueError("Enrollment and follow-up periods must be positive")
+    if method not in ["schoenfeld", "freedman", "lakatos", "auto"]:
+        raise ValueError("Method must be 'schoenfeld', 'freedman', 'lakatos', or 'auto'")
+    
+    # Auto-select method based on study design
+    if method == "auto":
+        if accrual_pattern != "uniform":
+            method = "lakatos"
+        elif enrollment_period / follow_up_period > 3 or enrollment_period / follow_up_period < 0.5:
+            method = "lakatos"
+        else:
+            method = "schoenfeld"
+    
+    # Return comparison if requested
+    if compare_all:
+        return compare_methods(
+            hazard_ratio=hazard_ratio, power=power, alpha=alpha,
+            allocation_ratio=allocation_ratio, sides=sides,
+            enrollment_period=enrollment_period, follow_up_period=follow_up_period,
+            median_control=median_control, hazard_control=hazard_control,
+            dropout_rate=dropout_rate, accrual_pattern=accrual_pattern
+        )
+    
+    # Calculate using selected method
+    if method == "schoenfeld":
+        result = schoenfeld_sample_size(
+            hazard_ratio=hazard_ratio, power=power, alpha=alpha,
+            allocation_ratio=allocation_ratio, sides=sides,
+            enrollment_period=enrollment_period, follow_up_period=follow_up_period,
+            median_control=median_control, hazard_control=hazard_control,
+            dropout_rate=dropout_rate
+        )
+    elif method == "freedman":
+        result = freedman_sample_size(
+            hazard_ratio=hazard_ratio, power=power, alpha=alpha,
+            allocation_ratio=allocation_ratio, sides=sides,
+            enrollment_period=enrollment_period, follow_up_period=follow_up_period,
+            median_control=median_control, hazard_control=hazard_control,
+            dropout_rate=dropout_rate
+        )
+    elif method == "lakatos":
+        if accrual_parameters is None:
+            accrual_parameters = {"enrollment_period": enrollment_period, 
+                                "follow_up_period": follow_up_period}
+        result = lakatos_sample_size(
+            hazard_ratio=hazard_ratio, power=power, alpha=alpha,
+            allocation_ratio=allocation_ratio, sides=sides,
+            accrual_pattern=accrual_pattern, accrual_parameters=accrual_parameters,
+            median_control=median_control, hazard_control=hazard_control,
+            dropout_rate=dropout_rate
+        )
+    
+    # Add method guidance to result
+    result["method_guidance"] = get_method_guidance(method)
+    result["method_used"] = method
+    result["available_methods"] = list_available_methods()
+    
+    return result
+
+
+def power_survival_advanced(n_control, n_treatment, hazard_ratio, alpha=0.05, sides=2,
+                           enrollment_period=12.0, follow_up_period=12.0,
+                           median_control=None, hazard_control=None, dropout_rate=0.0,
+                           method="schoenfeld"):
+    """
+    Calculate power using advanced survival power methods.
+    
+    Parameters
+    ----------
+    n_control : int
+        Sample size in control group
+    n_treatment : int
+        Sample size in treatment group
+    hazard_ratio : float
+        Hazard ratio (treatment/control)
+    alpha : float, default 0.05
+        Type I error rate
+    sides : int, default 2
+        1 for one-sided test, 2 for two-sided test
+    enrollment_period : float, default 12.0
+        Duration of patient enrollment (months)
+    follow_up_period : float, default 12.0
+        Additional follow-up after enrollment ends (months)
+    median_control : float, optional
+        Median survival in control group (months)
+    hazard_control : float, optional
+        Hazard rate in control group (per month)
+    dropout_rate : float, default 0.0
+        Proportion of patients lost to follow-up
+    method : str, default "schoenfeld"
+        Method to use: "schoenfeld", "freedman", or "auto"
+        
+    Returns
+    -------
+    dict
+        Power calculation results including method guidance
+    """
+    
+    # Parameter validation
+    if n_control <= 0 or n_treatment <= 0:
+        raise ValueError("Sample sizes must be positive")
+    if hazard_ratio <= 0:
+        raise ValueError("Hazard ratio must be positive")
+    if not 0 < alpha < 1:
+        raise ValueError("Alpha must be between 0 and 1")
+    if sides not in [1, 2]:
+        raise ValueError("Sides must be 1 or 2")
+    if method not in ["schoenfeld", "freedman", "auto"]:
+        raise ValueError("Method must be 'schoenfeld', 'freedman', or 'auto'")
+    
+    # Auto-select method (simpler for power calculations)
+    if method == "auto":
+        method = "schoenfeld"  # Default to most commonly used
+    
+    # Calculate using selected method
+    if method == "schoenfeld":
+        result = schoenfeld_power(
+            n_control=n_control, n_treatment=n_treatment, hazard_ratio=hazard_ratio,
+            alpha=alpha, sides=sides, enrollment_period=enrollment_period,
+            follow_up_period=follow_up_period, median_control=median_control,
+            hazard_control=hazard_control, dropout_rate=dropout_rate
+        )
+    elif method == "freedman":
+        result = freedman_power(
+            n_control=n_control, n_treatment=n_treatment, hazard_ratio=hazard_ratio,
+            alpha=alpha, sides=sides, enrollment_period=enrollment_period,
+            follow_up_period=follow_up_period, median_control=median_control,
+            hazard_control=hazard_control, dropout_rate=dropout_rate
+        )
+    
+    # Add method guidance to result
+    result["method_guidance"] = get_method_guidance(method)
+    result["method_used"] = method
+    result["available_methods"] = list_available_methods()
+    
+    return result
+
+
+# ===== Legacy Main Functions (maintained for backward compatibility) =====
 
 def sample_size_survival(median1, median2, enrollment_period=1.0, follow_up_period=1.0, 
                         dropout_rate=0.1, power=0.8, alpha=0.05, allocation_ratio=1.0, sides=2):

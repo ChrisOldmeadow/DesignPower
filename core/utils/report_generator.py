@@ -24,7 +24,19 @@ METHOD_REFERENCES = {
         "citation": "Guo Y, Logan HL, Glueck DH, Muller KE. (2013). Selecting a sample size for studies with repeated measures. BMC Medical Research Methodology, 13(1), 100",
         "doi": "https://doi.org/10.1186/1471-2288-13-100"
     },
-    # Survival outcomes
+    # Survival outcomes - Advanced Methods
+    "survival_schoenfeld": {
+        "citation": "Schoenfeld DA. (1983). Sample-size formula for the proportional-hazards regression model. Biometrics, 39(2), 499-503",
+        "doi": "https://doi.org/10.2307/2531021"
+    },
+    "survival_freedman": {
+        "citation": "Freedman LS. (1982). Tables of the number of patients required in clinical trials using the logrank test. Statistics in Medicine, 1(2), 121-129",
+        "doi": "https://doi.org/10.1002/sim.4780010204"
+    },
+    "survival_lakatos": {
+        "citation": "Lakatos E. (1988). Sample sizes based on the log-rank statistic in complex clinical trials. Biometrics, 44(1), 229-241",
+        "doi": "https://doi.org/10.2307/2531910"
+    },
     "survival_exponential": {
         "citation": "Schoenfeld DA. (1983). Sample-size formula for the proportional-hazards regression model. Biometrics, 39(2), 499-503",
         "doi": "https://doi.org/10.2307/2531021"
@@ -100,7 +112,7 @@ METHOD_REFERENCES = {
     }
 }
 
-def get_method_reference(outcome_type, test_type=None, method="analytical", design=None):
+def get_method_reference(outcome_type, test_type=None, method="analytical", design=None, advanced_method=None):
     """
     Get the appropriate reference for the specific calculation method.
     
@@ -114,6 +126,8 @@ def get_method_reference(outcome_type, test_type=None, method="analytical", desi
         Calculation method ('analytical' or 'simulation')
     design : str, optional
         Specific design type (e.g., 'repeated_measures')
+    advanced_method : str, optional
+        Advanced method for survival outcomes ('schoenfeld', 'freedman', 'lakatos')
         
     Returns
     -------
@@ -159,8 +173,13 @@ def get_method_reference(outcome_type, test_type=None, method="analytical", desi
             return METHOD_REFERENCES.get(key, default_ref)
     
     elif outcome_type == "survival":
-        # For survival outcomes, default to exponential model
-        return METHOD_REFERENCES.get("survival_exponential", default_ref)
+        # For survival outcomes, use advanced method if specified
+        if advanced_method and advanced_method in ["schoenfeld", "freedman", "lakatos"]:
+            key = f"survival_{advanced_method}"
+            return METHOD_REFERENCES.get(key, default_ref)
+        else:
+            # Default to Schoenfeld method
+            return METHOD_REFERENCES.get("survival_schoenfeld", default_ref)
     
     # Default to general analytical method
     return default_ref
@@ -326,40 +345,88 @@ def generate_sample_size_report(results, params, design_type, outcome_type):
         hr = params.get('hr', 0)
         median_survival1 = params.get('median_survival1', 0)
         
-        # Get appropriate reference
-        reference = get_method_reference('survival', method=method)
+        # Get appropriate reference based on advanced method
+        advanced_method = params.get('advanced_method', 'schoenfeld')
+        reference = get_method_reference('survival', method=method, advanced_method=advanced_method)
         
         if design_type == 'Parallel RCT':
             if hypothesis_type == 'Superiority':
                 # Extract accrual and follow-up times
                 accrual_time = params.get('accrual_time', 1.0)
                 follow_up_time = params.get('follow_up_time', 1.0)
-                dropout_rate1 = params.get('dropout_rate1', 0.1)
+                dropout_rate = params.get('dropout_rate', 0.1)
                 
+                # Advanced method information
+                method_used = results.get('method_used', advanced_method)
+                method_guidance = results.get('method_guidance', {})
+                
+                # Create method description
+                if method_used == 'schoenfeld':
+                    method_desc = "Schoenfeld (1983) method - the standard approach for log-rank test sample size calculations"
+                elif method_used == 'freedman':
+                    method_desc = "Freedman (1982) method - alternative approach with different censoring assumptions"
+                elif method_used == 'lakatos':
+                    method_desc = "Lakatos (1988) method - advanced approach accounting for complex accrual patterns"
+                else:
+                    method_desc = "standard log-rank test methodology"
+                
+                # Add accrual pattern information
+                current_accrual_pattern = params.get('accrual_pattern', 'uniform')
+                if current_accrual_pattern != 'uniform' and method_used == 'lakatos':
+                    accrual_desc = f" with {current_accrual_pattern.replace('_', ' ')} accrual pattern"
+                else:
+                    accrual_desc = " with uniform accrual"
+                
+                # Method comparison information
+                comparison_text = ""
+                if results.get('comparison'):
+                    comparison = results['comparison']
+                    sample_sizes = comparison.get('sample_sizes', {})
+                    max_diff = comparison.get('max_percent_difference', 0)
+                    if len(sample_sizes) > 1:
+                        sizes_text = ", ".join([f"{k.title()}: {v}" for k, v in sample_sizes.items()])
+                        comparison_text = f"\n\nMethod Comparison: {sizes_text} (max difference: {max_diff:.1f}%). "
+                        if max_diff < 5:
+                            comparison_text += "Methods show excellent agreement."
+                        elif max_diff < 15:
+                            comparison_text += "Methods show moderate agreement."
+                        else:
+                            comparison_text += "Methods show substantial differences; consider study design complexity."
+
                 report_text = textwrap.dedent(f"""
-                Sample Size Calculation Report:
+                Advanced Survival Analysis - Sample Size Calculation Report:
                 
                 A sample size of {n1} participants in group 1 and {n2} participants in group 2 
                 (total N = {n1 + n2}) will provide {power * 100:.0f}% power to detect a hazard ratio 
                 of {hr:.2f}, assuming a median survival time of {median_survival1:.1f} months in the 
-                reference group. The calculation assumes exponential survival distributions with an 
-                accrual period of {accrual_time:.1f} months, follow-up period of {follow_up_time:.1f} months, 
-                and anticipated dropout rate of {dropout_rate1*100:.1f}%. Analysis will use a log-rank test 
-                with a Type I error rate of {alpha * 100:.0f}%.
+                reference group. The calculation uses the {method_desc}{accrual_desc}. 
                 
-                Reference: {reference['citation']}
+                Study Design: Exponential survival distributions with accrual period of {accrual_time:.1f} months, 
+                follow-up period of {follow_up_time:.1f} months, and anticipated dropout rate of {dropout_rate*100:.1f}%. 
+                Analysis will use a log-rank test with a Type I error rate of {alpha * 100:.0f}%.{comparison_text}
+                
+                Primary Reference: {reference['citation']}
                 DOI: {reference['doi']}
                 """)
             else:  # Non-inferiority
-                nim = params.get('nim', 0)
+                nim = params.get('non_inferiority_margin_hr', params.get('nim', 0))
+                assumed_hr = params.get('assumed_true_hr', 1.0)
+                accrual_time = params.get('accrual_time', 1.0)
+                follow_up_time = params.get('follow_up_time', 1.0)
+                dropout_rate = params.get('dropout_rate', 0.1)
+                
                 report_text = textwrap.dedent(f"""
-                Non-Inferiority Sample Size Calculation Report:
+                Non-Inferiority Survival Analysis - Sample Size Calculation Report:
                 
                 A sample size of {n1} participants in group 1 and {n2} participants in group 2 
                 (total N = {n1 + n2}) will provide {power * 100:.0f}% power to establish 
                 non-inferiority with a hazard ratio margin of {nim:.2f}, assuming a median 
-                survival time of {median_survival1:.1f} months in the reference group, 
-                using a one-sided log-rank test with a Type I error rate of {alpha * 100:.0f}%.
+                survival time of {median_survival1:.1f} months in the reference group and 
+                a true hazard ratio of {assumed_hr:.2f}. 
+                
+                Study Design: Exponential survival distributions with accrual period of {accrual_time:.1f} months, 
+                follow-up period of {follow_up_time:.1f} months, and anticipated dropout rate of {dropout_rate*100:.1f}%. 
+                Analysis will use a one-sided log-rank test with a Type I error rate of {alpha * 100:.0f}%.
                 
                 Reference: {reference['citation']}
                 DOI: {reference['doi']}
@@ -484,6 +551,45 @@ def generate_power_report(results, params, design_type, outcome_type):
         ref_details = get_method_reference('binary', test_type, method)
         report_text += f"\n\nMethod Reference: {ref_details['citation']} ({ref_details['doi']})"
         
+    elif design_type == 'Parallel RCT' and 'Survival' in outcome_type:
+        # Enhanced survival outcome power reporting
+        hr = params.get('hr', 0.7)
+        median_survival1 = params.get('median_survival1', 12.0)
+        advanced_method = params.get('advanced_method', 'schoenfeld')
+        accrual_time = params.get('accrual_time', 12.0)
+        follow_up_time = params.get('follow_up_time', 24.0)
+        dropout_rate = params.get('dropout_rate', 0.1)
+        
+        # Method information
+        method_used = results.get('method_used', advanced_method)
+        events = results.get('events', 0)
+        
+        # Get median survival for treatment group
+        median_survival2 = median_survival1 / hr if hr > 0 else float('inf')
+        
+        report_text = textwrap.dedent(f"""
+        Advanced Survival Analysis - Power Calculation Report:
+
+        For a study designed to compare two parallel groups with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), targeting a hazard ratio of {hr:.2f} (median survival: control = {median_survival1:.1f} months, treatment = {median_survival2:.1f} months), the estimated statistical power is {power * 100:.1f}%. 
+        
+        Study Design: The calculation uses the {method_used.title()} method with exponential survival distributions, accrual period of {accrual_time:.1f} months, follow-up period of {follow_up_time:.1f} months, and anticipated dropout rate of {dropout_rate*100:.1f}%. Expected number of events: {events:.0f}. Analysis will use a log-rank test with a Type I error rate of {alpha*100:.0f}%.
+        """)
+        
+        # Add method comparison if available
+        if results.get('comparison'):
+            comparison = results['comparison']
+            max_diff = comparison.get('max_percent_difference', 0)
+            if max_diff > 0:
+                report_text += f"\n\nMethod Validation: Cross-method comparison shows {max_diff:.1f}% maximum difference, "
+                if max_diff < 5:
+                    report_text += "indicating excellent methodological agreement."
+                else:
+                    report_text += "suggesting methodological sensitivity to study design assumptions."
+        
+        # Add reference
+        ref_details = get_method_reference('survival', method=method, advanced_method=advanced_method)
+        report_text += f"\n\nMethod Reference: {ref_details['citation']} ({ref_details['doi']})"
+        
     else:
         # Default report for other types
         report_text = textwrap.dedent(f"""
@@ -555,6 +661,29 @@ def generate_mde_report(results, params, design_type, outcome_type):
         # Add reference
         ref_details = get_method_reference('continuous', method=method, design=None) # Standard parallel design
         report_text += f"\n\nMethod Reference: {ref_details['citation']} ({ref_details['doi']})"
+    elif design_type == 'Parallel RCT' and 'Survival' in outcome_type:
+        # Enhanced survival MDE reporting
+        mde_hr = results.get('mde')
+        median_survival1 = params.get('median_survival1', 12.0)
+        advanced_method = params.get('advanced_method', 'schoenfeld')
+        events = results.get('events', 0)
+        
+        if mde_hr:
+            median_survival2_mde = median_survival1 / mde_hr
+            
+            report_text = textwrap.dedent(f"""
+            Survival Analysis - Minimum Detectable Effect Report:
+
+            For a study with {n1} participants in group 1 and {n2} in group 2 (total {n1+n2}), aiming for {power * 100:.0f}% statistical power, the minimum detectable hazard ratio is {mde_hr:.3f}. This corresponds to detecting a difference between median survival times of {median_survival1:.1f} months (control) vs {median_survival2_mde:.1f} months (treatment). Expected number of events: {events:.0f}.
+            
+            The calculation uses the {advanced_method.title()} method with a Type I error rate of {alpha*100:.0f}%.
+            """)
+            
+            # Add reference
+            ref_details = get_method_reference('survival', method=method, advanced_method=advanced_method)
+            report_text += f"\n\nMethod Reference: {ref_details['citation']} ({ref_details['doi']})"
+        else:
+            report_text = "Minimum detectable effect calculation for survival outcomes is not available."
     else:
         # Default report for other types
         report_text = textwrap.dedent(f"""

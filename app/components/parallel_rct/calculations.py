@@ -518,6 +518,17 @@ def calculate_parallel_survival(params):
     calculation_type = params.get("calculation_type", "Sample Size")
     hypothesis_type = params.get("hypothesis_type", "Superiority")
     method = params.get("method", "Analytical").lower()
+    
+    # Advanced method parameters
+    advanced_method = params.get("advanced_method", "auto")
+    accrual_pattern = params.get("accrual_pattern", "uniform")
+    
+    # Accrual parameters for non-uniform patterns
+    accrual_parameters = {}
+    if params.get("ramp_factor"):
+        accrual_parameters["ramp_factor"] = params.get("ramp_factor")
+    if params.get("growth_rate"):
+        accrual_parameters["growth_rate"] = params.get("growth_rate")
 
     alpha = params.get("alpha", 0.05)
     power = params.get("power", 0.8)
@@ -590,6 +601,7 @@ def calculate_parallel_survival(params):
     if calculation_type == "Sample Size":
         if method == "analytical":
             if hypothesis_type == "Non-Inferiority":
+                # Use legacy non-inferiority function for now
                 sample_size_result = analytical_survival.sample_size_survival_non_inferiority(
                     median1=median_survival1,
                     non_inferiority_margin=non_inferiority_margin_hr_param,
@@ -601,18 +613,71 @@ def calculate_parallel_survival(params):
                     allocation_ratio=allocation_ratio,
                     assumed_hazard_ratio=assumed_true_hr_param
                 )
-            else: # Superiority
-                sample_size_result = analytical_survival.sample_size_survival(
-                    median1=median_survival1,
-                    median2=median2_for_calc,
-                    enrollment_period=accrual_time,
-                    follow_up_period=follow_up_time,
-                    dropout_rate=dropout_rate,
-                    power=power,
-                    alpha=alpha, 
-                    allocation_ratio=allocation_ratio,
-                    sides=sides 
-                )
+            else: # Superiority - use advanced methods
+                try:
+                    if advanced_method == "compare_all":
+                        # Use compare_all to get results from all methods
+                        sample_size_result = analytical_survival.sample_size_survival_advanced(
+                            hazard_ratio=hr_for_calc,
+                            power=power,
+                            alpha=alpha,
+                            allocation_ratio=allocation_ratio,
+                            sides=sides,
+                            enrollment_period=accrual_time,
+                            follow_up_period=follow_up_time,
+                            median_control=median_survival1,
+                            dropout_rate=dropout_rate,
+                            method="auto",  # Let auto-selection choose the primary method
+                            accrual_pattern=accrual_pattern,
+                            accrual_parameters=accrual_parameters if accrual_parameters else None,
+                            compare_all=True  # This returns comparison data
+                        )
+                        
+                        # Extract the comparison data
+                        if "comparison" in sample_size_result:
+                            result["comparison"] = sample_size_result["comparison"]
+                            result["methods_results"] = sample_size_result.get("methods", {})
+                            
+                            # Use the recommended method's results as primary
+                            recommended = sample_size_result["comparison"].get("recommended_method", "schoenfeld")
+                            if recommended in sample_size_result.get("methods", {}):
+                                sample_size_result = sample_size_result["methods"][recommended]
+                            
+                    else:
+                        # Single method calculation
+                        sample_size_result = analytical_survival.sample_size_survival_advanced(
+                            hazard_ratio=hr_for_calc,
+                            power=power,
+                            alpha=alpha,
+                            allocation_ratio=allocation_ratio,
+                            sides=sides,
+                            enrollment_period=accrual_time,
+                            follow_up_period=follow_up_time,
+                            median_control=median_survival1,
+                            dropout_rate=dropout_rate,
+                            method=advanced_method,
+                            accrual_pattern=accrual_pattern,
+                            accrual_parameters=accrual_parameters if accrual_parameters else None
+                        )
+                    
+                    # Add method guidance information to result
+                    result["method_used"] = sample_size_result.get("method_used", advanced_method)
+                    result["method_guidance"] = sample_size_result.get("method_guidance", {})
+                    
+                except Exception as e:
+                    # Fallback to legacy method if advanced fails
+                    st.warning(f"Advanced method failed, falling back to legacy method: {e}")
+                    sample_size_result = analytical_survival.sample_size_survival(
+                        median1=median_survival1,
+                        median2=median2_for_calc,
+                        enrollment_period=accrual_time,
+                        follow_up_period=follow_up_time,
+                        dropout_rate=dropout_rate,
+                        power=power,
+                        alpha=alpha, 
+                        allocation_ratio=allocation_ratio,
+                        sides=sides 
+                    )
         elif method == "simulation":
             if hypothesis_type == "Non-Inferiority":                   
                 sample_size_result = simulation_survival.sample_size_survival_non_inferiority_sim(
@@ -648,10 +713,10 @@ def calculate_parallel_survival(params):
         else:
             return {"error": f"Unsupported method: {method} for Sample Size calculation."}
             
-        result["n1"] = round(sample_size_result.get("n1", sample_size_result.get("sample_size_1", 0)))
-        result["n2"] = round(sample_size_result.get("n2", sample_size_result.get("sample_size_2", 0)))
+        result["n1"] = round(sample_size_result.get("n_control", sample_size_result.get("n1", sample_size_result.get("sample_size_1", 0))))
+        result["n2"] = round(sample_size_result.get("n_treatment", sample_size_result.get("n2", sample_size_result.get("sample_size_2", 0))))
         result["total_n"] = result["n1"] + result["n2"]
-        result["events"] = round(sample_size_result.get("events", sample_size_result.get("total_events", 0)))
+        result["events"] = round(sample_size_result.get("events_required", sample_size_result.get("events", sample_size_result.get("total_events", 0))))
         if 'power_curve_data' in sample_size_result:
             result['power_curve_data'] = sample_size_result['power_curve_data']
         
@@ -662,6 +727,7 @@ def calculate_parallel_survival(params):
         result["n2_param"] = n2
         if method == "analytical":
             if hypothesis_type == "Non-Inferiority":
+                # Use legacy non-inferiority function for now
                 power_result_dict = analytical_survival.power_survival_non_inferiority(
                     n1=n1, n2=n2,
                     median1=median_survival1,
@@ -672,17 +738,38 @@ def calculate_parallel_survival(params):
                     alpha=alpha, # NI function handles one-sided alpha internally
                     assumed_hazard_ratio=assumed_true_hr_param
                 )
-            else: # Superiority
-                power_result_dict = analytical_survival.power_survival(
-                    n1=n1, n2=n2,
-                    median1=median_survival1,
-                    median2=median2_for_calc,
-                    enrollment_period=accrual_time,
-                    follow_up_period=follow_up_time,
-                    dropout_rate=dropout_rate,
-                    alpha=alpha,
-                    sides=sides
-                )
+            else: # Superiority - use advanced methods
+                try:
+                    power_result_dict = analytical_survival.power_survival_advanced(
+                        n_control=n1,
+                        n_treatment=n2,
+                        hazard_ratio=hr_for_calc,
+                        alpha=alpha,
+                        sides=sides,
+                        enrollment_period=accrual_time,
+                        follow_up_period=follow_up_time,
+                        median_control=median_survival1,
+                        dropout_rate=dropout_rate,
+                        method=advanced_method
+                    )
+                    
+                    # Add method guidance information to result
+                    result["method_used"] = power_result_dict.get("method_used", advanced_method)
+                    result["method_guidance"] = power_result_dict.get("method_guidance", {})
+                    
+                except Exception as e:
+                    # Fallback to legacy method if advanced fails
+                    st.warning(f"Advanced method failed, falling back to legacy method: {e}")
+                    power_result_dict = analytical_survival.power_survival(
+                        n1=n1, n2=n2,
+                        median1=median_survival1,
+                        median2=median2_for_calc,
+                        enrollment_period=accrual_time,
+                        follow_up_period=follow_up_time,
+                        dropout_rate=dropout_rate,
+                        alpha=alpha,
+                        sides=sides
+                    )
         elif method == "simulation":
             if hypothesis_type == "Non-Inferiority":
                 power_result_dict = simulation_survival.power_survival_non_inferiority_sim(
@@ -714,7 +801,7 @@ def calculate_parallel_survival(params):
             return {"error": f"Unsupported method: {method} for Power calculation."}
         
         result["power"] = round(power_result_dict.get("power", 0), 3)
-        result["events"] = round(power_result_dict.get("events", power_result_dict.get("total_events", 0)))
+        result["events"] = round(power_result_dict.get("events", power_result_dict.get("total_events", power_result_dict.get("expected_events", 0))))
         if 'survival_curves' in power_result_dict:
             result['survival_curves'] = power_result_dict['survival_curves']
 
