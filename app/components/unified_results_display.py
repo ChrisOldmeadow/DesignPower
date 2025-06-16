@@ -131,33 +131,37 @@ class UnifiedResultsDisplay:
             self._display_generic_results(results, params, design_type, outcome_type, calculation_type)
             return
         
-        # Display main results header
-        st.markdown(f"### {config.design_name}: {config.outcome_name} - Results Summary")
-        st.markdown("---")
-        
-        # Display custom visualization if available
+        # Display custom visualization if available (keep this as it might show plots)
         if config.custom_visualization:
             config.custom_visualization(results, params, calculation_type, hypothesis_type, method_used)
         
-        # Display configured sections
-        for section in config.sections:
-            self._display_section(section, results, params, calculation_type, hypothesis_type)
-        
-        # Display simulation details if applicable
-        if config.show_simulation_details and self._is_simulation_method(results, params, method_used):
-            self._display_simulation_details(results, params)
-        
-        st.markdown("---")
-        
-        # Display standard components
-        if config.show_parameters_summary:
-            self._display_parameters_summary(params)
-        
+        # Display the HTML report as the main content
         if config.show_html_report:
             self._display_html_report(results, params, design_type, outcome_type)
         
-        if config.show_cli_code and config.cli_code_generator:
-            self._display_cli_code(params, config.cli_code_generator, design_type, outcome_type)
+        # Display other components in a more compact way
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if config.show_parameters_summary:
+                self._display_parameters_summary(params)
+                
+                # Include simulation details in parameters if applicable
+                if config.show_simulation_details and self._is_simulation_method(results, params, method_used):
+                    with st.expander("📊 Simulation Details", expanded=False):
+                        nsim = results.get('nsim_run', results.get('nsim', params.get('nsim', 'N/A')))
+                        st.write(f"**Number of simulations:** {nsim}")
+                        
+                        if 'seed' in results or 'seed' in params:
+                            seed = results.get('seed', params.get('seed'))
+                            st.write(f"**Random seed:** {seed}")
+                        
+                        if 'fallback_reason' in results and results['fallback_reason']:
+                            st.warning(f"Simulation used fallback values: {results['fallback_reason']}")
+        
+        with col2:
+            if config.show_cli_code and config.cli_code_generator:
+                self._display_cli_code(params, config.cli_code_generator, design_type, outcome_type)
     
     def _display_section(
         self,
@@ -243,21 +247,6 @@ class UnifiedResultsDisplay:
             params.get('use_simulation', False)
         )
     
-    def _display_simulation_details(self, results: Dict[str, Any], params: Dict[str, Any]):
-        """Display simulation-specific details."""
-        st.markdown("#### Simulation Details")
-        with st.expander("View Simulation Specifics"):
-            nsim = results.get('nsim_run', results.get('nsim', params.get('nsim', 'N/A')))
-            st.write(f"Number of simulations run: {nsim}")
-            
-            if 'fallback_reason' in results and results['fallback_reason']:
-                st.warning(f"Simulation used fallback values: {results['fallback_reason']}")
-            
-            # Display other simulation-specific metrics
-            sim_metrics = ['convergence_rate', 'simulation_time', 'seed']
-            for metric in sim_metrics:
-                if metric in results:
-                    st.write(f"{metric.replace('_', ' ').title()}: {results[metric]}")
     
     def _display_parameters_summary(self, params: Dict[str, Any]):
         """Display input parameters summary with enhanced visual presentation."""
@@ -445,27 +434,32 @@ class UnifiedResultsDisplay:
         return "\n".join(summary_lines)
     
     def _display_html_report(self, results: Dict[str, Any], params: Dict[str, Any], design_type: str, outcome_type: str):
-        """Display HTML report generation."""
-        with st.expander("Detailed HTML Report"):
-            try:
-                report_html = generate_report(
-                    design_type=design_type,
-                    outcome_type=outcome_type,
-                    params=params,
-                    results=results
-                )
-                st.markdown(report_html, unsafe_allow_html=True)
-                
-                report_key_suffix = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()[:8]
+        """Display HTML report as main content."""
+        try:
+            report_html = generate_report(
+                design_type=design_type,
+                outcome_type=outcome_type,
+                params=params,
+                results=results
+            )
+            # Display the HTML report as the main content
+            st.markdown(report_html, unsafe_allow_html=True)
+            
+            # Add download button below the report
+            st.markdown("---")
+            report_key_suffix = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()[:8]
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
                 st.download_button(
-                    label="Download Report (.html)",
+                    label="📥 Download Full Report (.html)",
                     data=report_html,
                     file_name=f"designpower_report_{report_key_suffix}.html",
                     mime="text/html",
-                    key=f"download_report_{design_type.replace(' ', '_')}_{outcome_type.replace(' ', '_')}_{report_key_suffix}"
+                    key=f"download_report_{design_type.replace(' ', '_')}_{outcome_type.replace(' ', '_')}_{report_key_suffix}",
+                    use_container_width=True
                 )
-            except Exception as e:
-                st.error(f"Error generating HTML report: {e}")
+        except Exception as e:
+            st.error(f"Error generating HTML report: {e}")
     
     def _generate_cli_command(self, params: Dict[str, Any], design_type: str, outcome_type: str) -> str:
         """Generate equivalent CLI command using systematic parameter mapping."""
@@ -713,35 +707,19 @@ designpower calculate --help"""
                     st.error(f"Error generating CLI command: {e}")
     
     def _display_generic_results(self, results: Dict[str, Any], params: Dict[str, Any], design_type: str, outcome_type: str, calculation_type: str):
-        """Fallback generic results display."""
-        st.markdown("### Results Summary")
-        st.markdown("---")
+        """Fallback generic results display - just show the HTML report."""
+        # For generic results, just display the HTML report and other standard components
+        if params.get('show_parameters_summary', True):
+            self._display_parameters_summary(params)
         
-        # Filter out non-displayable results
-        filtered_results = {
-            k: v for k, v in results.items() 
-            if k not in [
-                "design_method", "error", "power_curve_data", 
-                "survival_curves", "power_vs_hr_data", "plot_data",
-                "alpha_param", "power_param"
-            ]
-        }
+        # Display the HTML report as the main content
+        self._display_html_report(results, params, design_type, outcome_type)
         
-        if not filtered_results:
-            st.info("No specific tabular results to display for this configuration.")
-            return
-        
-        for key, value in filtered_results.items():
-            col1, col2 = st.columns([1, 2])
-            with col1:
-                st.markdown(f"**{key.replace('_', ' ').title()}:**")
-            with col2:
-                if isinstance(value, float):
-                    st.markdown(f"{value:.3f}")
-                elif isinstance(value, (list, tuple)) and len(value) == 2:
-                    st.markdown(f"({value[0]:.3f}, {value[1]:.3f})")
-                else:
-                    st.markdown(str(value))
+        # Display CLI code if applicable
+        if params.get('show_cli_code', True):
+            # We don't have a specific CLI generator for generic display, 
+            # but we can still show the general CLI command
+            self._display_cli_code(params, lambda p: "", design_type, outcome_type)
     
     def _register_default_configs(self):
         """Register default display configurations for all design types."""
