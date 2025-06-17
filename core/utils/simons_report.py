@@ -64,10 +64,10 @@ def generate_simons_report(results, params):
 <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">
 
 <h2 style="color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;">
-🔬 Simon's Two-Stage Design - Sample Size Report
+Simon's Two-Stage Design - Sample Size Report
 </h2>
 
-<h3 style="color: #495057;">✅ Design Overview</h3>
+<h3 style="color: #495057;">Design Overview</h3>
 <div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2E86AB;">
     <table style="width: 100%; border-collapse: collapse;">
     <tr>
@@ -89,7 +89,7 @@ def generate_simons_report(results, params):
     </table>
 </div>
 
-<h3 style="color: #495057;">📊 Statistical Properties</h3>
+<h3 style="color: #495057;">Statistical Properties</h3>
 <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
     <p><strong>Null Hypothesis (H₀):</strong> Response rate ≤ {p0:.2f} ({response_rate_percent_p0:.1f}%)</p>
     <p><strong>Alternative Hypothesis (H₁):</strong> Response rate = {p1:.2f} ({response_rate_percent_p1:.1f}%)</p>
@@ -98,7 +98,7 @@ def generate_simons_report(results, params):
     <p><strong>Actual Power:</strong> {actual_power:.3f} ({actual_power*100:.1f}%)</p>
 </div>
 
-<h3 style="color: #495057;">🎯 Decision Rules</h3>
+<h3 style="color: #495057;">Decision Rules</h3>
 <div style="background-color: #e6f3ff; padding: 15px; border-radius: 8px; border-left: 4px solid #0066cc;">
     <h4 style="color: #0052a3; margin-top: 0;">Stage 1 (n₁ = {n1} patients)</h4>
     <table style="width: 100%; border-collapse: collapse; background-color: white; border-radius: 6px; margin-bottom: 15px;">
@@ -139,7 +139,7 @@ def generate_simons_report(results, params):
     </table>
 </div>
 
-<h3 style="color: #495057;">📈 Operating Characteristics</h3>
+<h3 style="color: #495057;">Operating Characteristics</h3>
 <div style="background-color: #fffacd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd700;">
     <h4 style="color: #856404; margin-top: 0;">Under H₀ (p = {p0:.2f})</h4>
     <table style="width: 100%; margin-bottom: 15px;">
@@ -171,7 +171,7 @@ def generate_simons_report(results, params):
 </div>
 
 <div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
-    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">📝 Methodological Description</h4>
+    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">Methodological Description</h4>
     <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #cce7ff;">
         <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
         A Simon's {design_type.lower()} two-stage design enrolls {n1} patients in stage 1. If {r1} or fewer 
@@ -187,7 +187,7 @@ def generate_simons_report(results, params):
     </p>
 </div>
 
-<h3 style="color: #495057;">📚 Methodological References</h3>
+<h3 style="color: #495057;">Methodological References</h3>
 <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
     <p><strong>Primary Reference:</strong></p>
     <p style="font-style: italic; margin: 10px 0;">Simon R. (1989). Optimal two-stage designs for phase II clinical trials. Controlled Clinical Trials, 10(1), 1-10.</p>
@@ -202,7 +202,7 @@ def generate_simons_report(results, params):
 </div>
 
 <div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 15px 0;">
-    <h4 style="color: #0c5460; margin-top: 0;">⚠️ Important Considerations</h4>
+    <h4 style="color: #0c5460; margin-top: 0;">Important Considerations</h4>
     <ul style="color: #0c5460; margin-bottom: 0;">
     <li><strong>Interim Analysis:</strong> Must be performed after exactly {n1} patients</li>
     <li><strong>No Skipping:</strong> Cannot skip Stage 1 or modify thresholds based on results</li>

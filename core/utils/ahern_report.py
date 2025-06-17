@@ -59,10 +59,10 @@ def generate_ahern_report(results, params):
 <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">
 
 <h2 style="color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;">
-🔬 A'Hern Single-Stage Design - Sample Size Report
+A'Hern Single-Stage Design - Sample Size Report
 </h2>
 
-<h3 style="color: #495057;">✅ Design Parameters</h3>
+<h3 style="color: #495057;">Design Parameters</h3>
 <div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2E86AB;">
     <table style="width: 100%; border-collapse: collapse;">
     <tr>
@@ -80,7 +80,7 @@ def generate_ahern_report(results, params):
     </table>
 </div>
 
-<h3 style="color: #495057;">📊 Statistical Properties</h3>
+<h3 style="color: #495057;">Statistical Properties</h3>
 <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
     <p><strong>Null Hypothesis (H₀):</strong> Response rate ≤ {p0:.2f} ({null_rate_percent:.1f}%)</p>
     <p><strong>Alternative Hypothesis (H₁):</strong> Response rate = {p:.2f} ({response_rate_percent:.1f}%)</p>
@@ -89,7 +89,7 @@ def generate_ahern_report(results, params):
     <p><strong>Improvement Over H₀:</strong> {improvement:.1f}% ({improvement_level})</p>
 </div>
 
-<h3 style="color: #495057;">🎯 Decision Rule</h3>
+<h3 style="color: #495057;">Decision Rule</h3>
 <div style="background-color: #e6f3ff; padding: 15px; border-radius: 8px; border-left: 4px solid #0066cc;">
     <p style="font-size: 1.1em; margin-bottom: 15px;"><strong>Reject H₀ if ≥ {r} of {n} patients respond</strong></p>
     <table style="width: 100%; border-collapse: collapse; background-color: white; border-radius: 6px;">
@@ -112,7 +112,7 @@ def generate_ahern_report(results, params):
 </div>
 
 <div style="background-color: #e6f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #0066cc; margin: 20px 0;">
-    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">📝 Methodological Description</h4>
+    <h4 style="color: #0052a3; margin-top: 0; margin-bottom: 15px;">Methodological Description</h4>
     <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #cce7ff;">
         <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
         A single-arm study with {n} patients will have {actual_power*100:.1f}% power to detect a 
@@ -128,7 +128,7 @@ def generate_ahern_report(results, params):
 </div>
 
 <div style="background-color: #fffacd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd700; margin: 15px 0;">
-    <h4 style="color: #856404; margin-top: 0;">💡 Design Characteristics</h4>
+    <h4 style="color: #856404; margin-top: 0;">Design Characteristics</h4>
     <p style="color: #856404; margin-bottom: 10px;">
     The A'Hern design is a single-stage exact design for phase II trials:
     </p>
@@ -140,7 +140,7 @@ def generate_ahern_report(results, params):
     </ul>
 </div>
 
-<h3 style="color: #495057;">📚 Methodological Reference</h3>
+<h3 style="color: #495057;">Methodological Reference</h3>
 <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
     <p><strong>Primary Reference:</strong></p>
     <p style="font-style: italic; margin: 10px 0;">A'Hern RP. (2001). Sample size tables for exact single-stage phase II designs. Statistics in Medicine, 20(6), 859-866.</p>
@@ -155,7 +155,7 @@ def generate_ahern_report(results, params):
 </div>
 
 <div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 15px 0;">
-    <h4 style="color: #0c5460; margin-top: 0;">⚠️ Important Considerations</h4>
+    <h4 style="color: #0c5460; margin-top: 0;">Important Considerations</h4>
     <ul style="color: #0c5460; margin-bottom: 0;">
     <li><strong>Response definition:</strong> Clearly define what constitutes a "response" before starting</li>
     <li><strong>Patient selection:</strong> Results only apply to similar patient populations</li>
