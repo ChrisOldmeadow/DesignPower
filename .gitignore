@@ -79,3 +79,8 @@ node_modules/
 *.tmp
 temp/
 tmp/
+
+# Project-specific markdown files (kept locally but not in repo)
+CLAUDE.md
+VALIDATION_ROADMAP_TRACKING.md
+.backup_md_files/
