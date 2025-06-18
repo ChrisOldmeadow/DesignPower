@@ -139,29 +139,25 @@ class UnifiedResultsDisplay:
         if config.show_html_report:
             self._display_html_report(results, params, design_type, outcome_type)
         
-        # Display other components in a more compact way
-        col1, col2 = st.columns(2)
+        # Display other components vertically for better readability
+        if config.show_parameters_summary:
+            self._display_parameters_summary(params)
+            
+            # Include simulation details in parameters if applicable
+            if config.show_simulation_details and self._is_simulation_method(results, params, method_used):
+                with st.expander("📊 Simulation Details", expanded=False):
+                    nsim = results.get('nsim_run', results.get('nsim', params.get('nsim', 'N/A')))
+                    st.write(f"**Number of simulations:** {nsim}")
+                    
+                    if 'seed' in results or 'seed' in params:
+                        seed = results.get('seed', params.get('seed'))
+                        st.write(f"**Random seed:** {seed}")
+                    
+                    if 'fallback_reason' in results and results['fallback_reason']:
+                        st.warning(f"Simulation used fallback values: {results['fallback_reason']}")
         
-        with col1:
-            if config.show_parameters_summary:
-                self._display_parameters_summary(params)
-                
-                # Include simulation details in parameters if applicable
-                if config.show_simulation_details and self._is_simulation_method(results, params, method_used):
-                    with st.expander("📊 Simulation Details", expanded=False):
-                        nsim = results.get('nsim_run', results.get('nsim', params.get('nsim', 'N/A')))
-                        st.write(f"**Number of simulations:** {nsim}")
-                        
-                        if 'seed' in results or 'seed' in params:
-                            seed = results.get('seed', params.get('seed'))
-                            st.write(f"**Random seed:** {seed}")
-                        
-                        if 'fallback_reason' in results and results['fallback_reason']:
-                            st.warning(f"Simulation used fallback values: {results['fallback_reason']}")
-        
-        with col2:
-            if config.show_cli_code and config.cli_code_generator:
-                self._display_cli_code(params, config.cli_code_generator, design_type, outcome_type)
+        if config.show_cli_code and config.cli_code_generator:
+            self._display_cli_code(params, config.cli_code_generator, design_type, outcome_type)
     
     def _display_section(
         self,
