@@ -688,6 +688,7 @@ pip install designpower
 # 2. Or if using from source:
 cd /path/to/DesignPower
 source venv/bin/activate
+python3 -m pip install -r requirements.txt
 python cli_v2.py {cli_command.replace('designpower ', '')}
 
 # 3. For more options:
