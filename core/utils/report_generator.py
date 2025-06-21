@@ -262,7 +262,14 @@ def generate_sample_size_report(results, params, design_type, outcome_type):
                     seed = params.get("seed", 42)
                     method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed})"
                 else:
-                    method_text = "using analytical methods"
+                    # Be specific about the analytical method for continuous outcomes
+                    if repeated_measures:
+                        analysis_method = params.get("analysis_method", "Change Score")
+                        method_text = f"using a repeated measures {analysis_method} analysis"
+                    elif unequal_var:
+                        method_text = "using Welch's t-test (for unequal variances)"
+                    else:
+                        method_text = "using a two-sample t-test"
                 
                 # Create HTML report similar to cluster RCT style
                 report_html = f"""
@@ -797,7 +804,16 @@ def generate_power_report(results, params, design_type, outcome_type):
             seed = params.get("seed", 42)
             method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed})"
         else:
-            method_text = "using analytical methods"
+            # Be specific about the analytical method for continuous outcomes
+            repeated_measures = params.get("repeated_measures", False)
+            unequal_var = params.get("unequal_var", False)
+            if repeated_measures:
+                analysis_method = params.get("analysis_method", "Change Score")
+                method_text = f"using a repeated measures {analysis_method} analysis"
+            elif unequal_var:
+                method_text = "using Welch's t-test (for unequal variances)"
+            else:
+                method_text = "using a two-sample t-test"
         
         # Get appropriate reference
         reference = get_method_reference('continuous', method=method, design=None)
@@ -1257,7 +1273,16 @@ def generate_mde_report(results, params, design_type, outcome_type):
             seed = params.get("seed", 42)
             method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed})"
         else:
-            method_text = "using analytical methods"
+            # Be specific about the analytical method for continuous outcomes
+            repeated_measures = params.get("repeated_measures", False)
+            unequal_var = params.get("unequal_var", False)
+            if repeated_measures:
+                analysis_method = params.get("analysis_method", "Change Score")
+                method_text = f"using a repeated measures {analysis_method} analysis"
+            elif unequal_var:
+                method_text = "using Welch's t-test (for unequal variances)"
+            else:
+                method_text = "using a two-sample t-test"
         
         # Create HTML report
         report_html = f"""
@@ -1709,7 +1734,7 @@ def generate_stepped_wedge_report(results, params):
     stepping every time period across {steps} time steps (including baseline), will give the study {power:.0%} power to 
     detect a {f'treatment effect of {treatment_effect:.2f} units' if 'continuous' in outcome_type.lower() else f'change from {p_control:.2f} to {p_intervention:.2f} in the proportion'}, 
     assuming {f'a standard deviation of {std_dev:.2f}' if 'continuous' in outcome_type.lower() else 'the stated proportions'}, an intracluster correlation coefficient (ICC) of {icc:.3f}{f', and a cluster autocorrelation coefficient (CAC) of {cluster_autocorr:.3f}' if cluster_autocorr > 0 else ''}, 
-    with a Type I error rate of {alpha*100:.0f}%. Power calculations were performed using {'analytical methods' if method_used == 'Hussey & Hughes Analytical' else 'simulation-based methods'} as 
+    with a Type I error rate of {alpha*100:.0f}%. Power calculations were performed using {'the Hussey & Hughes (2007) analytical method with mixed-effects modeling' if method_used == 'Hussey & Hughes Analytical' else 'simulation-based methods with mixed-effects modeling'} as 
     described by {reference['citation'].split('.')[0]} et al.
     </p>
     </div>
@@ -1873,7 +1898,7 @@ def generate_interrupted_time_series_report(results, params):
     <p style="font-style: italic; line-height: 1.8; margin: 0; color: #333;">
     {f'A sample size of {n_pre} pre-intervention and {n_post} post-intervention time points (total {total_n} observations) will provide {int(power*100)}% power to detect a {effect_text}' if calculation_type != "Sample Size" else f'To achieve {int(params.get("power", 0.8)*100)}% power to detect a {effect_text}, a minimum of {n_pre} pre-intervention and {n_post} post-intervention time points (total {total_n} observations) is required'}, 
     {f'assuming an autocorrelation coefficient of {autocorr:.3f}, ' if autocorr > 0 else ''}with a Type I error rate of {alpha*100:.0f}%. 
-    Power calculations were performed using {'segmented regression analysis' if method.lower() == 'analytical' else 'simulation-based methods'} as described by {reference['citation'].split('.')[0]} et al.
+    Power calculations were performed using {'analytical segmented regression analysis with autoregressive errors' if method.lower() == 'analytical' else 'simulation-based segmented regression methods'} as described by {reference['citation'].split('.')[0]} et al.
     </p>
     </div>
     <p style="font-size: 0.9em; color: #666; margin-top: 10px; margin-bottom: 0;">

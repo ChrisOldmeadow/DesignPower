@@ -84,7 +84,11 @@ def generate_cluster_sample_size_report(results, params, outcome_type):
         seed = params.get("seed", 42)
         method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed})"
     else:
-        method_text = "using analytical methods"
+        # Be specific about the analytical method for cluster RCT
+        if outcome_type == "continuous":
+            method_text = "using a cluster-adjusted t-test accounting for the design effect"
+        else:
+            method_text = "using a cluster-adjusted chi-square test accounting for the design effect"
     
     if "Continuous" in outcome_type:
         # Extract continuous-specific parameters
@@ -390,7 +394,11 @@ def generate_cluster_power_report(results, params, outcome_type):
         seed = params.get("seed", 42)
         method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed})"
     else:
-        method_text = "using analytical methods"
+        # Be specific about the analytical method for cluster RCT
+        if outcome_type == "continuous":
+            method_text = "using a cluster-adjusted t-test accounting for the design effect"
+        else:
+            method_text = "using a cluster-adjusted chi-square test accounting for the design effect"
     
     # ICC interpretation
     if icc < 0.01:
@@ -658,7 +666,11 @@ def generate_cluster_mde_report(results, params, outcome_type):
         seed = params.get("seed", 42)
         method_text = f"using Monte Carlo simulation ({nsim:,} simulations, random seed {seed})"
     else:
-        method_text = "using analytical methods"
+        # Be specific about the analytical method for cluster RCT
+        if outcome_type == "continuous":
+            method_text = "using a cluster-adjusted t-test accounting for the design effect"
+        else:
+            method_text = "using a cluster-adjusted chi-square test accounting for the design effect"
     
     # ICC interpretation
     if icc < 0.01:

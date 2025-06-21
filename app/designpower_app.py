@@ -216,17 +216,6 @@ if page == "📊 Study Design Calculator":
         This app calculates power and sample size for various study designs.
         Select a design type and outcome type from the sidebar.
     """)
-    
-    # Add info about survival converter
-    with st.expander("🔄 New: Survival Parameter Converter", expanded=False):
-        st.write("""
-        **Convert between survival analysis parameters:**
-        - Median survival ↔ Hazard rate ↔ Survival fraction ↔ Event rate
-        - Hazard ratio scenarios for clinical trial planning
-        - Time unit conversions (days/weeks/months/years)
-        
-        Select "🔄 Survival Parameter Converter" in the sidebar to access this tool.
-        """)
 st.sidebar.header("Study Design")
 
 # Design type selection
