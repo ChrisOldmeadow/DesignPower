@@ -150,7 +150,6 @@ DesignPower/
 │   │   └── stepped_wedge/  # Stepped wedge methods
 │   ├── outcomes/           # Outcome-specific utilities
 │   └── utils/              # Report generation & validation
-├── api/                    # FastAPI REST interface
 ├── tests/                  # Comprehensive test suite
 │   ├── core/               # Unit tests for statistical functions
 │   ├── validation/         # Benchmark validation tests
