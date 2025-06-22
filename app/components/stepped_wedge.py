@@ -7,6 +7,8 @@ Stepped Wedge designs with continuous and binary outcomes.
 import streamlit as st
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import stats
@@ -209,10 +211,18 @@ def display_stepped_wedge_design(clusters, steps):
         else:
             st.write("**Heatmap View** (for smaller studies): Shows when each cluster receives the intervention")
         
-        # Create and display the plot with unique key for proper refresh
-        fig = create_stepped_wedge_visualization(clusters, steps)
-        st.pyplot(fig, key=f"sw_viz_{clusters}_{steps}")
-        plt.close(fig)  # Close to free memory
+        try:
+            # Create and display the plot with unique key for proper refresh
+            fig = create_stepped_wedge_visualization(clusters, steps)
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)  # Close to free memory
+        except Exception as e:
+            st.warning(f"Unable to display visualization. Error: {str(e)}")
+            # Provide alternative text-based representation
+            st.write("**Design Structure:**")
+            st.write(f"- {clusters} clusters")
+            st.write(f"- {steps} time steps")
+            st.write(f"- Clusters transition from control to intervention in a stepped pattern")
         
         # Add adaptive explanatory text
         if clusters > 20 or clusters * steps > 300:
@@ -399,9 +409,6 @@ def render_stepped_wedge_continuous(calc_type, hypothesis_type):
         st.write(f"**Intervention Periods:** {intervention_periods}")
         st.write(f"**Design Effect (approx):** {1 + (params['individuals_per_cluster'] - 1) * params['icc']:.2f}")
 
-    # Display stepped wedge design visualization
-    display_stepped_wedge_design(params["clusters"], params["steps"])
-
     return params
 
 
@@ -547,9 +554,6 @@ def render_stepped_wedge_binary(calc_type, hypothesis_type):
         st.write(f"**Control Periods:** {control_periods}")
         st.write(f"**Intervention Periods:** {intervention_periods}")
         st.write(f"**Design Effect (approx):** {1 + (params['individuals_per_cluster'] - 1) * params['icc']:.2f}")
-
-    # Display stepped wedge design visualization
-    display_stepped_wedge_design(params["clusters"], params["steps"])
 
     return params
 

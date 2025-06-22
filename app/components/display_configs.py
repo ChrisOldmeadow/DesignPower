@@ -344,6 +344,12 @@ def create_stepped_wedge_continuous_config() -> DisplayConfig:
         with col2:
             st.write(f"• Number of Time Steps: {steps}")
             st.write(f"• Cluster-Periods: {clusters * steps}")
+        
+        # Display the visualization
+        try:
+            display_stepped_wedge_design(clusters, steps)
+        except:
+            pass  # Silently fail if visualization cannot be displayed
     
     main_section = SectionConfig(
         title="Stepped Wedge Design Results",
@@ -379,6 +385,12 @@ def create_stepped_wedge_binary_config() -> DisplayConfig:
         with col2:
             st.write(f"• Number of Time Steps: {steps}")
             st.write(f"• Cluster-Periods: {clusters * steps}")
+        
+        # Display the visualization
+        try:
+            display_stepped_wedge_design(clusters, steps)
+        except:
+            pass  # Silently fail if visualization cannot be displayed
     
     main_section = SectionConfig(
         title="Stepped Wedge Design Results",
@@ -479,7 +491,7 @@ def register_all_configs(unified_display):
     try:
         from .parallel_rct import generate_cli_code_parallel_continuous, generate_cli_code_parallel_binary, generate_cli_code_parallel_survival
         from .cluster_rct import generate_cli_code_cluster_continuous, generate_cli_code_cluster_binary
-        from .stepped_wedge import generate_cli_code_stepped_wedge_continuous, generate_cli_code_stepped_wedge_binary
+        from .stepped_wedge import generate_cli_code_stepped_wedge_continuous, generate_cli_code_stepped_wedge_binary, display_stepped_wedge_design
         from .interrupted_time_series import generate_cli_code_interrupted_time_series_continuous, generate_cli_code_interrupted_time_series_binary
     except ImportError:
         # Handle case where CLI generators aren't available
