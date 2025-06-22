@@ -409,6 +409,13 @@ def render_stepped_wedge_continuous(calc_type, hypothesis_type):
         st.write(f"**Intervention Periods:** {intervention_periods}")
         st.write(f"**Design Effect (approx):** {1 + (params['individuals_per_cluster'] - 1) * params['icc']:.2f}")
 
+    # Add button to preview design layout (safe visualization)
+    if st.button("🔍 Preview Design Layout", help="Generate a visual preview of the stepped wedge design"):
+        try:
+            display_stepped_wedge_design(params["clusters"], params["steps"])
+        except Exception as e:
+            st.error(f"Could not generate design preview: {str(e)}")
+
     return params
 
 
@@ -554,6 +561,13 @@ def render_stepped_wedge_binary(calc_type, hypothesis_type):
         st.write(f"**Control Periods:** {control_periods}")
         st.write(f"**Intervention Periods:** {intervention_periods}")
         st.write(f"**Design Effect (approx):** {1 + (params['individuals_per_cluster'] - 1) * params['icc']:.2f}")
+
+    # Add button to preview design layout (safe visualization)
+    if st.button("🔍 Preview Design Layout", help="Generate a visual preview of the stepped wedge design"):
+        try:
+            display_stepped_wedge_design(params["clusters"], params["steps"])
+        except Exception as e:
+            st.error(f"Could not generate design preview: {str(e)}")
 
     return params
 

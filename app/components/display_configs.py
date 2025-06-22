@@ -348,8 +348,8 @@ def create_stepped_wedge_continuous_config() -> DisplayConfig:
         # Display the visualization
         try:
             display_stepped_wedge_design(clusters, steps)
-        except:
-            pass  # Silently fail if visualization cannot be displayed
+        except Exception as e:
+            st.info("📊 Design visualization temporarily unavailable. All calculations remain accurate.")
     
     main_section = SectionConfig(
         title="Stepped Wedge Design Results",
@@ -389,8 +389,8 @@ def create_stepped_wedge_binary_config() -> DisplayConfig:
         # Display the visualization
         try:
             display_stepped_wedge_design(clusters, steps)
-        except:
-            pass  # Silently fail if visualization cannot be displayed
+        except Exception as e:
+            st.info("📊 Design visualization temporarily unavailable. All calculations remain accurate.")
     
     main_section = SectionConfig(
         title="Stepped Wedge Design Results",
