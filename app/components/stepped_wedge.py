@@ -658,60 +658,136 @@ def render_stepped_wedge_binary(calc_type, hypothesis_type):
 
 def calculate_stepped_wedge_continuous(params):
     """
-    Calculate power for stepped wedge design with continuous outcome.
+    Calculate power, sample size, or MDE for stepped wedge design with continuous outcome.
     
     Args:
         params: Dictionary of parameters from the UI
         
     Returns:
-        dict: Results from the power calculation
+        dict: Results from the calculation
     """
     try:
-        # Extract parameters
-        clusters = int(params["clusters"])
+        # Extract common parameters
+        calc_type = params.get("calculation_type", "Power")
         steps = int(params["steps"])
-        individuals_per_cluster = int(params["individuals_per_cluster"])
         icc = float(params["icc"])
         cluster_autocorr = float(params.get("cluster_autocorr", 0.0))
-        treatment_effect = float(params["treatment_effect"])
         std_dev = float(params["std_dev"])
         alpha = float(params["alpha"])
         method = params.get("method", "Simulation")
         
-        if method == "Hussey & Hughes Analytical":
-            # Use analytical method
-            result = hussey_hughes_power_continuous(
-                clusters=clusters,
-                steps=steps,
-                individuals_per_cluster=individuals_per_cluster,
-                icc=icc,
-                cluster_autocorr=cluster_autocorr,
-                treatment_effect=treatment_effect,
-                std_dev=std_dev,
-                alpha=alpha
-            )
-            result["method"] = "Hussey & Hughes Analytical"
+        # Handle different calculation types
+        if calc_type == "Sample Size":
+            power = float(params["power"])
+            treatment_effect = float(params["treatment_effect"])
+            solve_for = params.get("solve_for", "clusters")
+            
+            if solve_for == "clusters":
+                # Calculate number of clusters (cluster size is fixed)
+                individuals_per_cluster = int(params["individuals_per_cluster"])
+                
+                if method == "Hussey & Hughes Analytical":
+                    result = hussey_hughes_sample_size_continuous(
+                        target_power=power,
+                        treatment_effect=treatment_effect,
+                        std_dev=std_dev,
+                        icc=icc,
+                        cluster_autocorr=cluster_autocorr,
+                        steps=steps,
+                        individuals_per_cluster=individuals_per_cluster,
+                        alpha=alpha
+                    )
+                    result["method"] = "Hussey & Hughes Analytical"
+                else:
+                    # Use simulation-based search for number of clusters
+                    result = _search_clusters_simulation_continuous(
+                        target_power=power,
+                        treatment_effect=treatment_effect,
+                        std_dev=std_dev,
+                        icc=icc,
+                        cluster_autocorr=cluster_autocorr,
+                        steps=steps,
+                        individuals_per_cluster=individuals_per_cluster,
+                        alpha=alpha,
+                        nsim=int(params["nsim"])
+                    )
+                    result["method"] = "Simulation"
+                    
+            else:
+                # Calculate cluster size (number of clusters is fixed)
+                clusters = int(params["clusters"])
+                result = _search_cluster_size_continuous(
+                    target_power=power,
+                    treatment_effect=treatment_effect,
+                    std_dev=std_dev,
+                    icc=icc,
+                    cluster_autocorr=cluster_autocorr,
+                    steps=steps,
+                    clusters=clusters,
+                    alpha=alpha,
+                    method=method,
+                    nsim=int(params["nsim"]) if method == "Simulation" else None
+                )
+                result["method"] = method
+                
         else:
-            # Use simulation method (extended to include cluster_autocorr if > 0)
-            nsim = int(params["nsim"])
+            # Power or MDE calculation (existing code)
+            clusters = int(params["clusters"])
+            individuals_per_cluster = int(params["individuals_per_cluster"])
             
-            if cluster_autocorr > 0:
-                st.warning("⚠️ Cluster autocorrelation > 0 detected. Current simulation method uses simplified correlation structure. Consider using Hussey & Hughes Analytical method for more accurate results with complex correlation structures.")
-            
-            result = simulate_continuous(
-                clusters=clusters,
-                steps=steps,
-                individuals_per_cluster=individuals_per_cluster,
-                icc=icc,
-                treatment_effect=treatment_effect,
-                std_dev=std_dev,
-                nsim=nsim,
-                alpha=alpha
-            )
-            result["method"] = "Simulation"
-            
-            # Add cluster autocorr to parameters for display
-            result["parameters"]["cluster_autocorr"] = cluster_autocorr
+            if calc_type == "Minimum Detectable Effect":
+                # Calculate MDE
+                power = float(params.get("power", 0.8))
+                result = _calculate_mde_continuous(
+                    clusters=clusters,
+                    steps=steps,
+                    individuals_per_cluster=individuals_per_cluster,
+                    icc=icc,
+                    cluster_autocorr=cluster_autocorr,
+                    std_dev=std_dev,
+                    power=power,
+                    alpha=alpha,
+                    method=method,
+                    nsim=int(params["nsim"]) if method == "Simulation" else None
+                )
+            else:
+                # Power calculation (existing code)
+                treatment_effect = float(params["treatment_effect"])
+                
+                if method == "Hussey & Hughes Analytical":
+                    # Use analytical method
+                    result = hussey_hughes_power_continuous(
+                        clusters=clusters,
+                        steps=steps,
+                        individuals_per_cluster=individuals_per_cluster,
+                        icc=icc,
+                        cluster_autocorr=cluster_autocorr,
+                        treatment_effect=treatment_effect,
+                        std_dev=std_dev,
+                        alpha=alpha
+                    )
+                    result["method"] = "Hussey & Hughes Analytical"
+                else:
+                    # Use simulation method (extended to include cluster_autocorr if > 0)
+                    nsim = int(params["nsim"])
+                    
+                    if cluster_autocorr > 0:
+                        st.warning("⚠️ Cluster autocorrelation > 0 detected. Current simulation method uses simplified correlation structure. Consider using Hussey & Hughes Analytical method for more accurate results with complex correlation structures.")
+                    
+                    result = simulate_continuous(
+                        clusters=clusters,
+                        steps=steps,
+                        individuals_per_cluster=individuals_per_cluster,
+                        icc=icc,
+                        treatment_effect=treatment_effect,
+                        std_dev=std_dev,
+                        nsim=nsim,
+                        alpha=alpha
+                    )
+                    result["method"] = "Simulation"
+                    
+                    # Add cluster autocorr to parameters for display
+                    result["parameters"]["cluster_autocorr"] = cluster_autocorr
         
         # Add common metadata
         result["design_type"] = "Stepped Wedge"
@@ -722,6 +798,183 @@ def calculate_stepped_wedge_continuous(params):
     except Exception as e:
         st.error(f"Error in calculation: {str(e)}")
         return None
+
+
+def _search_clusters_simulation_continuous(target_power, treatment_effect, std_dev, icc, cluster_autocorr, steps, individuals_per_cluster, alpha, nsim):
+    """Search for required number of clusters using simulation."""
+    from scipy.optimize import minimize_scalar
+    
+    def power_diff(clusters):
+        clusters = int(round(clusters))
+        if clusters < steps - 1:  # Must have at least one cluster per intervention step
+            return 1.0
+        try:
+            result = simulate_continuous(
+                clusters=clusters,
+                steps=steps,
+                individuals_per_cluster=individuals_per_cluster,
+                icc=icc,
+                treatment_effect=treatment_effect,
+                std_dev=std_dev,
+                nsim=nsim,
+                alpha=alpha
+            )
+            return abs(result['power'] - target_power)
+        except:
+            return 1.0
+    
+    # Search for optimal number of clusters
+    result = minimize_scalar(power_diff, bounds=(steps-1, 200), method='bounded')
+    optimal_clusters = int(round(result.x))
+    
+    # Get final power calculation
+    final_result = simulate_continuous(
+        clusters=optimal_clusters,
+        steps=steps,
+        individuals_per_cluster=individuals_per_cluster,
+        icc=icc,
+        treatment_effect=treatment_effect,
+        std_dev=std_dev,
+        nsim=nsim,
+        alpha=alpha
+    )
+    
+    final_result['clusters'] = optimal_clusters
+    return final_result
+
+
+def _search_cluster_size_continuous(target_power, treatment_effect, std_dev, icc, cluster_autocorr, steps, clusters, alpha, method, nsim):
+    """Search for required cluster size."""
+    from scipy.optimize import minimize_scalar
+    
+    def power_diff(cluster_size):
+        cluster_size = int(round(cluster_size))
+        if cluster_size < 1:
+            return 1.0
+        try:
+            if method == "Hussey & Hughes Analytical":
+                result = hussey_hughes_power_continuous(
+                    clusters=clusters,
+                    steps=steps,
+                    individuals_per_cluster=cluster_size,
+                    icc=icc,
+                    cluster_autocorr=cluster_autocorr,
+                    treatment_effect=treatment_effect,
+                    std_dev=std_dev,
+                    alpha=alpha
+                )
+            else:
+                result = simulate_continuous(
+                    clusters=clusters,
+                    steps=steps,
+                    individuals_per_cluster=cluster_size,
+                    icc=icc,
+                    treatment_effect=treatment_effect,
+                    std_dev=std_dev,
+                    nsim=nsim,
+                    alpha=alpha
+                )
+            return abs(result['power'] - target_power)
+        except:
+            return 1.0
+    
+    # Search for optimal cluster size
+    result = minimize_scalar(power_diff, bounds=(1, 500), method='bounded')
+    optimal_size = int(round(result.x))
+    
+    # Get final power calculation
+    if method == "Hussey & Hughes Analytical":
+        final_result = hussey_hughes_power_continuous(
+            clusters=clusters,
+            steps=steps,
+            individuals_per_cluster=optimal_size,
+            icc=icc,
+            cluster_autocorr=cluster_autocorr,
+            treatment_effect=treatment_effect,
+            std_dev=std_dev,
+            alpha=alpha
+        )
+    else:
+        final_result = simulate_continuous(
+            clusters=clusters,
+            steps=steps,
+            individuals_per_cluster=optimal_size,
+            icc=icc,
+            treatment_effect=treatment_effect,
+            std_dev=std_dev,
+            nsim=nsim,
+            alpha=alpha
+        )
+    
+    final_result['individuals_per_cluster'] = optimal_size
+    return final_result
+
+
+def _calculate_mde_continuous(clusters, steps, individuals_per_cluster, icc, cluster_autocorr, std_dev, power, alpha, method, nsim):
+    """Calculate minimum detectable effect."""
+    from scipy.optimize import minimize_scalar
+    
+    def power_diff(effect):
+        if effect <= 0:
+            return 1.0
+        try:
+            if method == "Hussey & Hughes Analytical":
+                result = hussey_hughes_power_continuous(
+                    clusters=clusters,
+                    steps=steps,
+                    individuals_per_cluster=individuals_per_cluster,
+                    icc=icc,
+                    cluster_autocorr=cluster_autocorr,
+                    treatment_effect=effect,
+                    std_dev=std_dev,
+                    alpha=alpha
+                )
+            else:
+                result = simulate_continuous(
+                    clusters=clusters,
+                    steps=steps,
+                    individuals_per_cluster=individuals_per_cluster,
+                    icc=icc,
+                    treatment_effect=effect,
+                    std_dev=std_dev,
+                    nsim=nsim,
+                    alpha=alpha
+                )
+            return abs(result['power'] - power)
+        except:
+            return 1.0
+    
+    # Search for minimum detectable effect
+    result = minimize_scalar(power_diff, bounds=(0.01, 5.0), method='bounded')
+    mde = result.x
+    
+    # Get final calculation
+    if method == "Hussey & Hughes Analytical":
+        final_result = hussey_hughes_power_continuous(
+            clusters=clusters,
+            steps=steps,
+            individuals_per_cluster=individuals_per_cluster,
+            icc=icc,
+            cluster_autocorr=cluster_autocorr,
+            treatment_effect=mde,
+            std_dev=std_dev,
+            alpha=alpha
+        )
+    else:
+        final_result = simulate_continuous(
+            clusters=clusters,
+            steps=steps,
+            individuals_per_cluster=individuals_per_cluster,
+            icc=icc,
+            treatment_effect=mde,
+            std_dev=std_dev,
+            nsim=nsim,
+            alpha=alpha
+        )
+    
+    final_result['mde'] = mde
+    final_result['cohen_d'] = mde / std_dev
+    return final_result
 
 
 def calculate_stepped_wedge_binary(params):
