@@ -301,24 +301,45 @@ def render_stepped_wedge_continuous(calc_type, hypothesis_type):
     with st.container():
         st.subheader("Study Design Parameters")
         
+        # For sample size calculations, let user choose what to solve for
+        if calc_type == "Sample Size":
+            st.subheader("Sample Size Options")
+            solve_for = st.radio(
+                "Solve for:",
+                ["Number of Clusters (fixed cluster size)", "Cluster Size (fixed number of clusters)"],
+                help="Choose whether to calculate the number of clusters needed or the size of each cluster",
+                key="sw_solve_for_continuous"
+            )
+            params["solve_for"] = "clusters" if "Number of Clusters" in solve_for else "cluster_size"
+        
         # Parameter inputs
         col1, col2 = st.columns(2)
         
         with col1:
-            params["clusters"] = st.number_input("Number of Clusters", 
-                                               value=12, step=1, min_value=3, max_value=500, 
-                                               help="Total number of clusters in the study",
-                                               key="sw_clusters_continuous")
+            # Conditionally show clusters or cluster size based on what we're solving for
+            if calc_type != "Sample Size" or params.get("solve_for") == "cluster_size":
+                params["clusters"] = st.number_input("Number of Clusters", 
+                                                   value=12, step=1, min_value=3, max_value=500, 
+                                                   help="Total number of clusters in the study",
+                                                   key="sw_clusters_continuous")
+            else:
+                st.info("Number of clusters will be calculated")
+                params["clusters"] = None
             
             params["steps"] = st.number_input("Number of Time Steps", 
                                             value=4, step=1, min_value=2, max_value=20,
                                             help="Total time steps including baseline (min 2)",
                                             key="sw_steps_continuous")
             
-            params["individuals_per_cluster"] = st.number_input("Individuals per Cluster per Step", 
-                                                              value=25, step=1, min_value=1, max_value=10000,
-                                                              help="Number of individuals in each cluster at each time step",
-                                                              key="sw_indiv_continuous")
+            # Conditionally show cluster size
+            if calc_type != "Sample Size" or params.get("solve_for") == "clusters":
+                params["individuals_per_cluster"] = st.number_input("Individuals per Cluster per Step", 
+                                                                  value=25, step=1, min_value=1, max_value=10000,
+                                                                  help="Number of individuals in each cluster at each time step",
+                                                                  key="sw_indiv_continuous")
+            else:
+                st.info("Cluster size will be calculated")
+                params["individuals_per_cluster"] = None
             
         with col2:
             params["icc"] = st.slider("Intracluster Correlation (ICC)", 
@@ -326,10 +347,14 @@ def render_stepped_wedge_continuous(calc_type, hypothesis_type):
                                     help="Correlation between individuals within the same cluster",
                                     key="sw_icc_continuous")
             
-            params["treatment_effect"] = st.number_input("Treatment Effect", 
-                                                       value=0.5, step=0.1,
-                                                       help="Expected difference in means due to intervention",
-                                                       key="sw_effect_continuous")
+            if calc_type != "Minimum Detectable Effect":
+                params["treatment_effect"] = st.number_input("Treatment Effect", 
+                                                           value=0.5, step=0.1,
+                                                           help="Expected difference in means due to intervention",
+                                                           key="sw_effect_continuous")
+            else:
+                st.info("Treatment effect will be calculated")
+                params["treatment_effect"] = None
             
             params["std_dev"] = st.number_input("Standard Deviation", 
                                               value=2.0, step=0.1, min_value=0.1,
@@ -346,6 +371,15 @@ def render_stepped_wedge_continuous(calc_type, hypothesis_type):
             params["alpha"] = st.slider("Significance Level (α)", 
                                       min_value=0.01, max_value=0.20, value=0.05, step=0.01,
                                       key="sw_alpha_continuous")
+            
+            # Add power input for sample size calculations
+            if calc_type == "Sample Size":
+                params["power"] = st.slider("Target Power (1-β)", 
+                                          min_value=0.70, max_value=0.99, value=0.80, step=0.01,
+                                          help="Desired statistical power to detect the treatment effect",
+                                          key="sw_power_continuous")
+            else:
+                params["power"] = None
         
         with col2:
             params["nsim"] = st.selectbox("Number of Simulations", 
@@ -439,24 +473,45 @@ def render_stepped_wedge_binary(calc_type, hypothesis_type):
     with st.container():
         st.subheader("Study Design Parameters")
         
+        # For sample size calculations, let user choose what to solve for
+        if calc_type == "Sample Size":
+            st.subheader("Sample Size Options")
+            solve_for = st.radio(
+                "Solve for:",
+                ["Number of Clusters (fixed cluster size)", "Cluster Size (fixed number of clusters)"],
+                help="Choose whether to calculate the number of clusters needed or the size of each cluster",
+                key="sw_solve_for_binary"
+            )
+            params["solve_for"] = "clusters" if "Number of Clusters" in solve_for else "cluster_size"
+        
         # Parameter inputs
         col1, col2 = st.columns(2)
         
         with col1:
-            params["clusters"] = st.number_input("Number of Clusters", 
-                                               value=12, step=1, min_value=3, max_value=500, 
-                                               help="Total number of clusters in the study",
-                                               key="sw_clusters_binary")
+            # Conditionally show clusters or cluster size based on what we're solving for
+            if calc_type != "Sample Size" or params.get("solve_for") == "cluster_size":
+                params["clusters"] = st.number_input("Number of Clusters", 
+                                                   value=12, step=1, min_value=3, max_value=500, 
+                                                   help="Total number of clusters in the study",
+                                                   key="sw_clusters_binary")
+            else:
+                st.info("Number of clusters will be calculated")
+                params["clusters"] = None
             
             params["steps"] = st.number_input("Number of Time Steps", 
                                             value=4, step=1, min_value=2, max_value=20,
                                             help="Total time steps including baseline (min 2)",
                                             key="sw_steps_binary")
             
-            params["individuals_per_cluster"] = st.number_input("Individuals per Cluster per Step", 
-                                                              value=25, step=1, min_value=1, max_value=10000,
-                                                              help="Number of individuals in each cluster at each time step",
-                                                              key="sw_indiv_binary")
+            # Conditionally show cluster size
+            if calc_type != "Sample Size" or params.get("solve_for") == "clusters":
+                params["individuals_per_cluster"] = st.number_input("Individuals per Cluster per Step", 
+                                                                  value=25, step=1, min_value=1, max_value=10000,
+                                                                  help="Number of individuals in each cluster at each time step",
+                                                                  key="sw_indiv_binary")
+            else:
+                st.info("Cluster size will be calculated")
+                params["individuals_per_cluster"] = None
             
         with col2:
             params["icc"] = st.slider("Intracluster Correlation (ICC)", 
@@ -464,15 +519,23 @@ def render_stepped_wedge_binary(calc_type, hypothesis_type):
                                     help="Correlation between individuals within the same cluster",
                                     key="sw_icc_binary")
             
-            params["p_control"] = st.slider("Control Proportion", 
-                                          min_value=0.01, max_value=0.99, value=0.30, step=0.01,
-                                          help="Expected proportion of events in control condition",
-                                          key="sw_p_control")
-            
-            params["p_intervention"] = st.slider("Intervention Proportion", 
-                                                min_value=0.01, max_value=0.99, value=0.45, step=0.01,
-                                                help="Expected proportion of events under intervention",
-                                                key="sw_p_intervention")
+            if calc_type != "Minimum Detectable Effect":
+                params["p_control"] = st.slider("Control Proportion", 
+                                              min_value=0.01, max_value=0.99, value=0.30, step=0.01,
+                                              help="Expected proportion of events in control condition",
+                                              key="sw_p_control")
+                
+                params["p_intervention"] = st.slider("Intervention Proportion", 
+                                                    min_value=0.01, max_value=0.99, value=0.45, step=0.01,
+                                                    help="Expected proportion of events under intervention",
+                                                    key="sw_p_intervention")
+            else:
+                params["p_control"] = st.slider("Control Proportion", 
+                                              min_value=0.01, max_value=0.99, value=0.30, step=0.01,
+                                              help="Baseline proportion of events in control condition",
+                                              key="sw_p_control")
+                st.info("Intervention proportion will be calculated")
+                params["p_intervention"] = None
 
     # Statistical parameters
     with st.container():
@@ -484,6 +547,15 @@ def render_stepped_wedge_binary(calc_type, hypothesis_type):
             params["alpha"] = st.slider("Significance Level (α)", 
                                       min_value=0.01, max_value=0.20, value=0.05, step=0.01,
                                       key="sw_alpha_binary")
+            
+            # Add power input for sample size calculations
+            if calc_type == "Sample Size":
+                params["power"] = st.slider("Target Power (1-β)", 
+                                          min_value=0.70, max_value=0.99, value=0.80, step=0.01,
+                                          help="Desired statistical power to detect the treatment effect",
+                                          key="sw_power_binary")
+            else:
+                params["power"] = None
         
         with col2:
             params["nsim"] = st.selectbox("Number of Simulations", 
