@@ -433,22 +433,28 @@ def render_stepped_wedge_continuous(calc_type, hypothesis_type):
 
     # Display study design summary
     with st.expander("Study Design Summary", expanded=False):
-        total_n = params["clusters"] * params["steps"] * params["individuals_per_cluster"]
-        control_periods = params["clusters"] * 1  # Baseline only
-        intervention_periods = params["clusters"] * (params["steps"] - 1)
-        
-        st.write(f"**Total Sample Size:** {total_n:,} individuals")
-        st.write(f"**Total Cluster-Periods:** {params['clusters'] * params['steps']}")
-        st.write(f"**Control Periods:** {control_periods}")
-        st.write(f"**Intervention Periods:** {intervention_periods}")
-        st.write(f"**Design Effect (approx):** {1 + (params['individuals_per_cluster'] - 1) * params['icc']:.2f}")
+        # Only show summary if we have all the required parameters
+        if params["clusters"] is not None and params["individuals_per_cluster"] is not None:
+            total_n = params["clusters"] * params["steps"] * params["individuals_per_cluster"]
+            control_periods = params["clusters"] * 1  # Baseline only
+            intervention_periods = params["clusters"] * (params["steps"] - 1)
+            
+            st.write(f"**Total Sample Size:** {total_n:,} individuals")
+            st.write(f"**Total Cluster-Periods:** {params['clusters'] * params['steps']}")
+            st.write(f"**Control Periods:** {control_periods}")
+            st.write(f"**Intervention Periods:** {intervention_periods}")
+            st.write(f"**Design Effect (approx):** {1 + (params['individuals_per_cluster'] - 1) * params['icc']:.2f}")
+        else:
+            st.info("Study design summary will be available after specifying all parameters or running calculations.")
 
     # Add button to preview design layout (safe visualization)
-    if st.button("🔍 Preview Design Layout", help="Generate a visual preview of the stepped wedge design"):
+    if params["clusters"] is not None and st.button("🔍 Preview Design Layout", help="Generate a visual preview of the stepped wedge design"):
         try:
             display_stepped_wedge_design(params["clusters"], params["steps"])
         except Exception as e:
             st.error(f"Could not generate design preview: {str(e)}")
+    elif params["clusters"] is None:
+        st.info("💡 Preview will be available after specifying the number of clusters")
 
     return params
 
@@ -624,22 +630,28 @@ def render_stepped_wedge_binary(calc_type, hypothesis_type):
 
     # Display study design summary
     with st.expander("Study Design Summary", expanded=False):
-        total_n = params["clusters"] * params["steps"] * params["individuals_per_cluster"]
-        control_periods = params["clusters"] * 1  # Baseline only
-        intervention_periods = params["clusters"] * (params["steps"] - 1)
-        
-        st.write(f"**Total Sample Size:** {total_n:,} individuals")
-        st.write(f"**Total Cluster-Periods:** {params['clusters'] * params['steps']}")
-        st.write(f"**Control Periods:** {control_periods}")
-        st.write(f"**Intervention Periods:** {intervention_periods}")
-        st.write(f"**Design Effect (approx):** {1 + (params['individuals_per_cluster'] - 1) * params['icc']:.2f}")
+        # Only show summary if we have all the required parameters
+        if params["clusters"] is not None and params["individuals_per_cluster"] is not None:
+            total_n = params["clusters"] * params["steps"] * params["individuals_per_cluster"]
+            control_periods = params["clusters"] * 1  # Baseline only
+            intervention_periods = params["clusters"] * (params["steps"] - 1)
+            
+            st.write(f"**Total Sample Size:** {total_n:,} individuals")
+            st.write(f"**Total Cluster-Periods:** {params['clusters'] * params['steps']}")
+            st.write(f"**Control Periods:** {control_periods}")
+            st.write(f"**Intervention Periods:** {intervention_periods}")
+            st.write(f"**Design Effect (approx):** {1 + (params['individuals_per_cluster'] - 1) * params['icc']:.2f}")
+        else:
+            st.info("Study design summary will be available after specifying all parameters or running calculations.")
 
     # Add button to preview design layout (safe visualization)
-    if st.button("🔍 Preview Design Layout", help="Generate a visual preview of the stepped wedge design"):
+    if params["clusters"] is not None and st.button("🔍 Preview Design Layout", help="Generate a visual preview of the stepped wedge design"):
         try:
             display_stepped_wedge_design(params["clusters"], params["steps"])
         except Exception as e:
             st.error(f"Could not generate design preview: {str(e)}")
+    elif params["clusters"] is None:
+        st.info("💡 Preview will be available after specifying the number of clusters")
 
     return params
 
