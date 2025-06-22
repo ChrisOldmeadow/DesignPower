@@ -82,12 +82,6 @@ python cli.py parallel --help
 python cli.py cluster --help
 ```
 
-### REST API
-```bash
-uvicorn api.main:app --reload
-```
-API documentation: http://localhost:8000/docs
-
 ### Python API
 ```python
 from core.designs.parallel.analytical_continuous import sample_size_two_sample_t_test
